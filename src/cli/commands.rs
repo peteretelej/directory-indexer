@@ -1,8 +1,11 @@
 use log::{info, warn};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{Config, IndexerError, Result};
 use crate::mcp::McpServer;
+use crate::indexing::engine::IndexingEngine;
+use crate::storage::{QdrantStore, SqliteStore};
+use crate::embedding::create_embedding_provider;
 
 pub async fn index(paths: Vec<String>) -> Result<()> {
     index_internal(paths, true).await
@@ -33,7 +36,34 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
         }
     }
 
-    warn!("Indexing not yet implemented - this is a placeholder");
+    // Load configuration
+    let config = Config::load()?;
+
+    // Initialize storage
+    let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
+    let vector_store = QdrantStore::new(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone()).await?;
+
+    // Initialize embedding provider
+    let embedding_provider = create_embedding_provider(&config.embedding)?;
+
+    // Create indexing engine
+    let engine = IndexingEngine::new(config, sqlite_store, vector_store, embedding_provider).await?;
+
+    // Convert paths to PathBuf
+    let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+
+    // Start indexing
+    let stats = engine.index_directories(path_bufs).await?;
+
+    if output_to_console {
+        println!("Indexing completed!");
+        println!("  Directories processed: {}", stats.directories_processed);
+        println!("  Files processed: {}", stats.files_processed);
+        println!("  Files skipped: {}", stats.files_skipped);
+        println!("  Files with errors: {}", stats.files_errored);
+        println!("  Chunks created: {}", stats.chunks_created);
+    }
+
     Ok(())
 }
 
@@ -58,7 +88,7 @@ pub async fn search_internal(query: String, path: Option<String>, limit: Option<
 
     if output_to_console {
         println!("Searching for: '{}'", query);
-        if let Some(p) = path {
+        if let Some(p) = &path {
             println!("  Scope: {}", p);
         }
         if let Some(l) = limit {
@@ -66,7 +96,57 @@ pub async fn search_internal(query: String, path: Option<String>, limit: Option<
         }
     }
 
-    warn!("Search not yet implemented - this is a placeholder");
+    // Load configuration
+    let config = Config::load()?;
+
+    // Initialize storage
+    let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
+    let vector_store = QdrantStore::new(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone()).await?;
+
+    // Initialize embedding provider
+    let embedding_provider = create_embedding_provider(&config.embedding)?;
+
+    // Generate embedding for the query
+    let query_embedding = embedding_provider.generate_embedding(query.clone()).await?;
+
+    // Perform vector search
+    let search_limit = limit.unwrap_or(10);
+    let search_results = vector_store.search(query_embedding, search_limit).await?;
+
+    if output_to_console {
+        if search_results.is_empty() {
+            println!("No results found for query: '{}'", query);
+        } else {
+            println!("\nSearch Results:");
+            println!("==============");
+            
+            for (i, result) in search_results.iter().enumerate() {
+                println!("\n{}. {} (score: {:.3})", i + 1, result.file_path, result.score);
+                println!("   Chunk: {}", result.chunk_id);
+                if !result.parent_directories.is_empty() {
+                    println!("   Path: {}", result.parent_directories.join(" > "));
+                }
+                
+                // Try to read the specific chunk content from SQLite
+                if let Ok(Some(file_record)) = sqlite_store.get_file_by_path(&result.file_path) {
+                    if let Some(chunks_json) = file_record.chunks_json {
+                        if let Ok(chunks) = serde_json::from_value::<Vec<String>>(chunks_json) {
+                            if result.chunk_id < chunks.len() {
+                                let chunk_content = &chunks[result.chunk_id];
+                                let preview = if chunk_content.len() > 200 {
+                                    format!("{}...", &chunk_content[..200])
+                                } else {
+                                    chunk_content.clone()
+                                };
+                                println!("   Preview: {}", preview.replace('\n', " "));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -141,28 +221,64 @@ pub async fn serve() -> Result<()> {
 pub async fn status(format: String) -> Result<()> {
     info!("Showing indexing status in format: {}", format);
 
+    // Load configuration
+    let config = Config::load()?;
+
+    // Initialize storage
+    let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
+    let vector_store = QdrantStore::new_without_init(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone());
+
+    // Get statistics from SQLite
+    let (dir_count, file_count, chunk_count) = sqlite_store.get_stats()?;
+
+    // Get vector store info (may not exist yet)
+    let collection_info = match vector_store.get_collection_info().await {
+        Ok(info) => Some(info),
+        Err(_) => None, // Collection doesn't exist yet
+    };
+
+    // Calculate database size (approximate)
+    let db_size_mb = if config.storage.sqlite_path.exists() {
+        std::fs::metadata(&config.storage.sqlite_path)?.len() / (1024 * 1024)
+    } else {
+        0
+    };
+
     match format.as_str() {
         "json" => {
             println!("{{");
-            println!("  \"indexed_directories\": 0,");
-            println!("  \"indexed_files\": 0,");
-            println!("  \"total_chunks\": 0,");
-            println!("  \"database_size_mb\": 0");
+            println!("  \"indexed_directories\": {},", dir_count);
+            println!("  \"indexed_files\": {},", file_count);
+            println!("  \"total_chunks\": {},", chunk_count);
+            if let Some(info) = &collection_info {
+                println!("  \"vector_points\": {},", info.points_count);
+                println!("  \"indexed_vectors\": {},", info.indexed_vectors_count);
+            } else {
+                println!("  \"vector_points\": 0,");
+                println!("  \"indexed_vectors\": 0,");
+            }
+            println!("  \"database_size_mb\": {}", db_size_mb);
             println!("}}");
         }
         "text" => {
             println!("Directory Indexer Status");
-            println!("  Indexed directories: 0");
-            println!("  Indexed files: 0");
-            println!("  Total chunks: 0");
-            println!("  Database size: 0 MB");
+            println!("  Indexed directories: {}", dir_count);
+            println!("  Indexed files: {}", file_count);
+            println!("  Total chunks: {}", chunk_count);
+            if let Some(info) = &collection_info {
+                println!("  Vector points: {}", info.points_count);
+                println!("  Indexed vectors: {}", info.indexed_vectors_count);
+            } else {
+                println!("  Vector points: 0 (collection not created)");
+                println!("  Indexed vectors: 0");
+            }
+            println!("  Database size: {} MB", db_size_mb);
         }
         _ => {
             return Err(IndexerError::invalid_input(format!("Unsupported format: {}. Use 'text' or 'json'", format)));
         }
     }
 
-    warn!("Status reporting not yet implemented - this is a placeholder");
     Ok(())
 }
 

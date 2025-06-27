@@ -1,6 +1,5 @@
-// async_trait will be added when we implement the actual embedding logic
-
-// Result import will be added when async methods are implemented
+use async_trait::async_trait;
+use crate::error::Result;
 
 #[derive(Debug, Clone)]
 pub struct EmbeddingResponse {
@@ -15,8 +14,18 @@ pub struct EmbeddingUsage {
     pub total_tokens: Option<u32>,
 }
 
-// TODO: Implement EmbeddingProvider trait when async_trait is available
+#[async_trait]
 pub trait EmbeddingProvider: Send + Sync {
     fn model_name(&self) -> &str;
     fn embedding_dimension(&self) -> usize;
+    
+    async fn generate_embeddings(&self, texts: Vec<String>) -> Result<EmbeddingResponse>;
+    async fn generate_embedding(&self, text: String) -> Result<Vec<f32>> {
+        let response = self.generate_embeddings(vec![text]).await?;
+        response.embeddings.into_iter().next().ok_or_else(|| {
+            crate::error::IndexerError::embedding("No embedding returned".to_string())
+        })
+    }
+    
+    async fn health_check(&self) -> Result<bool>;
 }
