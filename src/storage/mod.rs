@@ -2,4 +2,4 @@ pub mod qdrant;
 pub mod sqlite;
 
 pub use qdrant::QdrantStore;
-pub use sqlite::SqliteStore;
+pub use sqlite::{SqliteStore, FileRecord, DirectoryRecord};

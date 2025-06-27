@@ -15,13 +15,12 @@ impl McpTool {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "directory_paths": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Paths to directories to index"
+                    "directory_path": {
+                        "type": "string",
+                        "description": "Path to directory to index (or comma-separated paths)"
                     }
                 },
-                "required": ["directory_paths"]
+                "required": ["directory_path"]
             }),
         }
     }

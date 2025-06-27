@@ -1,9 +1,14 @@
 use log::{info, warn};
 use std::path::Path;
 
-use crate::{IndexerError, Result};
+use crate::{Config, IndexerError, Result};
+use crate::mcp::McpServer;
 
 pub async fn index(paths: Vec<String>) -> Result<()> {
+    index_internal(paths, true).await
+}
+
+pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Result<()> {
     info!("Indexing directories: {:?}", paths);
 
     if paths.is_empty() {
@@ -21,9 +26,11 @@ pub async fn index(paths: Vec<String>) -> Result<()> {
         }
     }
 
-    println!("Indexing {} directories", paths.len());
-    for path in &paths {
-        println!("  {}", path);
+    if output_to_console {
+        println!("Indexing {} directories", paths.len());
+        for path in &paths {
+            println!("  {}", path);
+        }
     }
 
     warn!("Indexing not yet implemented - this is a placeholder");
@@ -31,6 +38,10 @@ pub async fn index(paths: Vec<String>) -> Result<()> {
 }
 
 pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -> Result<()> {
+    search_internal(query, path, limit, true).await
+}
+
+pub async fn search_internal(query: String, path: Option<String>, limit: Option<usize>, output_to_console: bool) -> Result<()> {
     info!("Searching for: '{}' in path: {:?}, limit: {:?}", query, path, limit);
 
     if query.trim().is_empty() {
@@ -45,12 +56,14 @@ pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -
         }
     }
 
-    println!("Searching for: '{}'", query);
-    if let Some(p) = path {
-        println!("  Scope: {}", p);
-    }
-    if let Some(l) = limit {
-        println!("  Limit: {}", l);
+    if output_to_console {
+        println!("Searching for: '{}'", query);
+        if let Some(p) = path {
+            println!("  Scope: {}", p);
+        }
+        if let Some(l) = limit {
+            println!("  Limit: {}", l);
+        }
     }
 
     warn!("Search not yet implemented - this is a placeholder");
@@ -58,6 +71,10 @@ pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -
 }
 
 pub async fn similar(file: String, limit: usize) -> Result<()> {
+    similar_internal(file, limit, true).await
+}
+
+pub async fn similar_internal(file: String, limit: usize, output_to_console: bool) -> Result<()> {
     info!("Finding files similar to: '{}', limit: {}", file, limit);
 
     let file_path = Path::new(&file);
@@ -68,14 +85,20 @@ pub async fn similar(file: String, limit: usize) -> Result<()> {
         return Err(IndexerError::invalid_input(format!("Path is not a file: {}", file)));
     }
 
-    println!("Finding files similar to: {}", file);
-    println!("  Limit: {}", limit);
+    if output_to_console {
+        println!("Finding files similar to: {}", file);
+        println!("  Limit: {}", limit);
+    }
 
     warn!("Similar file search not yet implemented - this is a placeholder");
     Ok(())
 }
 
 pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
+    get_internal(file, chunks, true).await
+}
+
+pub async fn get_internal(file: String, chunks: Option<String>, output_to_console: bool) -> Result<()> {
     info!("Getting content for: '{}', chunks: {:?}", file, chunks);
 
     let file_path = Path::new(&file);
@@ -91,9 +114,11 @@ pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
         validate_chunk_range(chunk_str)?;
     }
 
-    println!("Getting content from: {}", file);
-    if let Some(c) = chunks {
-        println!("  Chunks: {}", c);
+    if output_to_console {
+        println!("Getting content from: {}", file);
+        if let Some(c) = chunks {
+            println!("  Chunks: {}", c);
+        }
     }
 
     warn!("File content retrieval not yet implemented - this is a placeholder");
@@ -103,16 +128,12 @@ pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
 pub async fn serve() -> Result<()> {
     info!("Starting MCP server");
 
-    // TODO: Implement actual MCP server
-    println!("Starting MCP server...");
-    println!("  Ready to accept MCP connections");
-
-    warn!("MCP server not yet implemented - this is a placeholder");
-
-    // Simulate server running
-    println!("Press Ctrl+C to stop");
-    tokio::signal::ctrl_c().await.unwrap();
-    println!("MCP server stopped");
+    // Load configuration
+    let config = Config::load()?;
+    
+    // Create and start MCP server
+    let server = McpServer::new(config).await?;
+    server.start().await?;
 
     Ok(())
 }

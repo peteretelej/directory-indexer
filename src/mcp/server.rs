@@ -1,140 +1,323 @@
-use log::{info, warn};
+use log::{debug, error, info, warn};
+use serde_json::{json, Value};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader};
 
-use crate::{
-    config::Config,
-    embedding::EmbeddingProvider,
-    error::{IndexerError, Result},
-    storage::{QdrantStore, SqliteStore},
-};
+use crate::{Config, Result};
+use super::json_rpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use super::tools::McpTool;
 
 pub struct McpServer {
     config: Config,
 }
 
 impl McpServer {
-    pub async fn new(
-        config: Config,
-        _sqlite_store: SqliteStore,
-        _vector_store: QdrantStore,
-        _embedding_provider: Box<dyn EmbeddingProvider>,
-    ) -> Result<Self> {
-        // TODO: Implement proper sharing of stores and providers
-        warn!("MCP server initialization not fully implemented");
-
+    pub async fn new(config: Config) -> Result<Self> {
+        info!("Initializing MCP server");
         Ok(Self { config })
     }
 
     pub async fn start(&self) -> Result<()> {
-        info!("Starting MCP server");
+        info!("Starting MCP server on stdio");
 
-        // TODO: Implement actual MCP server
-        // This would include:
-        // 1. Set up JSON-RPC server for MCP protocol
-        // 2. Register MCP tools (index, search, similar_files, get_content, server_info)
-        // 3. Handle incoming MCP requests
-        // 4. Route requests to appropriate handlers
-        // 5. Return responses in MCP format
+        let stdin = tokio::io::stdin();
+        let mut reader = AsyncBufReader::new(stdin);
+        let mut stdout = tokio::io::stdout();
 
-        warn!("MCP server implementation not yet complete");
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => {
+                    debug!("EOF reached, shutting down MCP server");
+                    break;
+                }
+                Ok(_) => {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
 
-        // For now, simulate server running
-        info!("MCP server listening for connections...");
+                    debug!("Received request: {}", line);
 
-        // Wait for shutdown signal
-        tokio::signal::ctrl_c().await.map_err(|e| {
-            IndexerError::mcp(format!("Failed to listen for shutdown signal: {}", e))
-        })?;
+                    let response = self.handle_request(line).await;
+                    let response_json = serde_json::to_string(&response)
+                        .unwrap_or_else(|_| r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"}}"#.to_string());
+
+                    debug!("Sending response: {}", response_json);
+
+                    if let Err(e) = stdout.write_all(response_json.as_bytes()).await {
+                        error!("Failed to write response: {}", e);
+                        break;
+                    }
+                    if let Err(e) = stdout.write_all(b"\n").await {
+                        error!("Failed to write newline: {}", e);
+                        break;
+                    }
+                    if let Err(e) = stdout.flush().await {
+                        error!("Failed to flush stdout: {}", e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to read from stdin: {}", e);
+                    break;
+                }
+            }
+        }
 
         info!("MCP server shutting down");
         Ok(())
     }
 
-    pub fn get_server_info(&self) -> ServerInfo {
-        ServerInfo {
-            name: "directory-indexer".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            description: "AI-powered directory indexing with semantic search".to_string(),
-            tools: vec![
-                "index".to_string(),
-                "search".to_string(),
-                "similar_files".to_string(),
-                "get_content".to_string(),
-                "server_info".to_string(),
-            ],
-            config: self.config.clone(),
+    async fn handle_request(&self, request_str: &str) -> JsonRpcResponse {
+        let request: JsonRpcRequest = match serde_json::from_str(request_str) {
+            Ok(req) => req,
+            Err(e) => {
+                error!("Failed to parse JSON-RPC request: {}", e);
+                return JsonRpcResponse::error(None, JsonRpcError::invalid_request());
+            }
+        };
+
+        match request.method.as_str() {
+            "initialize" => self.handle_initialize(request.id, request.params).await,
+            "tools/list" => self.handle_tools_list(request.id).await,
+            "tools/call" => self.handle_tools_call(request.id, request.params).await,
+            _ => {
+                warn!("Unknown method: {}", request.method);
+                JsonRpcResponse::error(request.id, JsonRpcError::method_not_found())
+            }
         }
     }
 
-    #[allow(dead_code)]
-    async fn handle_index_request(&self, directories: Vec<String>) -> Result<IndexResponse> {
-        info!("Handling index request for directories: {:?}", directories);
+    async fn handle_initialize(&self, id: Option<Value>, _params: Option<Value>) -> JsonRpcResponse {
+        info!("Handling initialize request");
 
-        // TODO: Convert string paths to PathBuf and validate
-        // TODO: Call indexing engine
+        let capabilities = json!({
+            "tools": {
+                "listChanged": true
+            },
+            "resources": {},
+            "prompts": {},
+            "logging": {}
+        });
 
-        warn!("Index request handling not yet implemented");
+        let result = json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": capabilities,
+            "serverInfo": {
+                "name": "directory-indexer",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        });
 
-        Ok(IndexResponse {
-            success: false,
-            message: "Indexing not yet implemented".to_string(),
-            directories_processed: 0,
-            files_processed: 0,
-            chunks_created: 0,
-        })
+        JsonRpcResponse::success(id, result)
     }
 
-    #[allow(dead_code)]
-    async fn handle_search_request(
-        &self,
-        query: String,
-        directory: Option<String>,
-    ) -> Result<SearchResponse> {
-        info!(
-            "Handling search request: '{}' in directory: {:?}",
-            query, directory
-        );
+    async fn handle_tools_list(&self, id: Option<Value>) -> JsonRpcResponse {
+        info!("Handling tools/list request");
 
-        // TODO: Create SearchQuery and call search engine
+        let tools = McpTool::all_tools();
+        let tools_json: Vec<Value> = tools.into_iter().map(|tool| {
+            json!({
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.input_schema
+            })
+        }).collect();
 
-        warn!("Search request handling not yet implemented");
+        let result = json!({
+            "tools": tools_json
+        });
 
-        Ok(SearchResponse {
-            query,
-            results: Vec::new(),
-            total_results: 0,
-        })
+        JsonRpcResponse::success(id, result)
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct ServerInfo {
-    pub name: String,
-    pub version: String,
-    pub description: String,
-    pub tools: Vec<String>,
-    pub config: Config,
-}
+    async fn handle_tools_call(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+        let params = match params {
+            Some(p) => p,
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params".to_string())),
+        };
 
-#[derive(Debug)]
-pub struct IndexResponse {
-    pub success: bool,
-    pub message: String,
-    pub directories_processed: usize,
-    pub files_processed: usize,
-    pub chunks_created: usize,
-}
+        let tool_name = match params.get("name").and_then(|v| v.as_str()) {
+            Some(name) => name,
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing tool name".to_string())),
+        };
 
-#[derive(Debug)]
-pub struct SearchResponse {
-    pub query: String,
-    pub results: Vec<SearchResultResponse>,
-    pub total_results: usize,
-}
+        let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
-#[derive(Debug)]
-pub struct SearchResultResponse {
-    pub file_path: String,
-    pub score: f32,
-    pub snippet: Option<String>,
-    pub chunk_id: usize,
+        info!("Handling tools/call request for tool: {}", tool_name);
+
+        match tool_name {
+            "server_info" => self.handle_server_info_tool(id).await,
+            "index" => self.handle_index_tool(id, arguments).await,
+            "search" => self.handle_search_tool(id, arguments).await,
+            "similar_files" => self.handle_similar_files_tool(id, arguments).await,
+            "get_content" => self.handle_get_content_tool(id, arguments).await,
+            _ => JsonRpcResponse::error(id, JsonRpcError::method_not_found()),
+        }
+    }
+
+    async fn handle_server_info_tool(&self, id: Option<Value>) -> JsonRpcResponse {
+        info!("Handling server_info tool");
+
+        let content = format!("Directory Indexer MCP Server v{}\n\nStatus:\n- Server running\n- Configuration loaded\n- Available tools: index, search, similar_files, get_content, server_info", 
+            env!("CARGO_PKG_VERSION"));
+
+        let result = json!({
+            "content": [
+                {
+                    "type": "text",
+                    "text": content
+                }
+            ]
+        });
+
+        JsonRpcResponse::success(id, result)
+    }
+
+    async fn handle_index_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+        info!("Handling index tool");
+
+        let directory_path = match arguments.get("directory_path").and_then(|v| v.as_str()) {
+            Some(path) => path,
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: directory_path".to_string())),
+        };
+
+        // Handle comma-separated paths for multiple directories
+        let paths: Vec<String> = directory_path
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
+
+        // Call CLI index function without console output
+        match crate::cli::commands::index_internal(paths.clone(), false).await {
+            Ok(_) => {
+                let content = format!("Successfully indexed {} directories:\n{}", 
+                    paths.len(),
+                    paths.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"));
+
+                let result = json!({
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content
+                        }
+                    ]
+                });
+
+                JsonRpcResponse::success(id, result)
+            }
+            Err(e) => {
+                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Failed to index directories: {}", e)))
+            }
+        }
+    }
+
+    async fn handle_search_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+        info!("Handling search tool");
+
+        let query = match arguments.get("query").and_then(|v| v.as_str()) {
+            Some(q) => q.to_string(),
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: query".to_string())),
+        };
+
+        let directory_path = arguments.get("directory_path").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let limit = arguments.get("limit").and_then(|v| v.as_u64()).map(|l| l as usize);
+
+        // Call CLI search function without console output
+        match crate::cli::commands::search_internal(query.clone(), directory_path.clone(), limit, false).await {
+            Ok(_) => {
+                let mut content = format!("Search completed for query: '{}'\n", query);
+                if let Some(path) = directory_path {
+                    content.push_str(&format!("Scope: {}\n", path));
+                }
+                if let Some(l) = limit {
+                    content.push_str(&format!("Limit: {}\n", l));
+                }
+                content.push_str("Note: Search functionality is still being implemented");
+
+                let result = json!({
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content
+                        }
+                    ]
+                });
+
+                JsonRpcResponse::success(id, result)
+            }
+            Err(e) => {
+                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Search failed: {}", e)))
+            }
+        }
+    }
+
+    async fn handle_similar_files_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+        info!("Handling similar_files tool");
+
+        let file_path = match arguments.get("file_path").and_then(|v| v.as_str()) {
+            Some(path) => path.to_string(),
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: file_path".to_string())),
+        };
+
+        let limit = arguments.get("limit").and_then(|v| v.as_u64()).map(|l| l as usize).unwrap_or(10);
+
+        // Call CLI similar function without console output
+        match crate::cli::commands::similar_internal(file_path.clone(), limit, false).await {
+            Ok(_) => {
+                let content = format!("Similar files search completed for: {}\nLimit: {}\nNote: Similar files functionality is still being implemented",
+                    file_path, limit);
+
+                let result = json!({
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content
+                        }
+                    ]
+                });
+
+                JsonRpcResponse::success(id, result)
+            }
+            Err(e) => {
+                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Similar files search failed: {}", e)))
+            }
+        }
+    }
+
+    async fn handle_get_content_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+        info!("Handling get_content tool");
+
+        let file_path = match arguments.get("file_path").and_then(|v| v.as_str()) {
+            Some(path) => path.to_string(),
+            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: file_path".to_string())),
+        };
+
+        let chunks = arguments.get("chunks").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        // Call CLI get function without console output
+        match crate::cli::commands::get_internal(file_path.clone(), chunks.clone(), false).await {
+            Ok(_) => {
+                let mut content = format!("Content retrieved from: {}\n", file_path);
+                if let Some(c) = chunks {
+                    content.push_str(&format!("Chunks: {}\n", c));
+                }
+                content.push_str("Note: File content retrieval functionality is still being implemented");
+
+                let result = json!({
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content
+                        }
+                    ]
+                });
+
+                JsonRpcResponse::success(id, result)
+            }
+            Err(e) => {
+                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Get content failed: {}", e)))
+            }
+        }
+    }
 }

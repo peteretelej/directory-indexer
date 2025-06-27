@@ -134,14 +134,14 @@ impl SqliteStore {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )?;
 
-        stmt.execute([
-            &record.path,
-            &record.size.to_string(),
-            &record.modified_time.to_string(),
-            &record.hash,
-            &parent_dirs_json,
-            &chunks_json.unwrap_or_default(),
-            &errors_json.unwrap_or_default(),
+        stmt.execute(rusqlite::params![
+            record.path,
+            record.size,
+            record.modified_time,
+            record.hash,
+            parent_dirs_json,
+            chunks_json,
+            errors_json
         ])?;
 
         Ok(self.conn.last_insert_rowid())
@@ -165,6 +165,7 @@ impl SqliteStore {
 
             let chunks_json: Option<String> = row.get(6)?;
             let chunks = chunks_json
+                .filter(|s| !s.is_empty())
                 .map(|s| serde_json::from_str(&s))
                 .transpose()
                 .map_err(|e| {
@@ -177,6 +178,7 @@ impl SqliteStore {
 
             let errors_json: Option<String> = row.get(7)?;
             let errors = errors_json
+                .filter(|s| !s.is_empty())
                 .map(|s| serde_json::from_str(&s))
                 .transpose()
                 .map_err(|e| {

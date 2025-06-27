@@ -7,6 +7,126 @@ use crate::{
     utils::{chunk_text, detect_file_type, should_ignore_file, FileType},
 };
 
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    pub path: String,
+    pub size: u64,
+    pub modified_time: u64,
+    pub hash: String,
+    pub parent_dirs: Vec<String>,
+    pub content: Option<String>,
+    pub errors: Option<String>,
+}
+
+pub struct FileScanner {
+    max_file_size: u64,
+    ignore_patterns: Vec<String>,
+}
+
+impl FileScanner {
+    pub fn new() -> Self {
+        Self {
+            max_file_size: 10 * 1024 * 1024, // 10MB default
+            ignore_patterns: vec![".git".to_string(), "node_modules".to_string(), "target".to_string()],
+        }
+    }
+
+    pub fn with_ignore_patterns(ignore_patterns: Vec<String>) -> Self {
+        Self {
+            max_file_size: 10 * 1024 * 1024,
+            ignore_patterns,
+        }
+    }
+
+    pub fn with_max_size(max_size: u64) -> Self {
+        Self {
+            max_file_size: max_size,
+            ignore_patterns: vec![],
+        }
+    }
+
+    pub fn scan_directory(&self, dir_path: &Path) -> Result<Vec<FileInfo>> {
+        let mut files = Vec::new();
+
+        for entry in WalkDir::new(dir_path).follow_links(false) {
+            let entry = entry.map_err(|e| {
+                IndexerError::file_processing(format!("Error walking directory: {}", e))
+            })?;
+
+            let path = entry.path();
+
+            // Skip directories
+            if path.is_dir() {
+                continue;
+            }
+
+            // Apply ignore patterns
+            if should_ignore_file(path, &self.ignore_patterns) {
+                debug!("Ignoring file due to patterns: {:?}", path);
+                continue;
+            }
+
+            // Get file metadata
+            let metadata = std::fs::metadata(path)?;
+            let size = metadata.len();
+
+            let modified_time = metadata
+                .modified()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| {
+                    IndexerError::file_processing(format!("Invalid modified time: {}", e))
+                })?
+                .as_secs();
+
+            // Calculate hash
+            let hash = crate::utils::calculate_file_hash(path)?;
+
+            // Extract parent directories
+            let parent_dirs = self.extract_parent_directories(path, dir_path);
+
+            // Check file size and read content if appropriate
+            let (content, errors) = if size > self.max_file_size {
+                (None, Some(format!("File too large: {} bytes (max: {})", size, self.max_file_size)))
+            } else {
+                match std::fs::read_to_string(path) {
+                    Ok(content) => (Some(content), None),
+                    Err(e) => (None, Some(format!("Failed to read file: {}", e))),
+                }
+            };
+
+            files.push(FileInfo {
+                path: path.to_string_lossy().to_string(),
+                size,
+                modified_time,
+                hash,
+                parent_dirs,
+                content,
+                errors,
+            });
+        }
+
+        Ok(files)
+    }
+
+    fn extract_parent_directories(&self, file_path: &Path, root_dir: &Path) -> Vec<String> {
+        let mut parent_dirs = Vec::new();
+        
+        // Add the root directory
+        parent_dirs.push(root_dir.to_string_lossy().to_string());
+        
+        // Add all parent directories between root and file
+        if let Ok(relative_path) = file_path.strip_prefix(root_dir) {
+            let mut current = root_dir.to_path_buf();
+            for component in relative_path.parent().unwrap_or(Path::new("")).components() {
+                current = current.join(component);
+                parent_dirs.push(current.to_string_lossy().to_string());
+            }
+        }
+        
+        parent_dirs
+    }
+}
+
 pub struct FileProcessor {
     max_file_size: u64,
     ignore_patterns: Vec<String>,

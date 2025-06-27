@@ -3,4 +3,4 @@ pub mod files;
 pub mod monitor;
 
 pub use engine::IndexingEngine;
-pub use files::FileProcessor;
+pub use files::{FileProcessor, FileScanner, FileInfo};
