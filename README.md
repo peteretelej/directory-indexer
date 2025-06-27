@@ -32,17 +32,12 @@ Finding relevant files requires knowing exactly what to search for:
 
 ## Architecture
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   AI Assistant  │◄──►│  MCP Server      │◄──►│  Vector Store   │
-│  (Claude, etc)  │    │  (Rust)          │    │  (Qdrant)       │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌──────────────────┐
-                       │  File System     │
-                       │  Monitor         │
-                       └──────────────────┘
+```mermaid
+graph TB
+    AI[AI Assistant<br/>Claude, etc] <--> MCP[MCP Server<br/>Rust Binary]
+    MCP <--> VS[Vector Store<br/>Qdrant]
+    MCP --> FS[File System<br/>Indexed Directories]
+    MCP --> MS[Metadata Store<br/>SQLite]
 ```
 
 **Core components:**
