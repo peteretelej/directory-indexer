@@ -1,0 +1,46 @@
+{
+  "name": "directory-indexer",
+  "version": "0.0.1",
+  "description": "Turn your directories into an AI-powered knowledge base for your team. MCP server that indexes local directories with semantic search.",
+  "main": "index.js",
+  "bin": {
+    "directory-indexer": "./bin/cli.js"
+  },
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "semantic-search",
+    "vector-database",
+    "ai",
+    "indexing",
+    "knowledge-base",
+    "claude",
+    "directory",
+    "search"
+  ],
+  "author": "Peter Etelej <peter@etelej.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peteretelej/directory-indexer.git"
+  },
+  "homepage": "https://github.com/peteretelej/directory-indexer#readme",
+  "bugs": {
+    "url": "https://github.com/peteretelej/directory-indexer/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
+}
