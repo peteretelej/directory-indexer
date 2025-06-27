@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Pre-push hook for directory-indexer
+# Run quality checks before pushing code
+
+set -e
+
+echo "Running pre-push checks..."
+
+# Check if we're in a Rust project
+if [ ! -f "Cargo.toml" ]; then
+    echo "ERROR: Cargo.toml not found. This script should be run from the project root."
+    exit 1
+fi
+
+echo "Running clippy (linter)..."
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "Checking code formatting..."
+cargo fmt --check
+
+echo "Running tests..."
+cargo test
+
+echo "Checking for security vulnerabilities..."
+if command -v cargo-audit >/dev/null 2>&1; then
+    cargo audit
+else
+    echo "Installing cargo-audit..."
+    cargo install cargo-audit
+    cargo audit
+fi
+
+
+echo "All pre-push checks passed!"

@@ -1,28 +1,24 @@
 {
   "name": "directory-indexer",
-  "version": "0.0.1",
-  "description": "Turn your directories into an AI-powered knowledge base for your team. MCP server that indexes local directories with semantic search.",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "AI-powered directory indexing with semantic search for MCP servers",
+  "main": "bin/directory-indexer.js",
   "bin": {
-    "directory-indexer": "./bin/cli.js"
-  },
-  "directories": {
-    "doc": "docs"
+    "directory-indexer": "bin/directory-indexer.js"
   },
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "cargo build --release",
+    "build-all": "node scripts/build-all.js",
+    "test": "cargo test",
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "mcp",
-    "semantic-search",
-    "vector-database",
-    "ai",
+    "search",
     "indexing",
-    "knowledge-base",
-    "claude",
-    "directory",
-    "search"
+    "ai",
+    "semantic",
+    "cli"
   ],
   "author": "Peter Etelej <peter@etelej.com>",
   "license": "MIT",
@@ -30,17 +26,30 @@
     "type": "git",
     "url": "https://github.com/peteretelej/directory-indexer.git"
   },
-  "homepage": "https://github.com/peteretelej/directory-indexer#readme",
+  "homepage": "https://github.com/peteretelej/directory-indexer",
   "bugs": {
     "url": "https://github.com/peteretelej/directory-indexer/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
   },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "files": [
-    "index.js",
     "bin/",
+    "scripts/",
+    "binaries/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
 }
