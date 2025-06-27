@@ -1,11 +1,26 @@
 use log::{info, warn};
+use std::path::Path;
 
-use crate::error::Result;
+use crate::{IndexerError, Result};
 
 pub async fn index(paths: Vec<String>) -> Result<()> {
     info!("Indexing directories: {:?}", paths);
 
-    // TODO: Implement actual indexing logic
+    if paths.is_empty() {
+        return Err(IndexerError::invalid_input("At least one directory path is required"));
+    }
+
+    // Validate all paths exist before starting indexing
+    for path in &paths {
+        let path_obj = Path::new(path);
+        if !path_obj.exists() {
+            return Err(IndexerError::not_found(format!("Directory not found: {}", path)));
+        }
+        if !path_obj.is_dir() {
+            return Err(IndexerError::invalid_input(format!("Path is not a directory: {}", path)));
+        }
+    }
+
     println!("Indexing {} directories", paths.len());
     for path in &paths {
         println!("  {}", path);
@@ -15,13 +30,27 @@ pub async fn index(paths: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-pub async fn search(query: String, path: Option<String>) -> Result<()> {
-    info!("Searching for: '{}' in path: {:?}", query, path);
+pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -> Result<()> {
+    info!("Searching for: '{}' in path: {:?}, limit: {:?}", query, path, limit);
 
-    // TODO: Implement actual search logic
+    if query.trim().is_empty() {
+        return Err(IndexerError::invalid_input("Search query cannot be empty"));
+    }
+
+    // Validate path if provided
+    if let Some(ref p) = path {
+        let path_obj = Path::new(p);
+        if !path_obj.exists() {
+            return Err(IndexerError::not_found(format!("Directory not found: {}", p)));
+        }
+    }
+
     println!("Searching for: '{}'", query);
     if let Some(p) = path {
         println!("  Scope: {}", p);
+    }
+    if let Some(l) = limit {
+        println!("  Limit: {}", l);
     }
 
     warn!("Search not yet implemented - this is a placeholder");
@@ -31,7 +60,14 @@ pub async fn search(query: String, path: Option<String>) -> Result<()> {
 pub async fn similar(file: String, limit: usize) -> Result<()> {
     info!("Finding files similar to: '{}', limit: {}", file, limit);
 
-    // TODO: Implement actual similarity search
+    let file_path = Path::new(&file);
+    if !file_path.exists() {
+        return Err(IndexerError::not_found(format!("File not found: {}", file)));
+    }
+    if !file_path.is_file() {
+        return Err(IndexerError::invalid_input(format!("Path is not a file: {}", file)));
+    }
+
     println!("Finding files similar to: {}", file);
     println!("  Limit: {}", limit);
 
@@ -42,7 +78,19 @@ pub async fn similar(file: String, limit: usize) -> Result<()> {
 pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
     info!("Getting content for: '{}', chunks: {:?}", file, chunks);
 
-    // TODO: Implement actual file content retrieval
+    let file_path = Path::new(&file);
+    if !file_path.exists() {
+        return Err(IndexerError::not_found(format!("File not found: {}", file)));
+    }
+    if !file_path.is_file() {
+        return Err(IndexerError::invalid_input(format!("Path is not a file: {}", file)));
+    }
+
+    // Validate chunk range if provided
+    if let Some(ref chunk_str) = chunks {
+        validate_chunk_range(chunk_str)?;
+    }
+
     println!("Getting content from: {}", file);
     if let Some(c) = chunks {
         println!("  Chunks: {}", c);
@@ -69,16 +117,58 @@ pub async fn serve() -> Result<()> {
     Ok(())
 }
 
-pub async fn status() -> Result<()> {
-    info!("Showing indexing status");
+pub async fn status(format: String) -> Result<()> {
+    info!("Showing indexing status in format: {}", format);
 
-    // TODO: Implement actual status reporting
-    println!("Directory Indexer Status");
-    println!("  Indexed directories: 0");
-    println!("  Indexed files: 0");
-    println!("  Total chunks: 0");
-    println!("  Database size: 0 MB");
+    match format.as_str() {
+        "json" => {
+            println!("{{");
+            println!("  \"indexed_directories\": 0,");
+            println!("  \"indexed_files\": 0,");
+            println!("  \"total_chunks\": 0,");
+            println!("  \"database_size_mb\": 0");
+            println!("}}");
+        }
+        "text" => {
+            println!("Directory Indexer Status");
+            println!("  Indexed directories: 0");
+            println!("  Indexed files: 0");
+            println!("  Total chunks: 0");
+            println!("  Database size: 0 MB");
+        }
+        _ => {
+            return Err(IndexerError::invalid_input(format!("Unsupported format: {}. Use 'text' or 'json'", format)));
+        }
+    }
 
     warn!("Status reporting not yet implemented - this is a placeholder");
+    Ok(())
+}
+
+fn validate_chunk_range(chunk_str: &str) -> Result<()> {
+    if chunk_str.contains('-') {
+        let parts: Vec<&str> = chunk_str.split('-').collect();
+        if parts.len() != 2 {
+            return Err(IndexerError::invalid_input("Invalid chunk range format. Use 'start-end' (e.g., '1-5')"));
+        }
+        
+        let start: usize = parts[0].parse()
+            .map_err(|_| IndexerError::invalid_input("Invalid start chunk number"))?;
+        let end: usize = parts[1].parse()
+            .map_err(|_| IndexerError::invalid_input("Invalid end chunk number"))?;
+            
+        if start == 0 || end == 0 {
+            return Err(IndexerError::invalid_input("Chunk numbers must be greater than 0"));
+        }
+        if start > end {
+            return Err(IndexerError::invalid_input("Start chunk must be less than or equal to end chunk"));
+        }
+    } else {
+        let chunk: usize = chunk_str.parse()
+            .map_err(|_| IndexerError::invalid_input("Invalid chunk number"))?;
+        if chunk == 0 {
+            return Err(IndexerError::invalid_input("Chunk number must be greater than 0"));
+        }
+    }
     Ok(())
 }

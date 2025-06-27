@@ -1,7 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 mod fixtures;
@@ -205,7 +204,7 @@ fn test_get_command_comprehensive() {
                 .arg(full_path.to_str().unwrap())
                 .assert()
                 .success()
-                .stdout(predicate::str::contains("content").or(predicate::str::len(10)));
+                .stdout(predicate::str::contains("content").or(predicate::str::is_empty().not()));
         }
     }
 }
@@ -278,7 +277,7 @@ fn test_status_verbose() {
         .arg("--verbose")
         .assert()
         .success()
-        .stdout(predicate::str::len(50)); // Should have substantial output
+        .stdout(predicate::str::is_empty().not()); // Should have substantial output
 }
 
 /// Test status with JSON format

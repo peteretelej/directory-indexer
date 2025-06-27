@@ -14,6 +14,9 @@ struct Cli {
 
     #[arg(short, long, global = true)]
     verbose: bool,
+
+    #[arg(short, long, global = true)]
+    config: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -30,6 +33,9 @@ enum Commands {
         /// Optional directory to scope search
         #[arg(short, long)]
         path: Option<String>,
+        /// Maximum number of results to return
+        #[arg(short, long)]
+        limit: Option<usize>,
     },
     /// Find files similar to a given file
     Similar {
@@ -44,13 +50,17 @@ enum Commands {
         /// Path to the file
         file: String,
         /// Chunk range (e.g., "2-5")
-        #[arg(short, long)]
+        #[arg(long)]
         chunks: Option<String>,
     },
     /// Start MCP server
     Serve,
     /// Show indexing status and statistics
-    Status,
+    Status {
+        /// Output format (text or json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[tokio::main]
@@ -72,8 +82,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Index { paths } => {
             cli::commands::index(paths).await?;
         }
-        Commands::Search { query, path } => {
-            cli::commands::search(query, path).await?;
+        Commands::Search { query, path, limit } => {
+            cli::commands::search(query, path, limit).await?;
         }
         Commands::Similar { file, limit } => {
             cli::commands::similar(file, limit).await?;
@@ -84,8 +94,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Serve => {
             cli::commands::serve().await?;
         }
-        Commands::Status => {
-            cli::commands::status().await?;
+        Commands::Status { format } => {
+            cli::commands::status(format).await?;
         }
     }
 

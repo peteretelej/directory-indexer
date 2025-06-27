@@ -3,7 +3,6 @@ use std::time::Duration;
 use std::thread;
 use std::io::{BufRead, BufReader, Write};
 use serde_json::{json, Value};
-use tempfile::TempDir;
 
 mod fixtures;
 use fixtures::create_test_files::TestDirectoryStructure;
@@ -15,7 +14,7 @@ struct McpServerHandle {
 
 impl McpServerHandle {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let mut process = Command::new("cargo")
+        let process = Command::new("cargo")
             .args(&["run", "--", "serve"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
