@@ -56,7 +56,7 @@ impl Default for Config {
                     .join(".directory-indexer")
                     .join("data.db"),
                 qdrant: QdrantConfig {
-                    endpoint: "http://localhost:6335".to_string(),
+                    endpoint: "http://localhost:6333".to_string(),
                     collection: "directory-indexer".to_string(),
                     api_key: None,
                 },
@@ -64,7 +64,7 @@ impl Default for Config {
             embedding: EmbeddingConfig {
                 provider: "ollama".to_string(),
                 model: "nomic-embed-text".to_string(),
-                endpoint: "http://localhost:11435".to_string(),
+                endpoint: "http://localhost:11434".to_string(),
                 api_key: None,
             },
             indexing: IndexingConfig {

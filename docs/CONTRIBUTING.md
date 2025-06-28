@@ -65,7 +65,7 @@
 In case you don't want to use the Ollama and Qdrant instances on the default ports, you can use docker to run them in differen ports using the script below:
 
 ```bash
-# Start dev services (Qdrant on 6335, Ollama on 11435)
+# Start dev services (isolated ports for development)
 ./scripts/start-dev-services.sh
 
 # Run tests
@@ -75,27 +75,9 @@ cargo test --test connectivity_tests
 ./scripts/stop-dev-services.sh
 ```
 
-The scripts runs them on different ports to avoid conflicts with existing instances.
+The script runs them on different ports to avoid conflicts with existing instances and sets up environment variables for seamless integration.
 
-```bash
-# qdrant on 6335
-docker run -d --name qdrant-dev \
-  -p 127.0.0.1:6335:6333 \
-  -v qdrant_dev_storage:/qdrant/storage \
-  qdrant/qdrant
-
-# ollama on 11435
-docker run -d --name ollama-dev \
-  -p 127.0.0.1:11435:11434 \
-  -v ollama_dev_data:/root/.ollama \
-  ollama/ollama
-
-docker exec ollama-dev ollama pull nomic-embed-text
-
-# Health checks
-curl http://localhost:6335/health    # Qdrant
-curl http://localhost:11435/api/tags # Ollama
-```
+**Note**: The development script runs services on isolated ports (6335, 11435) and sets `QDRANT_URL` and `OLLAMA_ENDPOINT` environment variables for you. Your tests and development workflows will automatically use these when available.
 
 ## Project Structure
 

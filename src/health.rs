@@ -149,7 +149,7 @@ async fn check_qdrant_connectivity(config: &Config) -> (bool, Vec<String>) {
                 "✗ Cannot connect to Qdrant at {}: {}",
                 config.storage.qdrant.endpoint, e
             );
-            error!("  Make sure Qdrant is running: docker run -p 6335:6333 qdrant/qdrant");
+            error!("  Make sure Qdrant is running: docker run -p 6333:6333 qdrant/qdrant");
             (false, Vec::new())
         }
     }
