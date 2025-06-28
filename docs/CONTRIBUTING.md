@@ -7,12 +7,14 @@
 - **Rust**: Install from [rustup.rs](https://rustup.rs/) (latest stable version)
 - **Node.js**: Version 16+ for npm packaging
 - **Qdrant**: Local instance for vector storage
+
   ```bash
   # Using Docker
   docker run -p 6333:6333 qdrant/qdrant
-  
+
   # Or install locally from https://qdrant.tech/
   ```
+
 - **Embedding Provider**: Choose one:
   - **Ollama** (recommended for development): Install from [ollama.ai](https://ollama.ai/)
   - **OpenAI API**: Requires API key
@@ -20,6 +22,7 @@
 ### Initial Setup
 
 1. **Clone and build**:
+
    ```bash
    git clone https://github.com/peteretelej/directory-indexer.git
    cd directory-indexer
@@ -27,11 +30,13 @@
    ```
 
 2. **Install npm dependencies**:
+
    ```bash
    npm install
    ```
 
 3. **Set up Ollama** (if using local embeddings):
+
    ```bash
    ollama pull nomic-embed-text
    ```
@@ -41,6 +46,37 @@
    cargo test
    npm test
    ```
+
+### Isolated Development Environment
+
+In case you don't want to use the Ollama and Qdrant instances on the default ports, you can use docker to run them in differen ports using the script below:
+
+```bash
+# Start dev services (Qdrant on 6335, Ollama on 11435)
+./scripts/start-dev-services.sh
+
+# Run tests
+cargo test --test connectivity_tests
+
+# Stop services
+./scripts/stop-dev-services.sh
+```
+
+The scripts runs them on different ports to avoid conflicts with existing instances.
+
+```bash
+# qdrant on 6335
+docker run -d --name qdrant-dev -p 6335:6333 -v qdrant_dev_storage:/qdrant/storage qdrant/qdrant
+
+# ollama on 11435
+docker run -d --name ollama-dev -p 11435:11434 -v ollama_dev_data:/root/.ollama ollama/ollama
+
+docker exec ollama-dev ollama pull nomic-embed-text
+
+# Health checks
+curl http://localhost:6335/health    # Qdrant
+curl http://localhost:11435/api/tags # Ollama
+```
 
 ## Project Structure
 
@@ -112,6 +148,7 @@ Before pushing code, run the pre-push script to ensure code quality:
 ```
 
 **Setting up Git Hook (recommended):**
+
 ```bash
 # Copy the script as a git pre-push hook
 cp scripts/pre-push .git/hooks/pre-push
@@ -119,8 +156,9 @@ chmod +x .git/hooks/pre-push
 ```
 
 The script runs:
+
 - `cargo clippy` - Rust linter with strict warnings
-- `cargo fmt --check` - Code formatting validation  
+- `cargo fmt --check` - Code formatting validation
 - `cargo test` - All tests
 - `cargo audit` - Security vulnerability scan (auto-installs if missing)
 
@@ -129,11 +167,13 @@ The script runs:
 ### Testing MCP Integration
 
 1. **Start the server**:
+
    ```bash
    cargo run -- serve
    ```
 
 2. **Test with MCP client**:
+
    ```json
    {
      "mcpServers": {
@@ -146,6 +186,7 @@ The script runs:
    ```
 
 3. **Test tools manually**:
+
    ```bash
    # Test indexing
    cargo run -- index ~/Documents/test
@@ -207,58 +248,74 @@ Create `~/.directory-indexer/config.json`:
 }
 ```
 
-## Code Quality Guidelines
+## Testing
 
-### Rust Best Practices
+```bash
+# Unit tests
+cargo test
 
-- **Error Handling**: Use `Result<T>` and custom error types
-- **Async/Await**: Use tokio for async operations
-- **Memory Safety**: Leverage Rust's ownership system
-- **Documentation**: Document public APIs with `///`
+# Integration tests
+cargo test --test integration_tests
 
-### Code Style
+# All tests
+./scripts/pre-push
+```
 
-- Follow `cargo fmt` formatting
-- Use descriptive variable names
-- Keep functions focused and small
-- Add tests for new functionality
+## Publishing
 
-### Performance
+### Pre-publish Steps
 
-- Use `cargo build --release` for benchmarking
-- Profile with `cargo flamegraph` if available
-- Monitor memory usage with large directories
-- Test with realistic file volumes
+```bash
+# 1. Update versions
+# Edit Cargo.toml: version = "0.1.0"
+# Edit package.json: "version": "0.1.0"
 
-## Testing Strategy
+# 2. Run quality checks
+./scripts/pre-push
 
-### Unit Tests
+# 3. Check what will be included
+cargo package --list
+npm pack --dry-run
 
-- Test individual functions and modules
-- Mock external dependencies (Qdrant, embedding APIs)
-- Use `tempfile` for filesystem tests
+# 4. Test publish without uploading
+cargo publish --dry-run
+npm publish --dry-run
+```
 
-### Integration Tests
+### Publishing to crates.io
 
-- Test complete workflows end-to-end
-- Use real file systems and test directories
-- Verify MCP protocol compliance
-- Test cross-platform compatibility
+```bash
+# Account setup at https://crates.io, then:
+cargo login
+cargo publish
+cargo install directory-indexer --force
 
-### Performance Tests
+cargo search directory-indexer
+directory-indexer --version
+```
 
-- Benchmark indexing speed with large directories
-- Test memory usage with many files
-- Verify search response times
+### Publishing to npm
+
+```bash
+npm login
+npm run build-all
+npm publish
+npm install -g directory-indexer
+
+npm view directory-indexer
+directory-indexer --version
+```
+
+### Post-publish
+
+```bash
+git add Cargo.toml package.json
+git commit -m "Release v0.1.0"
+git tag v0.1.0
+git push origin main --tags
+```
 
 ## Release Process
-
-### Version Management
-
-1. Update version in `Cargo.toml` and `package.json`
-2. Update `CHANGELOG.md` with release notes
-3. Create git tag: `git tag v0.1.0`
-4. Push tag: `git push origin v0.1.0`
 
 ### Automated Releases
 
@@ -269,41 +326,21 @@ Releases are automated via GitHub Actions:
 3. **npm Publishing**: Automated upload to npm registry
 4. **GitHub Release**: Create release with binaries
 
-### Manual Release Testing
-
-Before tagging a release:
-
-```bash
-# Test installation
-npm pack
-npm install -g ./directory-indexer-*.tgz
-
-# Test CLI
-directory-indexer --help
-directory-indexer index ./test-docs
-directory-indexer search "test"
-
-# Test MCP integration
-# (Configure with Claude Desktop/Cline and test tools)
-```
-
 ## Troubleshooting
 
 ### Common Issues
 
-**Build Failures:**
-- Ensure Rust toolchain is up to date: `rustup update`
-- Check for platform-specific dependencies
+```bash
+# Build issues
+rustup update
 
-**Test Failures:**
-- Verify Qdrant is running on port 6333
-- Check Ollama is running and has required models
-- Ensure test directories have proper permissions
+# Test failures
+docker run -p 6333:6333 qdrant/qdrant
+ollama pull nomic-embed-text
 
-**Runtime Issues:**
-- Check configuration file location and format
-- Verify network connectivity to embedding providers
-- Monitor disk space for SQLite database
+# Debug logging
+RUST_LOG=debug cargo run -- serve
+```
 
 ### Debug Logging
 
@@ -317,12 +354,10 @@ RUST_LOG=trace cargo run -- index ./docs
 
 ## Community
 
-- **Issues**: Report bugs and feature requests on GitHub
-- **Discussions**: Use GitHub Discussions for questions
-- **Pull Requests**: Follow the PR template and guidelines
+- Issues: GitHub Issues
 
 ## Security
 
-- Never commit API keys or sensitive configuration
-- Use environment variables for secrets in CI/CD
-- Report security issues privately to maintainers
+- No API keys in commits
+- Use env vars for secrets
+- Report security issues privately
