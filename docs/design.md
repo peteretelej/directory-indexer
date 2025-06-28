@@ -130,7 +130,7 @@ Location: `~/.directory-indexer/config.json`
 
 ### Quick Start
 ```bash
-# Start dev services (Qdrant on 6335, Ollama on 11435)
+# Start dev services (Qdrant on 6333, Ollama on 11434)
 ./scripts/start-dev-services.sh
 
 # Run tests

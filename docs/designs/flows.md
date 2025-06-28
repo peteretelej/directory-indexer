@@ -4,23 +4,40 @@ This document describes the key operational flows in the directory indexer syste
 
 ## System Architecture
 
+### CLI Flow
 ```mermaid
 graph TB
     CLI[CLI Interface] --> Engine[Indexing Engine]
     CLI --> Search[Search Engine]
-    CLI --> MCP[MCP Server]
     
     Engine --> SQLite[(SQLite DB)]
     Engine --> Qdrant[(Qdrant Vector Store)]
     Engine --> Files[File System]
+    Engine --> Embed[Embedding Provider]
     
     Search --> SQLite
     Search --> Qdrant
-    Search --> Embed[Embedding Provider]
+    Search --> Embed
     
-    Engine --> Embed
-    MCP --> Engine
-    MCP --> Search
+    Embed --> Ollama[Ollama API]
+    Embed --> OpenAI[OpenAI API]
+```
+
+### MCP Server Flow
+```mermaid
+graph TB
+    AI[AI Assistant] --> MCP[MCP Server]
+    MCP --> Engine[Indexing Engine]
+    MCP --> Search[Search Engine]
+    
+    Engine --> SQLite[(SQLite DB)]
+    Engine --> Qdrant[(Qdrant Vector Store)]
+    Engine --> Files[File System]
+    Engine --> Embed[Embedding Provider]
+    
+    Search --> SQLite
+    Search --> Qdrant
+    Search --> Embed
     
     Embed --> Ollama[Ollama API]
     Embed --> OpenAI[OpenAI API]
@@ -114,7 +131,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([User: search "Redis timeout"]) --> EMBED[Generate query embedding]
+    START([User: search Redis timeout]) --> EMBED[Generate query embedding]
     EMBED -->|Success| SEARCH[Vector search in Qdrant]
     EMBED -->|Failure| ERROR[Error: Embedding failed]
     

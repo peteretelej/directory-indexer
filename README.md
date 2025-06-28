@@ -18,6 +18,7 @@ directory-indexer serve
 ```
 
 **Configure with Claude Desktop:**
+
 ```json
 {
   "mcpServers": {
@@ -34,6 +35,7 @@ Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will 
 ## Requirements
 
 - **Qdrant**: Vector database for semantic search
+
   ```bash
   docker run -p 6333:6333 qdrant/qdrant
   ```
@@ -48,7 +50,7 @@ Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will 
 # Index your directories
 directory-indexer index ~/Documents ~/work/docs
 
-# Search semantically  
+# Search semantically
 directory-indexer search "database timeout errors"
 
 # Find similar files
@@ -70,7 +72,7 @@ directory-indexer status
 
 ## Documentation
 
-- **[API Reference](docs/API.md)**: Complete CLI and MCP tool documentation
+- **[API Reference](docs/designs/API.md)**: Complete CLI and MCP tool documentation
 - **[Contributing](docs/CONTRIBUTING.md)**: Development setup and guidelines
 - **[Design](docs/design.md)**: Architecture and technical decisions
 
