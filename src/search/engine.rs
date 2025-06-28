@@ -49,10 +49,9 @@ impl SearchEngine {
     }
 
     pub async fn search(&self, query: SearchQuery) -> Result<Vec<SearchResult>> {
-        info!(
-            "Searching for: '{}' with limit: {}",
-            query.text, query.limit
-        );
+        let text = &query.text;
+        let limit = query.limit;
+        info!("Searching for: '{text}' with limit: {limit}");
 
         // TODO: Implement actual search logic
         // This would include:
@@ -72,10 +71,7 @@ impl SearchEngine {
         file_path: PathBuf,
         limit: usize,
     ) -> Result<Vec<SearchResult>> {
-        info!(
-            "Finding files similar to: {:?} with limit: {}",
-            file_path, limit
-        );
+        info!("Finding files similar to: {file_path:?} with limit: {limit}");
 
         // TODO: Implement similar file search
         // This would include:
@@ -95,10 +91,7 @@ impl SearchEngine {
         file_path: PathBuf,
         chunk_range: Option<(usize, usize)>,
     ) -> Result<String> {
-        info!(
-            "Getting content for: {:?} with chunks: {:?}",
-            file_path, chunk_range
-        );
+        info!("Getting content for: {file_path:?} with chunks: {chunk_range:?}");
 
         // TODO: Implement file content retrieval
         // This would include:

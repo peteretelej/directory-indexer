@@ -61,7 +61,8 @@ impl EmbeddingProvider for OllamaProvider {
             "mxbai-embed-large" => 1024,
             "all-minilm" => 384,
             _ => {
-                warn!("Unknown model '{}', assuming 768 dimensions", self.model);
+                let model = &self.model;
+                warn!("Unknown model '{model}', assuming 768 dimensions");
                 768
             }
         }
@@ -97,7 +98,7 @@ impl EmbeddingProvider for OllamaProvider {
 
         let response =
             self.client.get(&models_url).send().await.map_err(|e| {
-                IndexerError::embedding(format!("Failed to connect to Ollama: {}", e))
+                IndexerError::embedding(format!("Failed to connect to Ollama: {e}"))
             })?;
 
         if !response.status().is_success() {
@@ -105,7 +106,7 @@ impl EmbeddingProvider for OllamaProvider {
         }
 
         let models_response: OllamaModelsResponse = response.json().await.map_err(|e| {
-            IndexerError::embedding(format!("Failed to parse models response: {}", e))
+            IndexerError::embedding(format!("Failed to parse models response: {e}"))
         })?;
 
         let model_available = models_response
@@ -133,18 +134,18 @@ impl OllamaProvider {
             .send()
             .await
             .map_err(|e| {
-                IndexerError::embedding(format!("Failed to send embedding request: {}", e))
+                IndexerError::embedding(format!("Failed to send embedding request: {e}"))
             })?;
 
         if !response.status().is_success() {
+            let status = response.status();
             return Err(IndexerError::embedding(format!(
-                "Ollama API returned error: {}",
-                response.status()
+                "Ollama API returned error: {status}"
             )));
         }
 
         let embed_response: OllamaEmbedResponse = response.json().await.map_err(|e| {
-            IndexerError::embedding(format!("Failed to parse embedding response: {}", e))
+            IndexerError::embedding(format!("Failed to parse embedding response: {e}"))
         })?;
 
         debug!(

@@ -36,29 +36,29 @@ impl McpServer {
                         continue;
                     }
 
-                    debug!("Received request: {}", line);
+                    debug!("Received request: {line}");
 
                     let response = self.handle_request(line).await;
                     let response_json = serde_json::to_string(&response)
                         .unwrap_or_else(|_| r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"}}"#.to_string());
 
-                    debug!("Sending response: {}", response_json);
+                    debug!("Sending response: {response_json}");
 
                     if let Err(e) = stdout.write_all(response_json.as_bytes()).await {
-                        error!("Failed to write response: {}", e);
+                        error!("Failed to write response: {e}");
                         break;
                     }
                     if let Err(e) = stdout.write_all(b"\n").await {
-                        error!("Failed to write newline: {}", e);
+                        error!("Failed to write newline: {e}");
                         break;
                     }
                     if let Err(e) = stdout.flush().await {
-                        error!("Failed to flush stdout: {}", e);
+                        error!("Failed to flush stdout: {e}");
                         break;
                     }
                 }
                 Err(e) => {
-                    error!("Failed to read from stdin: {}", e);
+                    error!("Failed to read from stdin: {e}");
                     break;
                 }
             }
@@ -72,7 +72,7 @@ impl McpServer {
         let request: JsonRpcRequest = match serde_json::from_str(request_str) {
             Ok(req) => req,
             Err(e) => {
-                error!("Failed to parse JSON-RPC request: {}", e);
+                error!("Failed to parse JSON-RPC request: {e}");
                 return JsonRpcResponse::error(None, JsonRpcError::invalid_request());
             }
         };
@@ -161,7 +161,7 @@ impl McpServer {
 
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
-        info!("Handling tools/call request for tool: {}", tool_name);
+        info!("Handling tools/call request for tool: {tool_name}");
 
         match tool_name {
             "server_info" => self.handle_server_info_tool(id).await,
@@ -176,11 +176,11 @@ impl McpServer {
     async fn handle_server_info_tool(&self, id: Option<Value>) -> JsonRpcResponse {
         info!("Handling server_info tool");
 
-        let content = format!("Directory Indexer MCP Server v{}\n\nStatus:\n- Server running\n- Configuration loaded\n- SQLite path: {}\n- Qdrant endpoint: {}\n- Embedding provider: {}\n- Available tools: index, search, similar_files, get_content, server_info", 
-            env!("CARGO_PKG_VERSION"),
-            self.config.storage.sqlite_path.display(),
-            self.config.storage.qdrant.endpoint,
-            self.config.embedding.provider);
+        let version = env!("CARGO_PKG_VERSION");
+        let sqlite_path = self.config.storage.sqlite_path.display();
+        let qdrant_endpoint = &self.config.storage.qdrant.endpoint;
+        let embedding_provider = &self.config.embedding.provider;
+        let content = format!("Directory Indexer MCP Server v{version}\n\nStatus:\n- Server running\n- Configuration loaded\n- SQLite path: {sqlite_path}\n- Qdrant endpoint: {qdrant_endpoint}\n- Embedding provider: {embedding_provider}\n- Available tools: index, search, similar_files, get_content, server_info");
 
         let result = json!({
             "content": [
@@ -218,15 +218,14 @@ impl McpServer {
         // Call CLI index function without console output
         match crate::cli::commands::index_internal(paths.clone(), false).await {
             Ok(_) => {
-                let content = format!(
-                    "Successfully indexed {} directories:\n{}",
-                    paths.len(),
-                    paths
-                        .iter()
-                        .map(|p| format!("- {}", p))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                );
+                let paths_len = paths.len();
+                let paths_list = paths
+                    .iter()
+                    .map(|p| format!("- {p}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let content =
+                    format!("Successfully indexed {paths_len} directories:\n{paths_list}");
 
                 let result = json!({
                     "content": [
@@ -241,7 +240,7 @@ impl McpServer {
             }
             Err(e) => JsonRpcResponse::error(
                 id,
-                JsonRpcError::internal_error(format!("Failed to index directories: {}", e)),
+                JsonRpcError::internal_error(format!("Failed to index directories: {e}")),
             ),
         }
     }
@@ -278,12 +277,12 @@ impl McpServer {
         .await
         {
             Ok(_) => {
-                let mut content = format!("Search completed for query: '{}'\n", query);
+                let mut content = format!("Search completed for query: '{query}'\n");
                 if let Some(path) = directory_path {
-                    content.push_str(&format!("Scope: {}\n", path));
+                    content.push_str(&format!("Scope: {path}\n"));
                 }
                 if let Some(l) = limit {
-                    content.push_str(&format!("Limit: {}\n", l));
+                    content.push_str(&format!("Limit: {l}\n"));
                 }
                 content.push_str("Note: Search functionality is still being implemented");
 
@@ -300,7 +299,7 @@ impl McpServer {
             }
             Err(e) => JsonRpcResponse::error(
                 id,
-                JsonRpcError::internal_error(format!("Search failed: {}", e)),
+                JsonRpcError::internal_error(format!("Search failed: {e}")),
             ),
         }
     }
@@ -333,7 +332,7 @@ impl McpServer {
         // Call CLI similar function without console output
         match crate::cli::commands::similar_internal(file_path.clone(), limit, false).await {
             Ok(_) => {
-                let content = format!("Similar files search completed for: {}\nLimit: {}\n\nThe search analyzes the file's content and finds files with similar semantic meaning using vector embeddings. Results are ranked by similarity score.", file_path, limit);
+                let content = format!("Similar files search completed for: {file_path}\nLimit: {limit}\n\nThe search analyzes the file's content and finds files with similar semantic meaning using vector embeddings. Results are ranked by similarity score.");
 
                 let result = json!({
                     "content": [
@@ -348,7 +347,7 @@ impl McpServer {
             }
             Err(e) => JsonRpcResponse::error(
                 id,
-                JsonRpcError::internal_error(format!("Similar files search failed: {}", e)),
+                JsonRpcError::internal_error(format!("Similar files search failed: {e}")),
             ),
         }
     }
@@ -380,9 +379,9 @@ impl McpServer {
         // Call CLI get function without console output
         match crate::cli::commands::get_internal(file_path.clone(), chunks.clone(), false).await {
             Ok(_) => {
-                let mut content = format!("Content retrieved from: {}\n", file_path);
+                let mut content = format!("Content retrieved from: {file_path}\n");
                 if let Some(c) = chunks {
-                    content.push_str(&format!("Chunks: {}\n", c));
+                    content.push_str(&format!("Chunks: {c}\n"));
                 }
                 content.push_str("\nThe file content has been retrieved from the indexed database. If chunks were specified, only those specific chunks are returned. Otherwise, the full file content is provided.");
 
@@ -399,7 +398,7 @@ impl McpServer {
             }
             Err(e) => JsonRpcResponse::error(
                 id,
-                JsonRpcError::internal_error(format!("Get content failed: {}", e)),
+                JsonRpcError::internal_error(format!("Get content failed: {e}")),
             ),
         }
     }

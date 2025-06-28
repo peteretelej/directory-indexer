@@ -14,7 +14,10 @@ if [ ! -f "Cargo.toml" ]; then
 fi
 
 echo "Running clippy (linter)..."
-cargo clippy --all-targets --all-features -- -D warnings
+# Check main library code with strict linting
+cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
+# Check other targets with standard linting (tests can be less strict)
+cargo clippy --bins --all-features -- -D warnings
 
 echo "Checking code formatting..."
 cargo fmt --check

@@ -42,7 +42,7 @@ impl IndexingEngine {
     }
 
     pub async fn index_directories(&self, paths: Vec<PathBuf>) -> Result<IndexingStats> {
-        info!("Starting indexing for {} directories", paths.len());
+        info!("Starting indexing for {len} directories", len = paths.len());
 
         let mut stats = IndexingStats {
             directories_processed: 0,
@@ -62,18 +62,18 @@ impl IndexingEngine {
                     stats.chunks_created += dir_stats.chunks_created;
                 }
                 Err(e) => {
-                    error!("Failed to index directory {:?}: {}", path, e);
+                    error!("Failed to index directory {path:?}: {e}");
                     stats.files_errored += 1;
                 }
             }
         }
 
-        info!("Indexing completed: {:?}", stats);
+        info!("Indexing completed: {stats:?}");
         Ok(stats)
     }
 
     async fn index_directory(&self, path: &PathBuf) -> Result<IndexingStats> {
-        info!("Indexing directory: {:?}", path);
+        info!("Indexing directory: {path:?}");
 
         let mut stats = IndexingStats {
             directories_processed: 0,
@@ -90,7 +90,10 @@ impl IndexingEngine {
         let scanner = FileScanner::new();
         let files = scanner.scan_directory(path).await?;
 
-        info!("Found {} files to process in {:?}", files.len(), path);
+        info!(
+            "Found {len} files to process in {path:?}",
+            len = files.len()
+        );
 
         // Process each file
         for file_info in files {
@@ -100,7 +103,7 @@ impl IndexingEngine {
                     stats.chunks_created += chunks_count;
                 }
                 Err(e) => {
-                    error!("Failed to process file {:?}: {}", file_info.path, e);
+                    error!("Failed to process file {:?}: {e}", file_info.path);
                     stats.files_errored += 1;
                 }
             }
@@ -140,8 +143,8 @@ impl IndexingEngine {
             .await
             .map_err(|e| {
                 IndexerError::file_processing(format!(
-                    "Failed to read file {:?}: {}",
-                    file_info.path, e
+                    "Failed to read file {:?}: {e}",
+                    file_info.path
                 ))
             })?;
 
@@ -174,8 +177,7 @@ impl IndexingEngine {
                             Ok(embedding) => Some((global_chunk_id, embedding)),
                             Err(e) => {
                                 error!(
-                                    "Failed to generate embedding for chunk {}: {}",
-                                    global_chunk_id, e
+                                    "Failed to generate embedding for chunk {global_chunk_id}: {e}"
                                 );
                                 None
                             }
@@ -221,15 +223,15 @@ impl IndexingEngine {
         self.sqlite_store.add_file(&file_record)?;
 
         info!(
-            "Successfully processed file: {:?} ({} chunks)",
+            "Successfully processed file: {:?} ({len} chunks)",
             file_info.path,
-            chunks.len()
+            len = chunks.len()
         );
         Ok(chunks.len())
     }
 
     pub async fn update_file(&self, file_path: &PathBuf) -> Result<()> {
-        info!("Updating file: {:?}", file_path);
+        info!("Updating file: {file_path:?}");
 
         // TODO: Implement file update logic
         // This would include:
@@ -242,7 +244,7 @@ impl IndexingEngine {
     }
 
     pub async fn remove_file(&self, file_path: &PathBuf) -> Result<()> {
-        info!("Removing file: {:?}", file_path);
+        info!("Removing file: {file_path:?}");
 
         // TODO: Implement file removal logic
         // This would include:

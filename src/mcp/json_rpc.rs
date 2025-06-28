@@ -67,7 +67,7 @@ impl JsonRpcError {
     pub fn invalid_params(message: String) -> Self {
         Self {
             code: -32602,
-            message: format!("Invalid params: {}", message),
+            message: format!("Invalid params: {message}"),
             data: None,
         }
     }
@@ -75,7 +75,7 @@ impl JsonRpcError {
     pub fn internal_error(message: String) -> Self {
         Self {
             code: -32603,
-            message: format!("Internal error: {}", message),
+            message: format!("Internal error: {message}"),
             data: None,
         }
     }

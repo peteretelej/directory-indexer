@@ -86,19 +86,17 @@ impl EmbeddingProvider for OpenAIProvider {
             .json(&request)
             .send()
             .await
-            .map_err(|e| {
-                IndexerError::embedding(format!("Failed to send OpenAI request: {}", e))
-            })?;
+            .map_err(|e| IndexerError::embedding(format!("Failed to send OpenAI request: {e}")))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             return Err(IndexerError::embedding(format!(
-                "OpenAI API returned error: {}",
-                response.status()
+                "OpenAI API returned error: {status}"
             )));
         }
 
         let openai_response: OpenAIEmbedResponse = response.json().await.map_err(|e| {
-            IndexerError::embedding(format!("Failed to parse OpenAI response: {}", e))
+            IndexerError::embedding(format!("Failed to parse OpenAI response: {e}"))
         })?;
 
         let embeddings = openai_response

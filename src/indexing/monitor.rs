@@ -22,10 +22,8 @@ impl FileMonitor {
     where
         F: Fn(FileChangeEvent) + Send + Sync + 'static,
     {
-        info!(
-            "Starting file monitoring for {} directories",
-            self.watched_directories.len()
-        );
+        let dir_count = self.watched_directories.len();
+        info!("Starting file monitoring for {dir_count} directories");
 
         // TODO: Implement actual file watching
         // This could use platform-specific file watching APIs:
@@ -50,7 +48,7 @@ impl FileMonitor {
 
             // For now, just log that we're checking
             for dir in &self.watched_directories {
-                info!("Checking directory for changes: {:?}", dir);
+                info!("Checking directory for changes: {dir:?}");
             }
         }
     }

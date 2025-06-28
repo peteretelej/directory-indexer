@@ -12,7 +12,7 @@ pub async fn index(paths: Vec<String>) -> Result<()> {
 }
 
 pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Result<()> {
-    info!("Indexing directories: {:?}", paths);
+    info!("Indexing directories: {paths:?}");
 
     if paths.is_empty() {
         return Err(IndexerError::invalid_input(
@@ -25,22 +25,20 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
         let path_obj = Path::new(path);
         if !path_obj.exists() {
             return Err(IndexerError::not_found(format!(
-                "Directory not found: {}",
-                path
+                "Directory not found: {path}"
             )));
         }
         if !path_obj.is_dir() {
             return Err(IndexerError::invalid_input(format!(
-                "Path is not a directory: {}",
-                path
+                "Path is not a directory: {path}"
             )));
         }
     }
 
     if output_to_console {
-        println!("Indexing {} directories", paths.len());
+        println!("Indexing {len} directories", len = paths.len());
         for path in &paths {
-            println!("  {}", path);
+            println!("  {path}");
         }
     }
 
@@ -90,10 +88,7 @@ pub async fn search_internal(
     limit: Option<usize>,
     output_to_console: bool,
 ) -> Result<()> {
-    info!(
-        "Searching for: '{}' in path: {:?}, limit: {:?}",
-        query, path, limit
-    );
+    info!("Searching for: '{query}' in path: {path:?}, limit: {limit:?}");
 
     if query.trim().is_empty() {
         return Err(IndexerError::invalid_input("Search query cannot be empty"));
@@ -103,20 +98,17 @@ pub async fn search_internal(
     if let Some(ref p) = path {
         let path_obj = Path::new(p);
         if !path_obj.exists() {
-            return Err(IndexerError::not_found(format!(
-                "Directory not found: {}",
-                p
-            )));
+            return Err(IndexerError::not_found(format!("Directory not found: {p}")));
         }
     }
 
     if output_to_console {
-        println!("Searching for: '{}'", query);
+        println!("Searching for: '{query}'");
         if let Some(p) = &path {
-            println!("  Scope: {}", p);
+            println!("  Scope: {p}");
         }
         if let Some(l) = limit {
-            println!("  Limit: {}", l);
+            println!("  Limit: {l}");
         }
     }
 
@@ -143,17 +135,17 @@ pub async fn search_internal(
 
     if output_to_console {
         if search_results.is_empty() {
-            println!("No results found for query: '{}'", query);
+            println!("No results found for query: '{query}'");
         } else {
             println!("\nSearch Results:");
             println!("==============");
 
             for (i, result) in search_results.iter().enumerate() {
                 println!(
-                    "\n{}. {} (score: {:.3})",
-                    i + 1,
-                    result.file_path,
-                    result.score
+                    "\n{num}. {file} (score: {score:.3})",
+                    num = i + 1,
+                    file = result.file_path,
+                    score = result.score
                 );
                 println!("   Chunk: {}", result.chunk_id);
                 if !result.parent_directories.is_empty() {
@@ -188,22 +180,21 @@ pub async fn similar(file: String, limit: usize) -> Result<()> {
 }
 
 pub async fn similar_internal(file: String, limit: usize, output_to_console: bool) -> Result<()> {
-    info!("Finding files similar to: '{}', limit: {}", file, limit);
+    info!("Finding files similar to: '{file}', limit: {limit}");
 
     let file_path = Path::new(&file);
     if !file_path.exists() {
-        return Err(IndexerError::not_found(format!("File not found: {}", file)));
+        return Err(IndexerError::not_found(format!("File not found: {file}")));
     }
     if !file_path.is_file() {
         return Err(IndexerError::invalid_input(format!(
-            "Path is not a file: {}",
-            file
+            "Path is not a file: {file}"
         )));
     }
 
     if output_to_console {
-        println!("Finding files similar to: {}", file);
-        println!("  Limit: {}", limit);
+        println!("Finding files similar to: {file}");
+        println!("  Limit: {limit}");
     }
 
     // Load configuration
@@ -229,21 +220,19 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
         let chunks = match file_record.chunks_json {
             Some(chunks_json) => {
                 serde_json::from_value::<Vec<String>>(chunks_json).map_err(|e| {
-                    IndexerError::file_processing(format!("Failed to parse chunks: {}", e))
+                    IndexerError::file_processing(format!("Failed to parse chunks: {e}"))
                 })?
             }
             None => {
                 return Err(IndexerError::not_found(format!(
-                    "No chunks found for file: {}",
-                    file
+                    "No chunks found for file: {file}"
                 )));
             }
         };
 
         if chunks.is_empty() {
             return Err(IndexerError::not_found(format!(
-                "No chunks found for file: {}",
-                file
+                "No chunks found for file: {file}"
             )));
         }
 
@@ -257,7 +246,7 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
     } else {
         // File not indexed, read from filesystem and generate embedding
         let content = std::fs::read_to_string(file_path)
-            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {}", e)))?;
+            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
 
         // Use first 512 chars as representative content
         let representative_content = if content.len() > 512 {
@@ -305,14 +294,14 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
 
     if output_to_console {
         if similar_files.is_empty() {
-            println!("No similar files found for: {}", file);
+            println!("No similar files found for: {file}");
         } else {
             println!("\nSimilar Files:");
             println!("==============");
 
             for (i, (file_path, (score, chunk_id))) in similar_files.iter().enumerate() {
-                println!("\n{}. {} (score: {:.3})", i + 1, file_path, score);
-                println!("   Best matching chunk: {}", chunk_id);
+                println!("\n{num}. {file_path} (score: {score:.3})", num = i + 1);
+                println!("   Best matching chunk: {chunk_id}");
 
                 // Try to get file metadata
                 if let Ok(Some(similar_file_record)) = sqlite_store.get_file_by_path(file_path) {
@@ -348,16 +337,15 @@ pub async fn get_internal(
     chunks: Option<String>,
     output_to_console: bool,
 ) -> Result<()> {
-    info!("Getting content for: '{}', chunks: {:?}", file, chunks);
+    info!("Getting content for: '{file}', chunks: {chunks:?}");
 
     let file_path = Path::new(&file);
     if !file_path.exists() {
-        return Err(IndexerError::not_found(format!("File not found: {}", file)));
+        return Err(IndexerError::not_found(format!("File not found: {file}")));
     }
     if !file_path.is_file() {
         return Err(IndexerError::invalid_input(format!(
-            "Path is not a file: {}",
-            file
+            "Path is not a file: {file}"
         )));
     }
 
@@ -370,9 +358,9 @@ pub async fn get_internal(
     };
 
     if output_to_console {
-        println!("Getting content from: {}", file);
+        println!("Getting content from: {file}");
         if let Some(c) = &chunks {
-            println!("  Chunks: {}", c);
+            println!("  Chunks: {c}");
         }
     }
 
@@ -389,7 +377,7 @@ pub async fn get_internal(
     let content = if let Some(file_record) = file_record {
         if let Some(chunks_json) = file_record.chunks_json {
             let chunks = serde_json::from_value::<Vec<String>>(chunks_json).map_err(|e| {
-                IndexerError::file_processing(format!("Failed to parse chunks: {}", e))
+                IndexerError::file_processing(format!("Failed to parse chunks: {e}"))
             })?;
 
             if let Some((start, end)) = chunk_range {
@@ -399,9 +387,7 @@ pub async fn get_internal(
 
                 if start_idx >= chunks.len() {
                     return Err(IndexerError::invalid_input(format!(
-                        "Chunk range {}-{} exceeds available chunks ({})",
-                        start,
-                        end,
+                        "Chunk range {start}-{end} exceeds available chunks ({})",
                         chunks.len()
                     )));
                 }
@@ -413,9 +399,8 @@ pub async fn get_internal(
             }
         } else {
             // File indexed but no chunks stored, read from filesystem
-            let content = std::fs::read_to_string(file_path).map_err(|e| {
-                IndexerError::file_processing(format!("Failed to read file: {}", e))
-            })?;
+            let content = std::fs::read_to_string(file_path)
+                .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
 
             if let Some((start, end)) = chunk_range {
                 // Split content into chunks on-the-fly for files without stored chunks
@@ -425,8 +410,7 @@ pub async fn get_internal(
 
                 if start > total_chunks || start == 0 {
                     return Err(IndexerError::invalid_input(format!(
-                        "Chunk {} is out of range. File has {} estimated chunks",
-                        start, total_chunks
+                        "Chunk {start} is out of range. File has {total_chunks} estimated chunks"
                     )));
                 }
 
@@ -441,7 +425,7 @@ pub async fn get_internal(
     } else {
         // File not indexed, read directly from file system
         let content = std::fs::read_to_string(file_path)
-            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {}", e)))?;
+            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
 
         if let Some((start, end)) = chunk_range {
             // Split content into chunks on-the-fly for unindexed files
@@ -451,8 +435,7 @@ pub async fn get_internal(
 
             if start > total_chunks || start == 0 {
                 return Err(IndexerError::invalid_input(format!(
-                    "Chunk {} is out of range. File has {} estimated chunks",
-                    start, total_chunks
+                    "Chunk {start} is out of range. File has {total_chunks} estimated chunks"
                 )));
             }
 
@@ -469,9 +452,9 @@ pub async fn get_internal(
         println!("\nFile Content:");
         println!("=============");
         if let Some((start, end)) = chunk_range {
-            println!("Chunks {}-{}:", start, end);
+            println!("Chunks {start}-{end}:");
         }
-        println!("{}", content);
+        println!("{content}");
     }
 
     Ok(())
@@ -491,7 +474,7 @@ pub async fn serve() -> Result<()> {
 }
 
 pub async fn status(format: String) -> Result<()> {
-    info!("Showing indexing status in format: {}", format);
+    info!("Showing indexing status in format: {format}");
 
     // Load configuration
     let config = Config::load()?;
@@ -519,9 +502,9 @@ pub async fn status(format: String) -> Result<()> {
     match format.as_str() {
         "json" => {
             println!("{{");
-            println!("  \"indexed_directories\": {},", dir_count);
-            println!("  \"indexed_files\": {},", file_count);
-            println!("  \"total_chunks\": {},", chunk_count);
+            println!("  \"indexed_directories\": {dir_count},");
+            println!("  \"indexed_files\": {file_count},");
+            println!("  \"total_chunks\": {chunk_count},");
             if let Some(info) = &collection_info {
                 println!("  \"vector_points\": {},", info.points_count);
                 println!("  \"indexed_vectors\": {},", info.indexed_vectors_count);
@@ -529,14 +512,14 @@ pub async fn status(format: String) -> Result<()> {
                 println!("  \"vector_points\": 0,");
                 println!("  \"indexed_vectors\": 0,");
             }
-            println!("  \"database_size_mb\": {}", db_size_mb);
+            println!("  \"database_size_mb\": {db_size_mb}");
             println!("}}");
         }
         "text" => {
             println!("Directory Indexer Status");
-            println!("  Indexed directories: {}", dir_count);
-            println!("  Indexed files: {}", file_count);
-            println!("  Total chunks: {}", chunk_count);
+            println!("  Indexed directories: {dir_count}");
+            println!("  Indexed files: {file_count}");
+            println!("  Total chunks: {chunk_count}");
             if let Some(info) = &collection_info {
                 println!("  Vector points: {}", info.points_count);
                 println!("  Indexed vectors: {}", info.indexed_vectors_count);
@@ -544,12 +527,11 @@ pub async fn status(format: String) -> Result<()> {
                 println!("  Vector points: 0 (collection not created)");
                 println!("  Indexed vectors: 0");
             }
-            println!("  Database size: {} MB", db_size_mb);
+            println!("  Database size: {db_size_mb} MB");
         }
         _ => {
             return Err(IndexerError::invalid_input(format!(
-                "Unsupported format: {}. Use 'text' or 'json'",
-                format
+                "Unsupported format: {format}. Use 'text' or 'json'"
             )));
         }
     }

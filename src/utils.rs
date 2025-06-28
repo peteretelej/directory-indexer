@@ -19,7 +19,7 @@ pub fn to_absolute_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 pub fn calculate_file_hash<P: AsRef<Path>>(path: P) -> Result<String> {
     let content = std::fs::read(path)?;
     let hash = Sha256::digest(&content);
-    Ok(format!("{:x}", hash))
+    Ok(format!("{hash:x}"))
 }
 
 /// Check if a file should be ignored based on patterns

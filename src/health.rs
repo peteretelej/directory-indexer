@@ -88,7 +88,7 @@ async fn check_ollama_connectivity(config: &Config) -> (bool, Vec<String>) {
                         (model_available, models)
                     }
                     Err(e) => {
-                        error!("✗ Ollama responded but returned invalid JSON: {}", e);
+                        error!("✗ Ollama responded but returned invalid JSON: {e}");
                         (false, Vec::new())
                     }
                 }
@@ -135,7 +135,7 @@ async fn check_qdrant_connectivity(config: &Config) -> (bool, Vec<String>) {
                         (true, vec![config.storage.qdrant.collection.clone()])
                     }
                     Err(e) => {
-                        warn!("⚠ Qdrant HTTP works but client connection failed: {}", e);
+                        warn!("⚠ Qdrant HTTP works but client connection failed: {e}");
                         (false, Vec::new())
                     }
                 }
@@ -164,7 +164,7 @@ async fn check_sqlite_connectivity(config: &Config) -> bool {
     // Try to create parent directory if it doesn't exist
     if let Some(parent) = config.storage.sqlite_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            error!("✗ Cannot create SQLite directory {:?}: {}", parent, e);
+            error!("✗ Cannot create SQLite directory {parent:?}: {e}");
             return false;
         }
     }
@@ -179,7 +179,7 @@ async fn check_sqlite_connectivity(config: &Config) -> bool {
                 true
             }
             Err(e) => {
-                error!("✗ SQLite database exists but operations failed: {}", e);
+                error!("✗ SQLite database exists but operations failed: {e}");
                 false
             }
         },
@@ -249,11 +249,11 @@ pub async fn test_embedding_generation(config: &Config) -> Result<()> {
         .json(&request)
         .send()
         .await
-        .map_err(|e| IndexerError::embedding(format!("Failed to send embedding request: {}", e)))?;
+        .map_err(|e| IndexerError::embedding(format!("Failed to send embedding request: {e}")))?;
 
     if response.status().is_success() {
         let result: serde_json::Value = response.json().await.map_err(|e| {
-            IndexerError::embedding(format!("Failed to parse embedding response: {}", e))
+            IndexerError::embedding(format!("Failed to parse embedding response: {e}"))
         })?;
 
         if let Some(embedding) = result.get("embedding").and_then(|e| e.as_array()) {

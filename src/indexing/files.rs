@@ -60,7 +60,7 @@ impl FileScanner {
 
         for entry in WalkDir::new(dir_path).follow_links(false) {
             let entry = entry.map_err(|e| {
-                IndexerError::file_processing(format!("Error walking directory: {}", e))
+                IndexerError::file_processing(format!("Error walking directory: {e}"))
             })?;
 
             let path = entry.path();
@@ -72,7 +72,7 @@ impl FileScanner {
 
             // Apply ignore patterns
             if should_ignore_file(path, &self.ignore_patterns) {
-                debug!("Ignoring file due to patterns: {:?}", path);
+                debug!("Ignoring file due to patterns: {path:?}");
                 continue;
             }
 
@@ -83,9 +83,7 @@ impl FileScanner {
             let modified_time = metadata
                 .modified()?
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| {
-                    IndexerError::file_processing(format!("Invalid modified time: {}", e))
-                })?
+                .map_err(|e| IndexerError::file_processing(format!("Invalid modified time: {e}")))?
                 .as_secs();
 
             // Calculate hash
@@ -99,14 +97,14 @@ impl FileScanner {
                 (
                     None,
                     Some(format!(
-                        "File too large: {} bytes (max: {})",
-                        size, self.max_file_size
+                        "File too large: {size} bytes (max: {})",
+                        self.max_file_size
                     )),
                 )
             } else {
                 match tokio::fs::read_to_string(path).await {
                     Ok(content) => (Some(content), None),
-                    Err(e) => (None, Some(format!("Failed to read file: {}", e))),
+                    Err(e) => (None, Some(format!("Failed to read file: {e}"))),
                 }
             };
 
@@ -188,7 +186,7 @@ impl FileProcessor {
 
         for entry in WalkDir::new(dir_path).follow_links(false) {
             let entry = entry.map_err(|e| {
-                IndexerError::file_processing(format!("Error walking directory: {}", e))
+                IndexerError::file_processing(format!("Error walking directory: {e}"))
             })?;
 
             let path = entry.path();
@@ -200,7 +198,7 @@ impl FileProcessor {
 
             // Apply ignore patterns
             if should_ignore_file(path, &self.ignore_patterns) {
-                debug!("Ignoring file due to patterns: {:?}", path);
+                debug!("Ignoring file due to patterns: {path:?}");
                 continue;
             }
 
@@ -210,16 +208,14 @@ impl FileProcessor {
 
             // Skip files that are too large
             if size > self.max_file_size {
-                warn!("Skipping large file ({} bytes): {:?}", size, path);
+                warn!("Skipping large file ({size} bytes): {path:?}");
                 continue;
             }
 
             let modified_time = metadata
                 .modified()?
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| {
-                    IndexerError::file_processing(format!("Invalid modified time: {}", e))
-                })?
+                .map_err(|e| IndexerError::file_processing(format!("Invalid modified time: {e}")))?
                 .as_secs();
 
             let file_type = detect_file_type(path);
@@ -236,12 +232,12 @@ impl FileProcessor {
     }
 
     pub async fn process_file(&self, path: &Path) -> Result<ProcessedFile> {
-        debug!("Processing file: {:?}", path);
+        debug!("Processing file: {path:?}");
 
         // Read file content
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {}", e)))?;
+            .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
 
         // Chunk the content
         let chunks = chunk_text(&content, self.chunk_size, self.overlap);

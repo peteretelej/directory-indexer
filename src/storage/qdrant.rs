@@ -41,7 +41,7 @@ impl QdrantStore {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to create HTTP client: {}", e))
+                IndexerError::vector_store(format!("Failed to create HTTP client: {e}"))
             })?;
 
         let store = QdrantStore {
@@ -69,19 +69,19 @@ impl QdrantStore {
             self.endpoint, self.collection_name
         );
         let response = self.client.get(&url).send().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to check collection existence: {}", e))
+            IndexerError::vector_store(format!("Failed to check collection existence: {e}"))
         })?;
 
-        let response_text = response.text().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to get response text: {}", e))
-        })?;
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| IndexerError::vector_store(format!("Failed to get response text: {e}")))?;
 
-        debug!("Collection exists response: {}", response_text);
+        debug!("Collection exists response: {response_text}");
 
         let exists_response: Value = serde_json::from_str(&response_text).map_err(|e| {
             IndexerError::vector_store(format!(
-                "Failed to parse collection exists response: {} - Response was: {}",
-                e, response_text
+                "Failed to parse collection exists response: {e} - Response was: {response_text}"
             ))
         })?;
 
@@ -122,16 +122,13 @@ impl QdrantStore {
             .json(&create_payload)
             .send()
             .await
-            .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to create collection: {}", e))
-            })?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to create collection: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
-                "Failed to create collection: HTTP {} - {}",
-                status, error_text
+                "Failed to create collection: HTTP {status} - {error_text}"
             )));
         }
 
@@ -178,14 +175,13 @@ impl QdrantStore {
             .json(&upsert_payload)
             .send()
             .await
-            .map_err(|e| IndexerError::vector_store(format!("Failed to upsert points: {}", e)))?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to upsert points: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
-                "Failed to upsert points: HTTP {} - {}",
-                status, error_text
+                "Failed to upsert points: HTTP {status} - {error_text}"
             )));
         }
 
@@ -195,9 +191,8 @@ impl QdrantStore {
 
     pub async fn search(&self, query_vector: Vec<f32>, limit: usize) -> Result<Vec<SearchResult>> {
         debug!(
-            "Searching Qdrant with vector dimension: {}, limit: {}",
-            query_vector.len(),
-            limit
+            "Searching Qdrant with vector dimension: {}, limit: {limit}",
+            query_vector.len()
         );
 
         let search_payload = json!({
@@ -217,19 +212,18 @@ impl QdrantStore {
             .json(&search_payload)
             .send()
             .await
-            .map_err(|e| IndexerError::vector_store(format!("Failed to search points: {}", e)))?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to search points: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
-                "Failed to search points: HTTP {} - {}",
-                status, error_text
+                "Failed to search points: HTTP {status} - {error_text}"
             )));
         }
 
         let search_response: Value = response.json().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to parse search response: {}", e))
+            IndexerError::vector_store(format!("Failed to parse search response: {e}"))
         })?;
 
         let results: Vec<SearchResult> = search_response
@@ -263,7 +257,7 @@ impl QdrantStore {
     }
 
     pub async fn delete_points_by_file(&self, file_path: &str) -> Result<()> {
-        debug!("Deleting points for file: {}", file_path);
+        debug!("Deleting points for file: {file_path}");
 
         let delete_payload = json!({
             "filter": {
@@ -288,38 +282,36 @@ impl QdrantStore {
             .json(&delete_payload)
             .send()
             .await
-            .map_err(|e| IndexerError::vector_store(format!("Failed to delete points: {}", e)))?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to delete points: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
-                "Failed to delete points: HTTP {} - {}",
-                status, error_text
+                "Failed to delete points: HTTP {status} - {error_text}"
             )));
         }
 
-        debug!("Successfully deleted points for file: {}", file_path);
+        debug!("Successfully deleted points for file: {file_path}");
         Ok(())
     }
 
     pub async fn get_collection_info(&self) -> Result<CollectionInfo> {
         let url = format!("{}/collections/{}", self.endpoint, self.collection_name);
         let response = self.client.get(&url).send().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to get collection info: {}", e))
+            IndexerError::vector_store(format!("Failed to get collection info: {e}"))
         })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
-                "Failed to get collection info: HTTP {} - {}",
-                status, error_text
+                "Failed to get collection info: HTTP {status} - {error_text}"
             )));
         }
 
         let collection_info: Value = response.json().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to parse collection info: {}", e))
+            IndexerError::vector_store(format!("Failed to parse collection info: {e}"))
         })?;
 
         let points_count = collection_info
@@ -345,7 +337,7 @@ impl QdrantStore {
         match self.client.get(&url).send().await {
             Ok(response) => Ok(response.status().is_success()),
             Err(e) => {
-                warn!("Qdrant health check failed: {}", e);
+                warn!("Qdrant health check failed: {e}");
                 Ok(false)
             }
         }
@@ -353,9 +345,10 @@ impl QdrantStore {
 
     pub async fn delete_collection(&self) -> Result<()> {
         let url = format!("{}/collections/{}", self.endpoint, self.collection_name);
-        let response = self.client.delete(&url).send().await.map_err(|e| {
-            IndexerError::vector_store(format!("Failed to delete collection: {}", e))
-        })?;
+        let response =
+            self.client.delete(&url).send().await.map_err(|e| {
+                IndexerError::vector_store(format!("Failed to delete collection: {e}"))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -363,8 +356,7 @@ impl QdrantStore {
             // Don't error if collection doesn't exist (404)
             if status != reqwest::StatusCode::NOT_FOUND {
                 return Err(IndexerError::vector_store(format!(
-                    "Failed to delete collection: HTTP {} - {}",
-                    status, error_text
+                    "Failed to delete collection: HTTP {status} - {error_text}"
                 )));
             }
         }
