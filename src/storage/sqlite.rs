@@ -2,7 +2,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::path::Path;
 
-use crate::error::Result;
+use crate::{error::Result, utils::normalize_path};
 
 pub struct SqliteStore {
     conn: Connection,
@@ -75,21 +75,23 @@ impl SqliteStore {
     }
 
     pub fn add_directory(&self, path: &str) -> Result<i64> {
+        let normalized_path = normalize_path(path)?;
         let mut stmt = self.conn.prepare(
             "INSERT OR REPLACE INTO directories (path, status, indexed_at) 
              VALUES (?1, 'pending', strftime('%s', 'now'))",
         )?;
 
-        stmt.execute([path])?;
+        stmt.execute([&normalized_path])?;
         Ok(self.conn.last_insert_rowid())
     }
 
     pub fn update_directory_status(&self, path: &str, status: &str) -> Result<()> {
+        let normalized_path = normalize_path(path)?;
         let mut stmt = self.conn.prepare(
             "UPDATE directories SET status = ?1, indexed_at = strftime('%s', 'now') WHERE path = ?2"
         )?;
 
-        stmt.execute([status, path])?;
+        stmt.execute([status, &normalized_path])?;
         Ok(())
     }
 
@@ -148,12 +150,13 @@ impl SqliteStore {
     }
 
     pub fn get_file_by_path(&self, path: &str) -> Result<Option<FileRecord>> {
+        let normalized_path = normalize_path(path)?;
         let mut stmt = self.conn.prepare(
             "SELECT id, path, size, modified_time, hash, parent_dirs, chunks_json, errors_json 
              FROM files WHERE path = ?1",
         )?;
 
-        let mut rows = stmt.query_map([path], |row| {
+        let mut rows = stmt.query_map([&normalized_path], |row| {
             let parent_dirs_str: String = row.get(5)?;
             let parent_dirs: Vec<String> = serde_json::from_str(&parent_dirs_str).map_err(|e| {
                 rusqlite::Error::FromSqlConversionFailure(
@@ -208,8 +211,9 @@ impl SqliteStore {
     }
 
     pub fn delete_file(&self, path: &str) -> Result<()> {
+        let normalized_path = normalize_path(path)?;
         let mut stmt = self.conn.prepare("DELETE FROM files WHERE path = ?1")?;
-        stmt.execute([path])?;
+        stmt.execute([&normalized_path])?;
         Ok(())
     }
 

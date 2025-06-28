@@ -300,7 +300,13 @@ mod file_scanning_tests {
         assert_eq!(scanned_files.len(), 2);
         let paths: Vec<String> = scanned_files
             .iter()
-            .map(|f| f.path.split('/').next_back().unwrap().to_string())
+            .map(|f| {
+                std::path::Path::new(&f.path)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
             .collect();
         assert!(paths.contains(&"valid.md".to_string()));
         assert!(paths.contains(&"also_valid.txt".to_string()));

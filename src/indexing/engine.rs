@@ -7,7 +7,7 @@ use crate::{
     error::{IndexerError, Result},
     indexing::files::{FileInfo, FileScanner},
     storage::{qdrant::VectorPoint, FileRecord, QdrantStore, SqliteStore},
-    utils::{calculate_file_hash, chunk_text},
+    utils::{calculate_file_hash, chunk_text, normalize_path},
 };
 
 pub struct IndexingEngine {
@@ -83,7 +83,7 @@ impl IndexingEngine {
             chunks_created: 0,
         };
 
-        // Add directory to SQLite for tracking
+        // Add directory to SQLite for tracking (normalization happens in add_directory)
         self.sqlite_store.add_directory(&path.to_string_lossy())?;
 
         // Scan directory for files
@@ -109,7 +109,7 @@ impl IndexingEngine {
             }
         }
 
-        // Update directory status
+        // Update directory status (normalization happens in update_directory_status)
         self.sqlite_store
             .update_directory_status(&path.to_string_lossy(), "completed")?;
 
@@ -123,8 +123,9 @@ impl IndexingEngine {
         // Calculate file hash
         let file_hash = calculate_file_hash(&file_info.path)?;
 
-        // Check if file already exists and is up to date
-        if let Some(existing) = self.sqlite_store.get_file_by_path(&file_info.path)? {
+        // Check if file already exists and is up to date (using normalized path for lookup)
+        let normalized_path = normalize_path(&file_info.path)?;
+        if let Some(existing) = self.sqlite_store.get_file_by_path(&normalized_path)? {
             if existing.hash == file_hash
                 && existing.modified_time == (file_info.modified_time as i64)
             {
@@ -132,9 +133,9 @@ impl IndexingEngine {
                 return Ok(0);
             }
 
-            // File changed, remove old data
+            // File changed, remove old data (using normalized path)
             self.vector_store
-                .delete_points_by_file(&file_info.path)
+                .delete_points_by_file(&normalized_path)
                 .await?;
         }
 
@@ -195,7 +196,7 @@ impl IndexingEngine {
                 let point = VectorPoint {
                     id: point_id,
                     vector: embedding,
-                    file_path: file_info.path.clone(),
+                    file_path: normalized_path.clone(),
                     chunk_id,
                     parent_directories: file_info.parent_dirs.clone(),
                 };
@@ -208,10 +209,10 @@ impl IndexingEngine {
             self.vector_store.upsert_points(vector_points).await?;
         }
 
-        // Store file record in SQLite
+        // Store file record in SQLite (using normalized path)
         let file_record = FileRecord {
             id: 0, // Will be set by database
-            path: file_info.path.clone(),
+            path: normalized_path.clone(),
             size: file_info.size as i64,
             modified_time: file_info.modified_time as i64,
             hash: file_hash,

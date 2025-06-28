@@ -4,7 +4,7 @@ use walkdir::WalkDir;
 
 use crate::{
     error::{IndexerError, Result},
-    utils::{chunk_text, detect_file_type, should_ignore_file, FileType},
+    utils::{chunk_text, detect_file_type, normalize_path, should_ignore_file, FileType},
 };
 
 #[derive(Debug, Clone)]
@@ -125,15 +125,19 @@ impl FileScanner {
     fn extract_parent_directories(&self, file_path: &Path, root_dir: &Path) -> Vec<String> {
         let mut parent_dirs = Vec::new();
 
-        // Add the root directory
-        parent_dirs.push(root_dir.to_string_lossy().to_string());
+        // Add the root directory (normalized)
+        if let Ok(normalized_root) = normalize_path(root_dir) {
+            parent_dirs.push(normalized_root);
+        }
 
         // Add all parent directories between root and file
         if let Ok(relative_path) = file_path.strip_prefix(root_dir) {
             let mut current = root_dir.to_path_buf();
             for component in relative_path.parent().unwrap_or(Path::new("")).components() {
                 current = current.join(component);
-                parent_dirs.push(current.to_string_lossy().to_string());
+                if let Ok(normalized_current) = normalize_path(&current) {
+                    parent_dirs.push(normalized_current);
+                }
             }
         }
 
@@ -282,9 +286,13 @@ impl FileProcessor {
         for root in root_dirs {
             if let Ok(relative_path) = file_path.strip_prefix(root) {
                 if let Some(parent) = relative_path.parent() {
-                    parent_dirs.push(parent.to_string_lossy().to_string());
+                    if let Ok(normalized_parent) = normalize_path(root.join(parent)) {
+                        parent_dirs.push(normalized_parent);
+                    }
                 }
-                parent_dirs.push(root.to_string_lossy().to_string());
+                if let Ok(normalized_root) = normalize_path(root) {
+                    parent_dirs.push(normalized_root);
+                }
                 break;
             }
         }
