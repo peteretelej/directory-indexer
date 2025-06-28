@@ -10,13 +10,22 @@
 
   ```bash
   # Using Docker
-  docker run -p 6333:6333 qdrant/qdrant
+  docker run -d --name qdrant \
+    -p 127.0.0.1:6333:6333 \
+    -v qdrant_storage:/qdrant/storage \
+    qdrant/qdrant
 
   # Or install locally from https://qdrant.tech/
   ```
 
 - **Embedding Provider**: Choose one:
-  - **Ollama** (recommended for development): Install from [ollama.ai](https://ollama.ai/)
+  - **Ollama** (recommended for development): Install natively for GPU support
+    ```bash
+    # Native installation (GPU acceleration)
+    # Visit https://ollama.ai for installation instructions
+    # Linux/macOS: curl -fsSL https://ollama.ai/install.sh | sh
+    ollama pull nomic-embed-text
+    ```
   - **OpenAI API**: Requires API key
 
 ### Initial Setup
@@ -38,7 +47,11 @@
 3. **Set up Ollama** (if using local embeddings):
 
    ```bash
+   # If using native installation (recommended for GPU)
    ollama pull nomic-embed-text
+   
+   # If using Docker (development only)
+   docker exec ollama-dev ollama pull nomic-embed-text
    ```
 
 4. **Run tests**:
@@ -66,10 +79,16 @@ The scripts runs them on different ports to avoid conflicts with existing instan
 
 ```bash
 # qdrant on 6335
-docker run -d --name qdrant-dev -p 6335:6333 -v qdrant_dev_storage:/qdrant/storage qdrant/qdrant
+docker run -d --name qdrant-dev \
+  -p 127.0.0.1:6335:6333 \
+  -v qdrant_dev_storage:/qdrant/storage \
+  qdrant/qdrant
 
 # ollama on 11435
-docker run -d --name ollama-dev -p 11435:11434 -v ollama_dev_data:/root/.ollama ollama/ollama
+docker run -d --name ollama-dev \
+  -p 127.0.0.1:11435:11434 \
+  -v ollama_dev_data:/root/.ollama \
+  ollama/ollama
 
 docker exec ollama-dev ollama pull nomic-embed-text
 
@@ -335,7 +354,10 @@ Releases are automated via GitHub Actions:
 rustup update
 
 # Test failures
-docker run -p 6333:6333 qdrant/qdrant
+docker run -d --name qdrant \
+  -p 127.0.0.1:6333:6333 \
+  -v qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
 ollama pull nomic-embed-text
 
 # Debug logging

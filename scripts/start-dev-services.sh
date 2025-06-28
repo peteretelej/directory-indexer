@@ -26,7 +26,7 @@ if docker ps --format 'table {{.Names}}' | grep -q "^qdrant-dev$"; then
 else
     docker run -d \
         --name qdrant-dev \
-        -p 6335:6333 \
+        -p 127.0.0.1:6335:6333 \
         -v qdrant_dev_storage:/qdrant/storage \
         qdrant/qdrant
     
@@ -52,7 +52,7 @@ if docker ps --format 'table {{.Names}}' | grep -q "^ollama-dev$"; then
 else
     docker run -d \
         --name ollama-dev \
-        -p 11435:11434 \
+        -p 127.0.0.1:11435:11434 \
         -v ollama_dev_data:/root/.ollama \
         ollama/ollama
     

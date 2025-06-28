@@ -36,13 +36,33 @@ Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will 
 
 - **Qdrant**: Vector database for semantic search
 
-  ```bash
-  docker run -p 6333:6333 qdrant/qdrant
-  ```
+```bash
+docker run -d --name qdrant \
+    -p 127.0.0.1:6333:6333 \
+    -v qdrant_storage:/qdrant/storage \
+    qdrant/qdrant
+```
 
-- **Embedding Provider** (choose one):
-  - **Ollama** (recommended): Free local embeddings
-  - **OpenAI**: Requires API key
+**Embedding Provider** (choose one):
+
+- **Ollama** (recommended): Self-hosted embeddings
+
+```bash
+# Install Ollama natively for GPU support (recommended)
+curl -fsSL https://ollama.ai/install.sh | sh
+# Visit https://ollama.ai for Windows installer
+ollama pull nomic-embed-text
+
+# OR use Docker (CPU-only, slower)
+docker run -d --name ollama \
+    -p 127.0.0.1:11434:11434 \
+    -v ollama_data:/root/.ollama \
+    ollama/ollama
+
+docker exec ollama ollama pull nomic-embed-text
+```
+
+- **OpenAI**: Requires API key
 
 ## CLI Usage
 
@@ -65,7 +85,7 @@ directory-indexer status
 
 ## Supported Files
 
-- **Text**: `.md`, `.txt`, `.rst`, `.org`
+- **Text**: `.md`, `.txt`
 - **Code**: `.rs`, `.py`, `.js`, `.ts`, `.go`, `.java`, etc.
 - **Data**: `.json`, `.yaml`, `.csv`, `.toml`
 - **Config**: `.env`, `.conf`, `.ini`
