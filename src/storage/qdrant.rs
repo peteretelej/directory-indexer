@@ -32,9 +32,18 @@ impl QdrantStore {
         Self::new_with_api_key(endpoint, collection_name, None).await
     }
 
-    pub async fn new_with_api_key(endpoint: &str, collection_name: String, _api_key: Option<String>) -> Result<Self> {
-        let client = Client::new();
-        
+    pub async fn new_with_api_key(
+        endpoint: &str,
+        collection_name: String,
+        _api_key: Option<String>,
+    ) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| {
+                IndexerError::vector_store(format!("Failed to create HTTP client: {}", e))
+            })?;
+
         let store = QdrantStore {
             client,
             endpoint: endpoint.to_string(),
@@ -55,7 +64,10 @@ impl QdrantStore {
 
     async fn ensure_collection_exists(&self) -> Result<()> {
         // Check if collection exists
-        let url = format!("{}/collections/{}/exists", self.endpoint, self.collection_name);
+        let url = format!(
+            "{}/collections/{}/exists",
+            self.endpoint, self.collection_name
+        );
         let response = self.client.get(&url).send().await.map_err(|e| {
             IndexerError::vector_store(format!("Failed to check collection existence: {}", e))
         })?;
@@ -63,11 +75,14 @@ impl QdrantStore {
         let response_text = response.text().await.map_err(|e| {
             IndexerError::vector_store(format!("Failed to get response text: {}", e))
         })?;
-        
+
         debug!("Collection exists response: {}", response_text);
-        
+
         let exists_response: Value = serde_json::from_str(&response_text).map_err(|e| {
-            IndexerError::vector_store(format!("Failed to parse collection exists response: {} - Response was: {}", e, response_text))
+            IndexerError::vector_store(format!(
+                "Failed to parse collection exists response: {} - Response was: {}",
+                e, response_text
+            ))
         })?;
 
         let collection_exists = exists_response
@@ -80,7 +95,10 @@ impl QdrantStore {
             info!("Creating Qdrant collection: {}", self.collection_name);
             self.create_collection().await?;
         } else {
-            debug!("Qdrant collection '{}' already exists", self.collection_name);
+            debug!(
+                "Qdrant collection '{}' already exists",
+                self.collection_name
+            );
         }
 
         Ok(())
@@ -88,7 +106,7 @@ impl QdrantStore {
 
     async fn create_collection(&self) -> Result<()> {
         let url = format!("{}/collections/{}", self.endpoint, self.collection_name);
-        
+
         let create_payload = json!({
             "vectors": {
                 "size": 768, // Default dimension, will be updated based on actual embeddings
@@ -98,7 +116,8 @@ impl QdrantStore {
             "replication_factor": 1
         });
 
-        let response = self.client
+        let response = self
+            .client
             .put(&url)
             .json(&create_payload)
             .send()
@@ -112,12 +131,14 @@ impl QdrantStore {
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
                 "Failed to create collection: HTTP {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
-        info!("Successfully created Qdrant collection: {}", self.collection_name);
+        info!(
+            "Successfully created Qdrant collection: {}",
+            self.collection_name
+        );
         Ok(())
     }
 
@@ -147,23 +168,24 @@ impl QdrantStore {
             "points": qdrant_points
         });
 
-        let url = format!("{}/collections/{}/points", self.endpoint, self.collection_name);
-        let response = self.client
+        let url = format!(
+            "{}/collections/{}/points",
+            self.endpoint, self.collection_name
+        );
+        let response = self
+            .client
             .put(&url)
             .json(&upsert_payload)
             .send()
             .await
-            .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to upsert points: {}", e))
-            })?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to upsert points: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
                 "Failed to upsert points: HTTP {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -171,12 +193,12 @@ impl QdrantStore {
         Ok(())
     }
 
-    pub async fn search(
-        &self,
-        query_vector: Vec<f32>,
-        limit: usize,
-    ) -> Result<Vec<SearchResult>> {
-        debug!("Searching Qdrant with vector dimension: {}, limit: {}", query_vector.len(), limit);
+    pub async fn search(&self, query_vector: Vec<f32>, limit: usize) -> Result<Vec<SearchResult>> {
+        debug!(
+            "Searching Qdrant with vector dimension: {}, limit: {}",
+            query_vector.len(),
+            limit
+        );
 
         let search_payload = json!({
             "vector": query_vector,
@@ -185,23 +207,24 @@ impl QdrantStore {
             "score_threshold": 0.0
         });
 
-        let url = format!("{}/collections/{}/points/search", self.endpoint, self.collection_name);
-        let response = self.client
+        let url = format!(
+            "{}/collections/{}/points/search",
+            self.endpoint, self.collection_name
+        );
+        let response = self
+            .client
             .post(&url)
             .json(&search_payload)
             .send()
             .await
-            .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to search points: {}", e))
-            })?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to search points: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
                 "Failed to search points: HTTP {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -255,23 +278,24 @@ impl QdrantStore {
             }
         });
 
-        let url = format!("{}/collections/{}/points/delete", self.endpoint, self.collection_name);
-        let response = self.client
+        let url = format!(
+            "{}/collections/{}/points/delete",
+            self.endpoint, self.collection_name
+        );
+        let response = self
+            .client
             .post(&url)
             .json(&delete_payload)
             .send()
             .await
-            .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to delete points: {}", e))
-            })?;
+            .map_err(|e| IndexerError::vector_store(format!("Failed to delete points: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
                 "Failed to delete points: HTTP {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -281,21 +305,16 @@ impl QdrantStore {
 
     pub async fn get_collection_info(&self) -> Result<CollectionInfo> {
         let url = format!("{}/collections/{}", self.endpoint, self.collection_name);
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                IndexerError::vector_store(format!("Failed to get collection info: {}", e))
-            })?;
+        let response = self.client.get(&url).send().await.map_err(|e| {
+            IndexerError::vector_store(format!("Failed to get collection info: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(IndexerError::vector_store(format!(
                 "Failed to get collection info: HTTP {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -322,7 +341,7 @@ impl QdrantStore {
     }
 
     pub async fn health_check(&self) -> Result<bool> {
-        let url = format!("{}/health", self.endpoint);
+        let url = format!("{}/", self.endpoint);
         match self.client.get(&url).send().await {
             Ok(response) => Ok(response.status().is_success()),
             Err(e) => {
@@ -330,6 +349,28 @@ impl QdrantStore {
                 Ok(false)
             }
         }
+    }
+
+    pub async fn delete_collection(&self) -> Result<()> {
+        let url = format!("{}/collections/{}", self.endpoint, self.collection_name);
+        let response = self.client.delete(&url).send().await.map_err(|e| {
+            IndexerError::vector_store(format!("Failed to delete collection: {}", e))
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            // Don't error if collection doesn't exist (404)
+            if status != reqwest::StatusCode::NOT_FOUND {
+                return Err(IndexerError::vector_store(format!(
+                    "Failed to delete collection: HTTP {} - {}",
+                    status, error_text
+                )));
+            }
+        }
+
+        debug!("Successfully deleted collection: {}", self.collection_name);
+        Ok(())
     }
 }
 

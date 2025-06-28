@@ -1,8 +1,8 @@
-use std::process::{Command, Stdio};
-use std::time::Duration;
-use std::thread;
-use std::io::{BufRead, BufReader, Write};
 use serde_json::{json, Value};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 mod fixtures;
 use fixtures::create_test_files::TestDirectoryStructure;
@@ -15,7 +15,7 @@ struct McpServerHandle {
 impl McpServerHandle {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let process = Command::new("cargo")
-            .args(&["run", "--", "serve"])
+            .args(["run", "--", "serve"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -30,7 +30,7 @@ impl McpServerHandle {
     fn send_request(&mut self, request: Value) -> Result<Value, Box<dyn std::error::Error>> {
         let stdin = self.process.stdin.as_mut().unwrap();
         let request_str = serde_json::to_string(&request)?;
-        
+
         stdin.write_all(request_str.as_bytes())?;
         stdin.write_all(b"\n")?;
         stdin.flush()?;
@@ -76,7 +76,9 @@ fn test_mcp_server_initialization() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -97,15 +99,20 @@ fn test_server_info_tool() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response["result"]["content"].is_array());
-    
+
     let content = &response["result"]["content"][0];
     assert_eq!(content["type"], "text");
-    assert!(content["text"].as_str().unwrap().contains("Directory Indexer"));
+    assert!(content["text"]
+        .as_str()
+        .unwrap()
+        .contains("Directory Indexer"));
 }
 
 /// Test index tool
@@ -127,16 +134,20 @@ fn test_index_tool() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response["result"]["content"].is_array());
-    
+
     let content = &response["result"]["content"][0];
     assert_eq!(content["type"], "text");
-    assert!(content["text"].as_str().unwrap().contains("indexed") || 
-            content["text"].as_str().unwrap().contains("Indexing"));
+    assert!(
+        content["text"].as_str().unwrap().contains("indexed")
+            || content["text"].as_str().unwrap().contains("Indexing")
+    );
 }
 
 /// Test index tool with multiple directories
@@ -144,7 +155,7 @@ fn test_index_tool() {
 fn test_index_tool_multiple_directories() {
     let test_structure1 = TestDirectoryStructure::new();
     let test_structure2 = TestDirectoryStructure::new();
-    
+
     let path1 = test_structure1.path().to_str().unwrap();
     let path2 = test_structure2.path().to_str().unwrap();
 
@@ -161,7 +172,9 @@ fn test_index_tool_multiple_directories() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -184,12 +197,19 @@ fn test_index_tool_invalid_directory() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
-    assert!(response["error"].is_object() || 
-            response["result"]["content"][0]["text"].as_str().unwrap().contains("error"));
+    assert!(
+        response["error"].is_object()
+            || response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("error")
+    );
 }
 
 /// Test search tool
@@ -200,7 +220,7 @@ fn test_search_tool() {
         "search functionality",
         "configuration settings",
         "error handling",
-        "performance optimization"
+        "performance optimization",
     ];
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
@@ -218,15 +238,17 @@ fn test_search_tool() {
             }
         });
 
-        let response = server.send_request(request).expect("Failed to send request");
+        let response = server
+            .send_request(request)
+            .expect("Failed to send request");
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], 1);
         assert!(response["result"]["content"].is_array());
-        
+
         let content = &response["result"]["content"][0];
         assert_eq!(content["type"], "text");
-        assert!(content["text"].as_str().unwrap().len() > 0);
+        assert!(!content["text"].as_str().unwrap().is_empty());
     }
 }
 
@@ -250,7 +272,9 @@ fn test_search_tool_with_directory_scope() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -274,7 +298,9 @@ fn test_search_tool_with_limit() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -297,12 +323,19 @@ fn test_search_tool_empty_query() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
-    assert!(response["error"].is_object() || 
-            response["result"]["content"][0]["text"].as_str().unwrap().contains("empty"));
+    assert!(
+        response["error"].is_object()
+            || response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("empty")
+    );
 }
 
 /// Test similar_files tool
@@ -313,7 +346,7 @@ fn test_similar_files_tool() {
         "docs/README.md",
         "src/main.rs",
         "config.json",
-        "data/users.csv"
+        "data/users.csv",
     ];
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
@@ -333,15 +366,17 @@ fn test_similar_files_tool() {
                 }
             });
 
-            let response = server.send_request(request).expect("Failed to send request");
+            let response = server
+                .send_request(request)
+                .expect("Failed to send request");
 
             assert_eq!(response["jsonrpc"], "2.0");
             assert_eq!(response["id"], 1);
             assert!(response["result"]["content"].is_array());
-            
+
             let content = &response["result"]["content"][0];
             assert_eq!(content["type"], "text");
-            assert!(content["text"].as_str().unwrap().len() > 0);
+            assert!(!content["text"].as_str().unwrap().is_empty());
         }
     }
 }
@@ -366,7 +401,9 @@ fn test_similar_files_tool_with_limit() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -389,12 +426,19 @@ fn test_similar_files_tool_nonexistent_file() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
-    assert!(response["error"].is_object() || 
-            response["result"]["content"][0]["text"].as_str().unwrap().contains("not found"));
+    assert!(
+        response["error"].is_object()
+            || response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("not found")
+    );
 }
 
 /// Test get_content tool
@@ -405,7 +449,7 @@ fn test_get_content_tool() {
         "docs/README.md",
         "config.json",
         "data/users.csv",
-        "src/main.rs"
+        "src/main.rs",
     ];
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
@@ -425,15 +469,17 @@ fn test_get_content_tool() {
                 }
             });
 
-            let response = server.send_request(request).expect("Failed to send request");
+            let response = server
+                .send_request(request)
+                .expect("Failed to send request");
 
             assert_eq!(response["jsonrpc"], "2.0");
             assert_eq!(response["id"], 1);
             assert!(response["result"]["content"].is_array());
-            
+
             let content = &response["result"]["content"][0];
             assert_eq!(content["type"], "text");
-            assert!(content["text"].as_str().unwrap().len() > 0);
+            assert!(!content["text"].as_str().unwrap().is_empty());
         }
     }
 }
@@ -458,7 +504,9 @@ fn test_get_content_tool_with_chunks() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -485,7 +533,9 @@ fn test_get_content_tool_single_chunk() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -512,12 +562,19 @@ fn test_get_content_tool_invalid_chunk_range() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
-    assert!(response["error"].is_object() || 
-            response["result"]["content"][0]["text"].as_str().unwrap().contains("invalid"));
+    assert!(
+        response["error"].is_object()
+            || response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("invalid")
+    );
 }
 
 /// Test listing available tools
@@ -531,17 +588,20 @@ fn test_list_tools() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response["result"]["tools"].is_array());
-    
+
     let tools = response["result"]["tools"].as_array().unwrap();
-    let tool_names: Vec<String> = tools.iter()
+    let tool_names: Vec<String> = tools
+        .iter()
         .map(|t| t["name"].as_str().unwrap().to_string())
         .collect();
-    
+
     assert!(tool_names.contains(&"index".to_string()));
     assert!(tool_names.contains(&"search".to_string()));
     assert!(tool_names.contains(&"similar_files".to_string()));
@@ -563,13 +623,23 @@ fn test_tool_missing_arguments() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response["error"].is_object());
-    assert!(response["error"]["message"].as_str().unwrap().contains("required") ||
-            response["error"]["message"].as_str().unwrap().contains("missing"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("required")
+            || response["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("missing")
+    );
 }
 
 /// Test calling non-existent tool
@@ -586,13 +656,23 @@ fn test_nonexistent_tool() {
     });
 
     let mut server = McpServerHandle::new().expect("Failed to start MCP server");
-    let response = server.send_request(request).expect("Failed to send request");
+    let response = server
+        .send_request(request)
+        .expect("Failed to send request");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response["error"].is_object());
-    assert!(response["error"]["message"].as_str().unwrap().contains("not found") ||
-            response["error"]["message"].as_str().unwrap().contains("unknown"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not found")
+            || response["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("unknown")
+    );
 }
 
 /// Test end-to-end MCP workflow
@@ -618,7 +698,9 @@ fn test_mcp_end_to_end_workflow() {
         }
     });
 
-    let response = server.send_request(init_request).expect("Failed to initialize");
+    let response = server
+        .send_request(init_request)
+        .expect("Failed to initialize");
     assert_eq!(response["jsonrpc"], "2.0");
 
     // Step 2: Get server info
@@ -632,7 +714,9 @@ fn test_mcp_end_to_end_workflow() {
         }
     });
 
-    let response = server.send_request(info_request).expect("Failed to get server info");
+    let response = server
+        .send_request(info_request)
+        .expect("Failed to get server info");
     assert_eq!(response["jsonrpc"], "2.0");
 
     // Step 3: Index directory
@@ -664,7 +748,9 @@ fn test_mcp_end_to_end_workflow() {
         }
     });
 
-    let response = server.send_request(search_request).expect("Failed to search");
+    let response = server
+        .send_request(search_request)
+        .expect("Failed to search");
     assert_eq!(response["jsonrpc"], "2.0");
 
     // Step 5: Find similar files
@@ -682,7 +768,9 @@ fn test_mcp_end_to_end_workflow() {
             }
         });
 
-        let response = server.send_request(similar_request).expect("Failed to find similar files");
+        let response = server
+            .send_request(similar_request)
+            .expect("Failed to find similar files");
         assert_eq!(response["jsonrpc"], "2.0");
     }
 
@@ -701,7 +789,9 @@ fn test_mcp_end_to_end_workflow() {
             }
         });
 
-        let response = server.send_request(content_request).expect("Failed to get content");
+        let response = server
+            .send_request(content_request)
+            .expect("Failed to get content");
         assert_eq!(response["jsonrpc"], "2.0");
     }
 }

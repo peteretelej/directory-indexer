@@ -26,24 +26,27 @@ pub fn calculate_file_hash<P: AsRef<Path>>(path: P) -> Result<String> {
 pub fn should_ignore_file<P: AsRef<Path>>(path: P, ignore_patterns: &[String]) -> bool {
     let path = path.as_ref();
     let path_str = path.to_string_lossy();
-    let file_name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_default();
 
     for pattern in ignore_patterns {
         // Check if pattern matches directory component
         if path_str.contains(pattern) {
             return true;
         }
-        
+
         // Check for hidden files (starts with dot)
         if pattern == ".*" && file_name.starts_with('.') {
             return true;
         }
-        
+
         // Check for files ending with pattern (like *~)
         if pattern.starts_with('*') && file_name.ends_with(&pattern[1..]) {
             return true;
         }
-        
+
         // Direct file name match
         if file_name == *pattern {
             return true;

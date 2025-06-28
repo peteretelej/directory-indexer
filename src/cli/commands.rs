@@ -1,11 +1,11 @@
 use log::{info, warn};
 use std::path::{Path, PathBuf};
 
-use crate::{Config, IndexerError, Result};
-use crate::mcp::McpServer;
-use crate::indexing::engine::IndexingEngine;
-use crate::storage::{QdrantStore, SqliteStore};
 use crate::embedding::create_embedding_provider;
+use crate::indexing::engine::IndexingEngine;
+use crate::mcp::McpServer;
+use crate::storage::{QdrantStore, SqliteStore};
+use crate::{Config, IndexerError, Result};
 
 pub async fn index(paths: Vec<String>) -> Result<()> {
     index_internal(paths, true).await
@@ -15,17 +15,25 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
     info!("Indexing directories: {:?}", paths);
 
     if paths.is_empty() {
-        return Err(IndexerError::invalid_input("At least one directory path is required"));
+        return Err(IndexerError::invalid_input(
+            "At least one directory path is required",
+        ));
     }
 
     // Validate all paths exist before starting indexing
     for path in &paths {
         let path_obj = Path::new(path);
         if !path_obj.exists() {
-            return Err(IndexerError::not_found(format!("Directory not found: {}", path)));
+            return Err(IndexerError::not_found(format!(
+                "Directory not found: {}",
+                path
+            )));
         }
         if !path_obj.is_dir() {
-            return Err(IndexerError::invalid_input(format!("Path is not a directory: {}", path)));
+            return Err(IndexerError::invalid_input(format!(
+                "Path is not a directory: {}",
+                path
+            )));
         }
     }
 
@@ -41,13 +49,18 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
-    let vector_store = QdrantStore::new(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone()).await?;
+    let vector_store = QdrantStore::new(
+        &config.storage.qdrant.endpoint,
+        config.storage.qdrant.collection.clone(),
+    )
+    .await?;
 
     // Initialize embedding provider
     let embedding_provider = create_embedding_provider(&config.embedding)?;
 
     // Create indexing engine
-    let engine = IndexingEngine::new(config, sqlite_store, vector_store, embedding_provider).await?;
+    let engine =
+        IndexingEngine::new(config, sqlite_store, vector_store, embedding_provider).await?;
 
     // Convert paths to PathBuf
     let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
@@ -71,8 +84,16 @@ pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -
     search_internal(query, path, limit, true).await
 }
 
-pub async fn search_internal(query: String, path: Option<String>, limit: Option<usize>, output_to_console: bool) -> Result<()> {
-    info!("Searching for: '{}' in path: {:?}, limit: {:?}", query, path, limit);
+pub async fn search_internal(
+    query: String,
+    path: Option<String>,
+    limit: Option<usize>,
+    output_to_console: bool,
+) -> Result<()> {
+    info!(
+        "Searching for: '{}' in path: {:?}, limit: {:?}",
+        query, path, limit
+    );
 
     if query.trim().is_empty() {
         return Err(IndexerError::invalid_input("Search query cannot be empty"));
@@ -82,7 +103,10 @@ pub async fn search_internal(query: String, path: Option<String>, limit: Option<
     if let Some(ref p) = path {
         let path_obj = Path::new(p);
         if !path_obj.exists() {
-            return Err(IndexerError::not_found(format!("Directory not found: {}", p)));
+            return Err(IndexerError::not_found(format!(
+                "Directory not found: {}",
+                p
+            )));
         }
     }
 
@@ -101,7 +125,11 @@ pub async fn search_internal(query: String, path: Option<String>, limit: Option<
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
-    let vector_store = QdrantStore::new(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone()).await?;
+    let vector_store = QdrantStore::new(
+        &config.storage.qdrant.endpoint,
+        config.storage.qdrant.collection.clone(),
+    )
+    .await?;
 
     // Initialize embedding provider
     let embedding_provider = create_embedding_provider(&config.embedding)?;
@@ -119,14 +147,19 @@ pub async fn search_internal(query: String, path: Option<String>, limit: Option<
         } else {
             println!("\nSearch Results:");
             println!("==============");
-            
+
             for (i, result) in search_results.iter().enumerate() {
-                println!("\n{}. {} (score: {:.3})", i + 1, result.file_path, result.score);
+                println!(
+                    "\n{}. {} (score: {:.3})",
+                    i + 1,
+                    result.file_path,
+                    result.score
+                );
                 println!("   Chunk: {}", result.chunk_id);
                 if !result.parent_directories.is_empty() {
                     println!("   Path: {}", result.parent_directories.join(" > "));
                 }
-                
+
                 // Try to read the specific chunk content from SQLite
                 if let Ok(Some(file_record)) = sqlite_store.get_file_by_path(&result.file_path) {
                     if let Some(chunks_json) = file_record.chunks_json {
@@ -162,7 +195,10 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
         return Err(IndexerError::not_found(format!("File not found: {}", file)));
     }
     if !file_path.is_file() {
-        return Err(IndexerError::invalid_input(format!("Path is not a file: {}", file)));
+        return Err(IndexerError::invalid_input(format!(
+            "Path is not a file: {}",
+            file
+        )));
     }
 
     if output_to_console {
@@ -178,7 +214,11 @@ pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
     get_internal(file, chunks, true).await
 }
 
-pub async fn get_internal(file: String, chunks: Option<String>, output_to_console: bool) -> Result<()> {
+pub async fn get_internal(
+    file: String,
+    chunks: Option<String>,
+    output_to_console: bool,
+) -> Result<()> {
     info!("Getting content for: '{}', chunks: {:?}", file, chunks);
 
     let file_path = Path::new(&file);
@@ -186,7 +226,10 @@ pub async fn get_internal(file: String, chunks: Option<String>, output_to_consol
         return Err(IndexerError::not_found(format!("File not found: {}", file)));
     }
     if !file_path.is_file() {
-        return Err(IndexerError::invalid_input(format!("Path is not a file: {}", file)));
+        return Err(IndexerError::invalid_input(format!(
+            "Path is not a file: {}",
+            file
+        )));
     }
 
     // Validate chunk range if provided
@@ -210,7 +253,7 @@ pub async fn serve() -> Result<()> {
 
     // Load configuration
     let config = Config::load()?;
-    
+
     // Create and start MCP server
     let server = McpServer::new(config).await?;
     server.start().await?;
@@ -226,16 +269,16 @@ pub async fn status(format: String) -> Result<()> {
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
-    let vector_store = QdrantStore::new_without_init(&config.storage.qdrant.endpoint, config.storage.qdrant.collection.clone());
+    let vector_store = QdrantStore::new_without_init(
+        &config.storage.qdrant.endpoint,
+        config.storage.qdrant.collection.clone(),
+    );
 
     // Get statistics from SQLite
     let (dir_count, file_count, chunk_count) = sqlite_store.get_stats()?;
 
     // Get vector store info (may not exist yet)
-    let collection_info = match vector_store.get_collection_info().await {
-        Ok(info) => Some(info),
-        Err(_) => None, // Collection doesn't exist yet
-    };
+    let collection_info = (vector_store.get_collection_info().await).ok();
 
     // Calculate database size (approximate)
     let db_size_mb = if config.storage.sqlite_path.exists() {
@@ -275,7 +318,10 @@ pub async fn status(format: String) -> Result<()> {
             println!("  Database size: {} MB", db_size_mb);
         }
         _ => {
-            return Err(IndexerError::invalid_input(format!("Unsupported format: {}. Use 'text' or 'json'", format)));
+            return Err(IndexerError::invalid_input(format!(
+                "Unsupported format: {}. Use 'text' or 'json'",
+                format
+            )));
         }
     }
 
@@ -286,25 +332,36 @@ fn validate_chunk_range(chunk_str: &str) -> Result<()> {
     if chunk_str.contains('-') {
         let parts: Vec<&str> = chunk_str.split('-').collect();
         if parts.len() != 2 {
-            return Err(IndexerError::invalid_input("Invalid chunk range format. Use 'start-end' (e.g., '1-5')"));
+            return Err(IndexerError::invalid_input(
+                "Invalid chunk range format. Use 'start-end' (e.g., '1-5')",
+            ));
         }
-        
-        let start: usize = parts[0].parse()
+
+        let start: usize = parts[0]
+            .parse()
             .map_err(|_| IndexerError::invalid_input("Invalid start chunk number"))?;
-        let end: usize = parts[1].parse()
+        let end: usize = parts[1]
+            .parse()
             .map_err(|_| IndexerError::invalid_input("Invalid end chunk number"))?;
-            
+
         if start == 0 || end == 0 {
-            return Err(IndexerError::invalid_input("Chunk numbers must be greater than 0"));
+            return Err(IndexerError::invalid_input(
+                "Chunk numbers must be greater than 0",
+            ));
         }
         if start > end {
-            return Err(IndexerError::invalid_input("Start chunk must be less than or equal to end chunk"));
+            return Err(IndexerError::invalid_input(
+                "Start chunk must be less than or equal to end chunk",
+            ));
         }
     } else {
-        let chunk: usize = chunk_str.parse()
+        let chunk: usize = chunk_str
+            .parse()
             .map_err(|_| IndexerError::invalid_input("Invalid chunk number"))?;
         if chunk == 0 {
-            return Err(IndexerError::invalid_input("Chunk number must be greater than 0"));
+            return Err(IndexerError::invalid_input(
+                "Chunk number must be greater than 0",
+            ));
         }
     }
     Ok(())

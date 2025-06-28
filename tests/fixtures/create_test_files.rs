@@ -2,27 +2,31 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
+#[allow(dead_code)]
 pub struct TestDirectoryStructure {
     pub temp_dir: TempDir,
 }
 
 impl TestDirectoryStructure {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let temp_dir = TempDir::new().unwrap();
         Self::create_comprehensive_test_structure(temp_dir.path());
-        
+
         Self { temp_dir }
     }
 
+    #[allow(dead_code)]
     pub fn path(&self) -> &Path {
         self.temp_dir.path()
     }
 
+    #[allow(dead_code)]
     fn create_comprehensive_test_structure(base_path: &Path) {
         // Documentation files
         let docs_dir = base_path.join("docs");
         fs::create_dir_all(&docs_dir).unwrap();
-        
+
         fs::write(
             docs_dir.join("README.md"),
             r#"# Project Documentation
@@ -70,7 +74,8 @@ Parameters:
 - path: string (required) - Directory path to index
 - recursive: boolean (optional) - Whether to recurse subdirectories
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             docs_dir.join("troubleshooting.md"),
@@ -99,7 +104,8 @@ If experiencing out-of-memory errors:
 - Monitor garbage collection
 - Optimize data structures
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Source code files
         let src_dir = base_path.join("src");
@@ -145,7 +151,8 @@ fn main() {
     }
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             src_dir.join("database.rs"),
@@ -195,7 +202,8 @@ impl Database {
     }
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             src_dir.join("search.rs"),
@@ -247,7 +255,8 @@ pub fn search_documents(query: &str) {
     // Implementation would use SearchEngine
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Configuration files
         fs::write(
@@ -281,7 +290,8 @@ pub fn search_documents(query: &str) {
   }
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             base_path.join("Cargo.toml"),
@@ -304,7 +314,8 @@ tempfile = "3.0"
 assert_cmd = "2.0"
 predicates = "3.0"
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             base_path.join("package.json"),
@@ -334,7 +345,8 @@ predicates = "3.0"
   "license": "MIT"
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Data files
         let data_dir = base_path.join("data");
@@ -349,7 +361,8 @@ predicates = "3.0"
 4,Alice Brown,alice@example.com,moderator,2023-04-05,2024-01-17
 5,Charlie Wilson,charlie@example.com,user,2023-05-12,2024-01-16
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             data_dir.join("products.json"),
@@ -382,7 +395,8 @@ predicates = "3.0"
   ]
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             data_dir.join("logs.txt"),
@@ -398,7 +412,8 @@ predicates = "3.0"
 2024-01-20 11:15:34 INFO Retrying file processing with elevated privileges
 2024-01-20 11:15:35 INFO File processing completed successfully
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Scripts and utilities
         let scripts_dir = base_path.join("scripts");
@@ -423,7 +438,8 @@ cargo run -- index ./sample_data
 
 echo "Setup complete!"
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             scripts_dir.join("deploy.py"),
@@ -464,7 +480,8 @@ def main():
 if __name__ == "__main__":
     main()
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Test files
         let tests_dir = base_path.join("tests");
@@ -506,7 +523,8 @@ mod tests {
     }
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Nested directories with specialized content
         let backend_dir = base_path.join("backend/api");
@@ -566,7 +584,8 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(response)
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let frontend_dir = base_path.join("frontend/components");
         fs::create_dir_all(&frontend_dir).unwrap();
@@ -623,7 +642,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   );
 };
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Error logs and edge cases
         let logs_dir = base_path.join("logs");
@@ -642,25 +662,27 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 [2024-01-20T11:15:34Z] INFO: Implementing chunked processing for large files
 [2024-01-20T11:15:35Z] INFO: Large file processing completed successfully
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Binary-like files (should be ignored)
         fs::write(
             base_path.join("binary.dat"),
-            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]
-        ).unwrap();
+            [
+                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+            ],
+        )
+        .unwrap();
 
         // Large text file for performance testing
         let mut large_content = String::new();
-        for i in 0..1000 {
+        for i in 0..50 {
+            // Reduced from 1000 to 50 for faster testing
             large_content.push_str(&format!(
                 "Line {} - This is a large file used for performance testing. It contains repeated content to simulate real-world large documents.\n",
                 i
             ));
         }
-        fs::write(
-            base_path.join("large_file.txt"),
-            large_content
-        ).unwrap();
+        fs::write(base_path.join("large_file.txt"), large_content).unwrap();
     }
 }

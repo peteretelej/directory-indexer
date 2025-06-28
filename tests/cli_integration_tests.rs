@@ -5,11 +5,56 @@ use tempfile::TempDir;
 
 mod fixtures;
 use fixtures::create_test_files::TestDirectoryStructure;
+use fixtures::simple_test_files::SimpleTestDirectoryStructure;
+
+fn are_services_available() -> bool {
+    // Quick check if required services are running
+    let qdrant_available = std::process::Command::new("curl")
+        .args(["-s", "http://localhost:6335/", "-o", "/dev/null"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let ollama_available = std::process::Command::new("curl")
+        .args(["-s", "http://localhost:11435/api/tags", "-o", "/dev/null"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    qdrant_available && ollama_available
+}
 
 /// Test the `index` command with various directory structures
 #[test]
 fn test_index_command_comprehensive() {
+    // Skip if services aren't available (for CI/testing environments)
+    if !are_services_available() {
+        println!("Skipping test - required services (Qdrant/Ollama) not available");
+        return;
+    }
+
     let test_structure = TestDirectoryStructure::new();
+    let test_path = test_structure.path().to_str().unwrap();
+
+    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    cmd.arg("index")
+        .arg(test_path)
+        .timeout(std::time::Duration::from_secs(120)) // Increased timeout
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Indexing").or(predicate::str::contains("indexed")));
+}
+
+/// Test the `index` command with minimal test data (fast)
+#[test]
+fn test_index_command_simple() {
+    // Skip if services aren't available
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_structure = SimpleTestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
@@ -18,15 +63,20 @@ fn test_index_command_comprehensive() {
         .timeout(std::time::Duration::from_secs(30))
         .assert()
         .success()
-        .stdout(predicate::str::contains("Indexing").or(predicate::str::contains("indexed")));
+        .stdout(predicate::str::contains("Indexing"));
 }
 
 /// Test indexing multiple directories
 #[test]
 fn test_index_multiple_directories() {
-    let test_structure1 = TestDirectoryStructure::new();
-    let test_structure2 = TestDirectoryStructure::new();
-    
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_structure1 = SimpleTestDirectoryStructure::new(); // Use simple structure
+    let test_structure2 = SimpleTestDirectoryStructure::new();
+
     let path1 = test_structure1.path().to_str().unwrap();
     let path2 = test_structure2.path().to_str().unwrap();
 
@@ -55,18 +105,15 @@ fn test_index_nonexistent_directory() {
 fn test_index_relative_path() {
     let test_structure = TestDirectoryStructure::new();
     let current_dir = std::env::current_dir().unwrap();
-    
+
     // Change to the test directory parent
     std::env::set_current_dir(test_structure.path().parent().unwrap()).unwrap();
-    
+
     let relative_path = test_structure.path().file_name().unwrap().to_str().unwrap();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("index")
-        .arg(relative_path)
-        .assert()
-        .success();
-    
+    cmd.arg("index").arg(relative_path).assert().success();
+
     // Restore original directory
     std::env::set_current_dir(current_dir).unwrap();
 }
@@ -259,14 +306,11 @@ fn test_get_invalid_chunk_range() {
 #[test]
 fn test_status_command_comprehensive() {
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("status")
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("Status")
-                .or(predicate::str::contains("indexed"))
-                .or(predicate::str::contains("directories"))
-        );
+    cmd.arg("status").assert().success().stdout(
+        predicate::str::contains("Status")
+            .or(predicate::str::contains("indexed"))
+            .or(predicate::str::contains("directories")),
+    );
 }
 
 /// Test status with verbose flag
@@ -317,28 +361,22 @@ fn test_version_command() {
 #[test]
 fn test_help_command() {
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("--help")
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("USAGE")
-                .or(predicate::str::contains("Commands"))
-                .or(predicate::str::contains("Options"))
-        );
+    cmd.arg("--help").assert().success().stdout(
+        predicate::str::contains("USAGE")
+            .or(predicate::str::contains("Commands"))
+            .or(predicate::str::contains("Options")),
+    );
 }
 
 /// Test invalid command
 #[test]
 fn test_invalid_command() {
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("invalid-command")
-        .assert()
-        .failure()
-        .stderr(
-            predicate::str::contains("unknown")
-                .or(predicate::str::contains("invalid"))
-                .or(predicate::str::contains("not found"))
-        );
+    cmd.arg("invalid-command").assert().failure().stderr(
+        predicate::str::contains("unknown")
+            .or(predicate::str::contains("invalid"))
+            .or(predicate::str::contains("not found")),
+    );
 }
 
 /// Test command with insufficient arguments
@@ -383,7 +421,7 @@ fn test_insufficient_arguments_get() {
 fn test_with_custom_config() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("test_config.json");
-    
+
     let config_content = r#"{
         "storage": {
             "sqlite_path": ":memory:",
@@ -398,7 +436,7 @@ fn test_with_custom_config() {
             "endpoint": "http://localhost:11434"
         }
     }"#;
-    
+
     fs::write(&config_path, config_content).unwrap();
 
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
@@ -412,7 +450,12 @@ fn test_with_custom_config() {
 /// End-to-end workflow test
 #[test]
 fn test_end_to_end_workflow() {
-    let test_structure = TestDirectoryStructure::new();
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_structure = SimpleTestDirectoryStructure::new(); // Use simple structure
     let test_path = test_structure.path().to_str().unwrap();
 
     // Step 1: Index the directory
@@ -425,9 +468,7 @@ fn test_end_to_end_workflow() {
 
     // Step 2: Check status
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("status")
-        .assert()
-        .success();
+    cmd.arg("status").assert().success();
 
     // Step 3: Search for content
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();

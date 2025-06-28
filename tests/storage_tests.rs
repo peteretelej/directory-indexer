@@ -1,4 +1,4 @@
-use directory_indexer::storage::{SqliteStore, FileRecord};
+use directory_indexer::storage::{FileRecord, SqliteStore};
 use serde_json::json;
 use tempfile::NamedTempFile;
 
@@ -29,7 +29,9 @@ mod sqlite_tests {
 
         // Test adding directory
         let dir_path = "/home/user/documents";
-        let dir_id = store.add_directory(dir_path).expect("Failed to add directory");
+        let dir_id = store
+            .add_directory(dir_path)
+            .expect("Failed to add directory");
         assert!(dir_id > 0);
 
         // Test getting directories
@@ -39,8 +41,12 @@ mod sqlite_tests {
         assert_eq!(directories[0].status, "pending");
 
         // Test updating directory status
-        store.update_directory_status(dir_path, "completed").expect("Failed to update status");
-        let directories = store.get_directories().expect("Failed to get directories after update");
+        store
+            .update_directory_status(dir_path, "completed")
+            .expect("Failed to update status");
+        let directories = store
+            .get_directories()
+            .expect("Failed to get directories after update");
         assert_eq!(directories[0].status, "completed");
     }
 
@@ -66,10 +72,11 @@ mod sqlite_tests {
         assert!(file_id > 0);
 
         // Test getting file by path
-        let retrieved_file = store.get_file_by_path(&file_record.path)
+        let retrieved_file = store
+            .get_file_by_path(&file_record.path)
             .expect("Failed to get file")
             .expect("File not found");
-        
+
         assert_eq!(retrieved_file.path, file_record.path);
         assert_eq!(retrieved_file.size, file_record.size);
         assert_eq!(retrieved_file.hash, file_record.hash);
@@ -97,9 +104,12 @@ mod sqlite_tests {
             errors_json: Some(json!({"error": "File too large", "code": "FILE_SIZE_EXCEEDED"})),
         };
 
-        store.add_file(&file_record).expect("Failed to add file with errors");
+        store
+            .add_file(&file_record)
+            .expect("Failed to add file with errors");
 
-        let retrieved_file = store.get_file_by_path(&file_record.path)
+        let retrieved_file = store
+            .get_file_by_path(&file_record.path)
             .expect("Failed to get file")
             .expect("File not found");
 
@@ -129,16 +139,22 @@ mod sqlite_tests {
 
         // Add file
         store.add_file(&file_record).expect("Failed to add file");
-        
+
         // Verify it exists
-        let file = store.get_file_by_path(&file_record.path).expect("Failed to get file");
+        let file = store
+            .get_file_by_path(&file_record.path)
+            .expect("Failed to get file");
         assert!(file.is_some());
 
         // Delete file
-        store.delete_file(&file_record.path).expect("Failed to delete file");
+        store
+            .delete_file(&file_record.path)
+            .expect("Failed to delete file");
 
         // Verify it's gone
-        let file = store.get_file_by_path(&file_record.path).expect("Failed to get file");
+        let file = store
+            .get_file_by_path(&file_record.path)
+            .expect("Failed to get file");
         assert!(file.is_none());
     }
 
@@ -175,12 +191,13 @@ mod sqlite_tests {
 
         // Add first version
         store.add_file(&file_v1).expect("Failed to add file v1");
-        
+
         // Add second version (should replace)
         store.add_file(&file_v2).expect("Failed to add file v2");
 
         // Should only have one file with v2 data
-        let retrieved = store.get_file_by_path(file_path)
+        let retrieved = store
+            .get_file_by_path(file_path)
             .expect("Failed to get file")
             .expect("File not found");
 
@@ -199,8 +216,8 @@ mod file_scanning_tests {
     use std::fs;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_file_scanning_and_metadata_extraction() {
+    #[tokio::test]
+    async fn test_file_scanning_and_metadata_extraction() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
@@ -227,7 +244,9 @@ mod file_scanning_tests {
 
         // Test file scanning
         let scanner = FileScanner::new();
-        let scanned_files = scanner.scan_directory(base_path)
+        let scanned_files = scanner
+            .scan_directory(base_path)
+            .await
             .expect("Failed to scan directory");
 
         // Should find all files
@@ -238,27 +257,28 @@ mod file_scanning_tests {
             assert!(file_info.size > 0);
             assert!(file_info.modified_time > 0);
             assert!(!file_info.hash.is_empty());
-            
+
             // Parent directories should be set correctly
             if file_info.path.contains("subdir") {
-                assert!(file_info.parent_dirs.iter().any(|dir| dir.contains("subdir")));
+                assert!(file_info
+                    .parent_dirs
+                    .iter()
+                    .any(|dir| dir.contains("subdir")));
             }
-            assert!(file_info.parent_dirs.iter().any(|dir| dir == base_path.to_str().unwrap()));
+            assert!(file_info
+                .parent_dirs
+                .iter()
+                .any(|dir| dir == base_path.to_str().unwrap()));
         }
     }
 
-    #[test]
-    fn test_file_filtering() {
+    #[tokio::test]
+    async fn test_file_filtering() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path();
 
         // Create files including ones that should be ignored
-        let files = vec![
-            "valid.md",
-            "also_valid.txt",
-            ".hidden",
-            "temp~",
-        ];
+        let files = vec!["valid.md", "also_valid.txt", ".hidden", "temp~"];
 
         for file in &files {
             fs::write(base_path.join(file), "content").unwrap();
@@ -271,35 +291,43 @@ mod file_scanning_tests {
 
         let ignore_patterns = vec![".git".to_string(), ".*".to_string(), "*~".to_string()];
         let scanner = FileScanner::with_ignore_patterns(ignore_patterns);
-        let scanned_files = scanner.scan_directory(base_path)
+        let scanned_files = scanner
+            .scan_directory(base_path)
+            .await
             .expect("Failed to scan directory");
 
         // Should only find the valid files
         assert_eq!(scanned_files.len(), 2);
-        let paths: Vec<String> = scanned_files.iter()
-            .map(|f| f.path.split('/').last().unwrap().to_string())
+        let paths: Vec<String> = scanned_files
+            .iter()
+            .map(|f| f.path.split('/').next_back().unwrap().to_string())
             .collect();
         assert!(paths.contains(&"valid.md".to_string()));
         assert!(paths.contains(&"also_valid.txt".to_string()));
     }
 
-    #[test]
-    fn test_large_file_handling() {
+    #[tokio::test]
+    async fn test_large_file_handling() {
         let temp_dir = TempDir::new().unwrap();
         let large_file = temp_dir.path().join("large.txt");
-        
+
         // Create a large file (simulate by setting a small max_file_size)
         let content = "x".repeat(1000); // 1KB file
         fs::write(&large_file, content).unwrap();
 
         let scanner = FileScanner::with_max_size(500); // 500 bytes max
-        let scanned_files = scanner.scan_directory(temp_dir.path())
+        let scanned_files = scanner
+            .scan_directory(temp_dir.path())
+            .await
             .expect("Failed to scan directory");
 
         // File should be scanned but marked as too large
         assert_eq!(scanned_files.len(), 1);
         let file_info = &scanned_files[0];
-        assert!(file_info.errors.as_ref().map_or(false, |e| e.contains("too large")));
+        assert!(file_info
+            .errors
+            .as_ref()
+            .is_some_and(|e| e.contains("too large")));
     }
 }
 
@@ -336,11 +364,14 @@ mod metadata_storage_tests {
             errors_json: None,
         };
 
-        let file_id = store.add_file(&file_record).expect("Failed to store file metadata");
+        let file_id = store
+            .add_file(&file_record)
+            .expect("Failed to store file metadata");
         assert!(file_id > 0);
 
         // Verify stored metadata
-        let stored = store.get_file_by_path(&file_info.path)
+        let stored = store
+            .get_file_by_path(&file_info.path)
             .expect("Failed to retrieve file")
             .expect("File not found");
 
@@ -383,9 +414,12 @@ mod metadata_storage_tests {
             })),
         };
 
-        store.add_file(&file_record).expect("Failed to store file with errors");
+        store
+            .add_file(&file_record)
+            .expect("Failed to store file with errors");
 
-        let stored = store.get_file_by_path(&file_info.path)
+        let stored = store
+            .get_file_by_path(&file_info.path)
             .expect("Failed to retrieve file")
             .expect("File not found");
 
@@ -413,7 +447,9 @@ mod metadata_storage_tests {
             errors_json: None,
         };
 
-        store.add_file(&initial_record).expect("Failed to store initial file");
+        store
+            .add_file(&initial_record)
+            .expect("Failed to store initial file");
 
         // Update with chunks after processing
         let chunks = json!([
@@ -444,10 +480,13 @@ mod metadata_storage_tests {
             errors_json: None,
         };
 
-        store.add_file(&updated_record).expect("Failed to update file with chunks");
+        store
+            .add_file(&updated_record)
+            .expect("Failed to update file with chunks");
 
         // Verify chunks were stored
-        let stored = store.get_file_by_path(file_path)
+        let stored = store
+            .get_file_by_path(file_path)
             .expect("Failed to retrieve file")
             .expect("File not found");
 
@@ -493,10 +532,11 @@ mod metadata_storage_tests {
         // Verify all files stored correctly
         for (name, size, hash) in files {
             let path = format!("/batch/test/{}", name);
-            let stored = store.get_file_by_path(&path)
+            let stored = store
+                .get_file_by_path(&path)
                 .expect("Failed to retrieve file")
                 .expect("File not found");
-            
+
             assert_eq!(stored.size, size);
             assert_eq!(stored.hash, hash);
         }

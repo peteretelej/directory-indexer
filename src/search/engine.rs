@@ -7,10 +7,12 @@ use crate::{
     storage::{QdrantStore, SqliteStore},
 };
 
-#[allow(dead_code)]
 pub struct SearchEngine {
+    #[allow(dead_code)]
     sqlite_store: SqliteStore,
+    #[allow(dead_code)]
     vector_store: QdrantStore,
+    #[allow(dead_code)]
     embedding_provider: Box<dyn EmbeddingProvider>,
 }
 
@@ -110,42 +112,5 @@ impl SearchEngine {
         Err(IndexerError::not_found(
             "File content retrieval not implemented",
         ))
-    }
-
-    #[allow(dead_code)]
-    async fn generate_query_embedding(&self, _query: &str) -> Result<Vec<f32>> {
-        // TODO: Implement query embedding generation when EmbeddingProvider trait is complete
-        Ok(vec![0.0; 768]) // Placeholder embedding
-    }
-
-    #[allow(dead_code)]
-    fn apply_directory_filter(
-        &self,
-        results: Vec<SearchResult>,
-        filter: &PathBuf,
-    ) -> Vec<SearchResult> {
-        results
-            .into_iter()
-            .filter(|result| {
-                result.file_path.starts_with(filter)
-                    || result
-                        .parent_directories
-                        .iter()
-                        .any(|dir| PathBuf::from(dir).starts_with(filter))
-            })
-            .collect()
-    }
-
-    #[allow(dead_code)]
-    fn rank_results(&self, mut results: Vec<SearchResult>) -> Vec<SearchResult> {
-        // Sort by score (descending) and then by modification time (descending)
-        results.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then(b.modified_time.cmp(&a.modified_time))
-        });
-
-        results
     }
 }

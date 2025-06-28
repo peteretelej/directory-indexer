@@ -35,8 +35,13 @@ struct OllamaModel {
 
 impl OllamaProvider {
     pub fn new(endpoint: String, model: String) -> Self {
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60)) // Embedding can take longer
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
         Self {
-            client: Client::new(),
+            client,
             endpoint,
             model,
         }
@@ -63,16 +68,20 @@ impl EmbeddingProvider for OllamaProvider {
     }
 
     async fn generate_embeddings(&self, texts: Vec<String>) -> Result<EmbeddingResponse> {
-        debug!("Generating embeddings for {} texts using model '{}'", texts.len(), self.model);
-        
+        debug!(
+            "Generating embeddings for {} texts using model '{}'",
+            texts.len(),
+            self.model
+        );
+
         let mut embeddings = Vec::new();
-        
+
         // Ollama API typically handles one text at a time
         for text in &texts {
             let embedding = self.generate_single_embedding(text).await?;
             embeddings.push(embedding);
         }
-        
+
         Ok(EmbeddingResponse {
             embeddings,
             model: self.model.clone(),
@@ -85,23 +94,22 @@ impl EmbeddingProvider for OllamaProvider {
 
     async fn health_check(&self) -> Result<bool> {
         let models_url = format!("{}/api/tags", self.endpoint);
-        
-        let response = self.client
-            .get(&models_url)
-            .send()
-            .await
-            .map_err(|e| IndexerError::embedding(format!("Failed to connect to Ollama: {}", e)))?;
+
+        let response =
+            self.client.get(&models_url).send().await.map_err(|e| {
+                IndexerError::embedding(format!("Failed to connect to Ollama: {}", e))
+            })?;
 
         if !response.status().is_success() {
             return Ok(false);
         }
 
-        let models_response: OllamaModelsResponse = response
-            .json()
-            .await
-            .map_err(|e| IndexerError::embedding(format!("Failed to parse models response: {}", e)))?;
+        let models_response: OllamaModelsResponse = response.json().await.map_err(|e| {
+            IndexerError::embedding(format!("Failed to parse models response: {}", e))
+        })?;
 
-        let model_available = models_response.models
+        let model_available = models_response
+            .models
             .iter()
             .any(|m| m.name.contains(&self.model));
 
@@ -112,18 +120,21 @@ impl EmbeddingProvider for OllamaProvider {
 impl OllamaProvider {
     async fn generate_single_embedding(&self, text: &str) -> Result<Vec<f32>> {
         let embed_url = format!("{}/api/embeddings", self.endpoint);
-        
+
         let request = OllamaEmbedRequest {
             model: self.model.clone(),
             prompt: text.to_string(),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&embed_url)
             .json(&request)
             .send()
             .await
-            .map_err(|e| IndexerError::embedding(format!("Failed to send embedding request: {}", e)))?;
+            .map_err(|e| {
+                IndexerError::embedding(format!("Failed to send embedding request: {}", e))
+            })?;
 
         if !response.status().is_success() {
             return Err(IndexerError::embedding(format!(
@@ -132,12 +143,14 @@ impl OllamaProvider {
             )));
         }
 
-        let embed_response: OllamaEmbedResponse = response
-            .json()
-            .await
-            .map_err(|e| IndexerError::embedding(format!("Failed to parse embedding response: {}", e)))?;
+        let embed_response: OllamaEmbedResponse = response.json().await.map_err(|e| {
+            IndexerError::embedding(format!("Failed to parse embedding response: {}", e))
+        })?;
 
-        debug!("Generated embedding with dimension: {}", embed_response.embedding.len());
+        debug!(
+            "Generated embedding with dimension: {}",
+            embed_response.embedding.len()
+        );
         Ok(embed_response.embedding)
     }
 }

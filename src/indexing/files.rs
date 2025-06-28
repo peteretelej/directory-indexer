@@ -23,11 +23,21 @@ pub struct FileScanner {
     ignore_patterns: Vec<String>,
 }
 
+impl Default for FileScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileScanner {
     pub fn new() -> Self {
         Self {
             max_file_size: 10 * 1024 * 1024, // 10MB default
-            ignore_patterns: vec![".git".to_string(), "node_modules".to_string(), "target".to_string()],
+            ignore_patterns: vec![
+                ".git".to_string(),
+                "node_modules".to_string(),
+                "target".to_string(),
+            ],
         }
     }
 
@@ -45,7 +55,7 @@ impl FileScanner {
         }
     }
 
-    pub fn scan_directory(&self, dir_path: &Path) -> Result<Vec<FileInfo>> {
+    pub async fn scan_directory(&self, dir_path: &Path) -> Result<Vec<FileInfo>> {
         let mut files = Vec::new();
 
         for entry in WalkDir::new(dir_path).follow_links(false) {
@@ -67,7 +77,7 @@ impl FileScanner {
             }
 
             // Get file metadata
-            let metadata = std::fs::metadata(path)?;
+            let metadata = tokio::fs::metadata(path).await?;
             let size = metadata.len();
 
             let modified_time = metadata
@@ -86,9 +96,15 @@ impl FileScanner {
 
             // Check file size and read content if appropriate
             let (content, errors) = if size > self.max_file_size {
-                (None, Some(format!("File too large: {} bytes (max: {})", size, self.max_file_size)))
+                (
+                    None,
+                    Some(format!(
+                        "File too large: {} bytes (max: {})",
+                        size, self.max_file_size
+                    )),
+                )
             } else {
-                match std::fs::read_to_string(path) {
+                match tokio::fs::read_to_string(path).await {
                     Ok(content) => (Some(content), None),
                     Err(e) => (None, Some(format!("Failed to read file: {}", e))),
                 }
@@ -110,10 +126,10 @@ impl FileScanner {
 
     fn extract_parent_directories(&self, file_path: &Path, root_dir: &Path) -> Vec<String> {
         let mut parent_dirs = Vec::new();
-        
+
         // Add the root directory
         parent_dirs.push(root_dir.to_string_lossy().to_string());
-        
+
         // Add all parent directories between root and file
         if let Ok(relative_path) = file_path.strip_prefix(root_dir) {
             let mut current = root_dir.to_path_buf();
@@ -122,7 +138,7 @@ impl FileScanner {
                 parent_dirs.push(current.to_string_lossy().to_string());
             }
         }
-        
+
         parent_dirs
     }
 }
@@ -167,7 +183,7 @@ impl FileProcessor {
         }
     }
 
-    pub fn walk_directory(&self, dir_path: &Path) -> Result<Vec<FileMetadata>> {
+    pub async fn walk_directory(&self, dir_path: &Path) -> Result<Vec<FileMetadata>> {
         let mut files = Vec::new();
 
         for entry in WalkDir::new(dir_path).follow_links(false) {
@@ -189,7 +205,7 @@ impl FileProcessor {
             }
 
             // Get file metadata
-            let metadata = std::fs::metadata(path)?;
+            let metadata = tokio::fs::metadata(path).await?;
             let size = metadata.len();
 
             // Skip files that are too large
@@ -219,18 +235,19 @@ impl FileProcessor {
         Ok(files)
     }
 
-    pub fn process_file(&self, path: &Path) -> Result<ProcessedFile> {
+    pub async fn process_file(&self, path: &Path) -> Result<ProcessedFile> {
         debug!("Processing file: {:?}", path);
 
         // Read file content
-        let content = std::fs::read_to_string(path)
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {}", e)))?;
 
         // Chunk the content
         let chunks = chunk_text(&content, self.chunk_size, self.overlap);
 
         // Get file metadata
-        let metadata = std::fs::metadata(path)?;
+        let metadata = tokio::fs::metadata(path).await?;
         let size = metadata.len();
         let file_type = detect_file_type(path);
 
@@ -286,8 +303,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_walk_directory() {
+    #[tokio::test]
+    async fn test_walk_directory() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -296,13 +313,13 @@ mod tests {
         fs::write(temp_path.join("test.md"), "# Test").unwrap();
 
         let processor = FileProcessor::new(1024 * 1024, vec![], 512, 50);
-        let files = processor.walk_directory(temp_path).unwrap();
+        let files = processor.walk_directory(temp_path).await.unwrap();
 
         assert_eq!(files.len(), 2);
     }
 
-    #[test]
-    fn test_process_file() {
+    #[tokio::test]
+    async fn test_process_file() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
         let file_path = temp_path.join("test.txt");
@@ -314,7 +331,7 @@ mod tests {
         .unwrap();
 
         let processor = FileProcessor::new(1024 * 1024, vec![], 20, 5);
-        let processed = processor.process_file(&file_path).unwrap();
+        let processed = processor.process_file(&file_path).await.unwrap();
 
         assert!(!processed.content.is_empty());
         assert!(!processed.chunks.is_empty());

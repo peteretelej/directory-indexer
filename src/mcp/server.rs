@@ -2,9 +2,9 @@ use log::{debug, error, info, warn};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader};
 
-use crate::{Config, Result};
 use super::json_rpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
 use super::tools::McpTool;
+use crate::{Config, Result};
 
 pub struct McpServer {
     config: Config,
@@ -88,7 +88,11 @@ impl McpServer {
         }
     }
 
-    async fn handle_initialize(&self, id: Option<Value>, _params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_initialize(
+        &self,
+        id: Option<Value>,
+        _params: Option<Value>,
+    ) -> JsonRpcResponse {
         info!("Handling initialize request");
 
         let capabilities = json!({
@@ -116,13 +120,16 @@ impl McpServer {
         info!("Handling tools/list request");
 
         let tools = McpTool::all_tools();
-        let tools_json: Vec<Value> = tools.into_iter().map(|tool| {
-            json!({
-                "name": tool.name,
-                "description": tool.description,
-                "inputSchema": tool.input_schema
+        let tools_json: Vec<Value> = tools
+            .into_iter()
+            .map(|tool| {
+                json!({
+                    "name": tool.name,
+                    "description": tool.description,
+                    "inputSchema": tool.input_schema
+                })
             })
-        }).collect();
+            .collect();
 
         let result = json!({
             "tools": tools_json
@@ -134,12 +141,22 @@ impl McpServer {
     async fn handle_tools_call(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
         let params = match params {
             Some(p) => p,
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("Missing params".to_string()),
+                )
+            }
         };
 
         let tool_name = match params.get("name").and_then(|v| v.as_str()) {
             Some(name) => name,
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing tool name".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("Missing tool name".to_string()),
+                )
+            }
         };
 
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
@@ -159,8 +176,11 @@ impl McpServer {
     async fn handle_server_info_tool(&self, id: Option<Value>) -> JsonRpcResponse {
         info!("Handling server_info tool");
 
-        let content = format!("Directory Indexer MCP Server v{}\n\nStatus:\n- Server running\n- Configuration loaded\n- Available tools: index, search, similar_files, get_content, server_info", 
-            env!("CARGO_PKG_VERSION"));
+        let content = format!("Directory Indexer MCP Server v{}\n\nStatus:\n- Server running\n- Configuration loaded\n- SQLite path: {}\n- Qdrant endpoint: {}\n- Embedding provider: {}\n- Available tools: index, search, similar_files, get_content, server_info", 
+            env!("CARGO_PKG_VERSION"),
+            self.config.storage.sqlite_path.display(),
+            self.config.storage.qdrant.endpoint,
+            self.config.embedding.provider);
 
         let result = json!({
             "content": [
@@ -179,7 +199,14 @@ impl McpServer {
 
         let directory_path = match arguments.get("directory_path").and_then(|v| v.as_str()) {
             Some(path) => path,
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: directory_path".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(
+                        "missing required parameter: directory_path".to_string(),
+                    ),
+                )
+            }
         };
 
         // Handle comma-separated paths for multiple directories
@@ -191,9 +218,15 @@ impl McpServer {
         // Call CLI index function without console output
         match crate::cli::commands::index_internal(paths.clone(), false).await {
             Ok(_) => {
-                let content = format!("Successfully indexed {} directories:\n{}", 
+                let content = format!(
+                    "Successfully indexed {} directories:\n{}",
                     paths.len(),
-                    paths.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"));
+                    paths
+                        .iter()
+                        .map(|p| format!("- {}", p))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                );
 
                 let result = json!({
                     "content": [
@@ -206,9 +239,10 @@ impl McpServer {
 
                 JsonRpcResponse::success(id, result)
             }
-            Err(e) => {
-                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Failed to index directories: {}", e)))
-            }
+            Err(e) => JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error(format!("Failed to index directories: {}", e)),
+            ),
         }
     }
 
@@ -217,14 +251,32 @@ impl McpServer {
 
         let query = match arguments.get("query").and_then(|v| v.as_str()) {
             Some(q) => q.to_string(),
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: query".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("missing required parameter: query".to_string()),
+                )
+            }
         };
 
-        let directory_path = arguments.get("directory_path").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let limit = arguments.get("limit").and_then(|v| v.as_u64()).map(|l| l as usize);
+        let directory_path = arguments
+            .get("directory_path")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let limit = arguments
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .map(|l| l as usize);
 
         // Call CLI search function without console output
-        match crate::cli::commands::search_internal(query.clone(), directory_path.clone(), limit, false).await {
+        match crate::cli::commands::search_internal(
+            query.clone(),
+            directory_path.clone(),
+            limit,
+            false,
+        )
+        .await
+        {
             Ok(_) => {
                 let mut content = format!("Search completed for query: '{}'\n", query);
                 if let Some(path) = directory_path {
@@ -246,21 +298,37 @@ impl McpServer {
 
                 JsonRpcResponse::success(id, result)
             }
-            Err(e) => {
-                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Search failed: {}", e)))
-            }
+            Err(e) => JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error(format!("Search failed: {}", e)),
+            ),
         }
     }
 
-    async fn handle_similar_files_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+    async fn handle_similar_files_tool(
+        &self,
+        id: Option<Value>,
+        arguments: Value,
+    ) -> JsonRpcResponse {
         info!("Handling similar_files tool");
 
         let file_path = match arguments.get("file_path").and_then(|v| v.as_str()) {
             Some(path) => path.to_string(),
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: file_path".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(
+                        "missing required parameter: file_path".to_string(),
+                    ),
+                )
+            }
         };
 
-        let limit = arguments.get("limit").and_then(|v| v.as_u64()).map(|l| l as usize).unwrap_or(10);
+        let limit = arguments
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .map(|l| l as usize)
+            .unwrap_or(10);
 
         // Call CLI similar function without console output
         match crate::cli::commands::similar_internal(file_path.clone(), limit, false).await {
@@ -279,21 +347,36 @@ impl McpServer {
 
                 JsonRpcResponse::success(id, result)
             }
-            Err(e) => {
-                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Similar files search failed: {}", e)))
-            }
+            Err(e) => JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error(format!("Similar files search failed: {}", e)),
+            ),
         }
     }
 
-    async fn handle_get_content_tool(&self, id: Option<Value>, arguments: Value) -> JsonRpcResponse {
+    async fn handle_get_content_tool(
+        &self,
+        id: Option<Value>,
+        arguments: Value,
+    ) -> JsonRpcResponse {
         info!("Handling get_content tool");
 
         let file_path = match arguments.get("file_path").and_then(|v| v.as_str()) {
             Some(path) => path.to_string(),
-            None => return JsonRpcResponse::error(id, JsonRpcError::invalid_params("missing required parameter: file_path".to_string())),
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(
+                        "missing required parameter: file_path".to_string(),
+                    ),
+                )
+            }
         };
 
-        let chunks = arguments.get("chunks").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let chunks = arguments
+            .get("chunks")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         // Call CLI get function without console output
         match crate::cli::commands::get_internal(file_path.clone(), chunks.clone(), false).await {
@@ -302,7 +385,9 @@ impl McpServer {
                 if let Some(c) = chunks {
                     content.push_str(&format!("Chunks: {}\n", c));
                 }
-                content.push_str("Note: File content retrieval functionality is still being implemented");
+                content.push_str(
+                    "Note: File content retrieval functionality is still being implemented",
+                );
 
                 let result = json!({
                     "content": [
@@ -315,9 +400,10 @@ impl McpServer {
 
                 JsonRpcResponse::success(id, result)
             }
-            Err(e) => {
-                JsonRpcResponse::error(id, JsonRpcError::internal_error(format!("Get content failed: {}", e)))
-            }
+            Err(e) => JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error(format!("Get content failed: {}", e)),
+            ),
         }
     }
 }

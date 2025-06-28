@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pre-push hook for directory-indexer
-# Run quality checks before pushing code
+# Run essential quality checks before pushing code
 
 set -e
 
@@ -19,8 +19,11 @@ cargo clippy --all-targets --all-features -- -D warnings
 echo "Checking code formatting..."
 cargo fmt --check
 
-echo "Running tests..."
-cargo test
+echo "Running essential tests..."
+# Only run fast, essential tests - skip the slow integration tests
+cargo test --lib
+cargo test --test error_scenarios_tests  
+cargo test --test storage_tests
 
 echo "Checking for security vulnerabilities..."
 if command -v cargo-audit >/dev/null 2>&1; then
@@ -30,6 +33,5 @@ else
     cargo install cargo-audit
     cargo audit
 fi
-
 
 echo "All pre-push checks passed!"

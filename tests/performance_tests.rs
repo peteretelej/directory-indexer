@@ -13,16 +13,16 @@ fn test_indexing_performance_small_directory() {
     let test_path = test_structure.path().to_str().unwrap();
 
     let start = Instant::now();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
     cmd.arg("index")
         .arg(test_path)
         .timeout(Duration::from_secs(30))
         .assert()
         .success();
-    
+
     let duration = start.elapsed();
-    
+
     // Should complete within reasonable time for small directory
     assert!(duration < Duration::from_secs(30));
     println!("Small directory indexing took: {:?}", duration);
@@ -32,18 +32,18 @@ fn test_indexing_performance_small_directory() {
 #[test]
 fn test_indexing_performance_medium_directory() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create 100 files with varying sizes
     for i in 0..100 {
         let content = format!("This is file number {}. ", i).repeat(100); // ~2KB each
         fs::write(temp_dir.path().join(format!("file_{}.txt", i)), content).unwrap();
     }
-    
+
     // Create subdirectories
     for i in 0..10 {
         let subdir = temp_dir.path().join(format!("subdir_{}", i));
         fs::create_dir(&subdir).unwrap();
-        
+
         for j in 0..10 {
             let content = format!("Subdirectory {} file {}. ", i, j).repeat(50);
             fs::write(subdir.join(format!("subfile_{}.txt", j)), content).unwrap();
@@ -51,16 +51,16 @@ fn test_indexing_performance_medium_directory() {
     }
 
     let start = Instant::now();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
     cmd.arg("index")
         .arg(temp_dir.path().to_str().unwrap())
         .timeout(Duration::from_secs(60))
         .assert()
         .success();
-    
+
     let duration = start.elapsed();
-    
+
     // Should complete within reasonable time for medium directory
     assert!(duration < Duration::from_secs(60));
     println!("Medium directory indexing took: {:?}", duration);
@@ -93,16 +93,16 @@ fn test_search_performance() {
 
     for query in search_queries {
         let start = Instant::now();
-        
+
         let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
         cmd.arg("search")
             .arg(query)
             .timeout(Duration::from_secs(10))
             .assert()
             .success();
-        
+
         let duration = start.elapsed();
-        
+
         // Search should be fast
         assert!(duration < Duration::from_secs(5));
         println!("Search for '{}' took: {:?}", query, duration);
@@ -132,25 +132,28 @@ fn test_concurrent_search_performance() {
     ];
 
     let start = Instant::now();
-    
+
     // Run multiple searches concurrently
-    let handles: Vec<_> = queries.into_iter().map(|query| {
-        std::thread::spawn(move || {
-            let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-            cmd.arg("search")
-                .arg(query)
-                .timeout(Duration::from_secs(10))
-                .assert()
-                .success();
+    let handles: Vec<_> = queries
+        .into_iter()
+        .map(|query| {
+            std::thread::spawn(move || {
+                let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+                cmd.arg("search")
+                    .arg(query)
+                    .timeout(Duration::from_secs(10))
+                    .assert()
+                    .success();
+            })
         })
-    }).collect();
+        .collect();
 
     for handle in handles {
         handle.join().unwrap();
     }
-    
+
     let duration = start.elapsed();
-    
+
     // Concurrent searches should complete reasonably quickly
     assert!(duration < Duration::from_secs(15));
     println!("Concurrent searches took: {:?}", duration);
@@ -181,16 +184,16 @@ fn test_similar_files_performance() {
         let full_path = test_structure.path().join(file_path);
         if full_path.exists() {
             let start = Instant::now();
-            
+
             let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
             cmd.arg("similar")
                 .arg(full_path.to_str().unwrap())
                 .timeout(Duration::from_secs(10))
                 .assert()
                 .success();
-            
+
             let duration = start.elapsed();
-            
+
             // Similar files search should be fast
             assert!(duration < Duration::from_secs(5));
             println!("Similar files for '{}' took: {:?}", file_path, duration);
@@ -202,33 +205,36 @@ fn test_similar_files_performance() {
 #[test]
 fn test_get_content_performance() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create files of various sizes
     let file_sizes = vec![
-        (1024, "small.txt"),        // 1KB
-        (10 * 1024, "medium.txt"),  // 10KB
-        (100 * 1024, "large.txt"),  // 100KB
-        (1024 * 1024, "huge.txt"),  // 1MB
+        (1024, "small.txt"),       // 1KB
+        (10 * 1024, "medium.txt"), // 10KB
+        (100 * 1024, "large.txt"), // 100KB
+        (1024 * 1024, "huge.txt"), // 1MB
     ];
 
     for (size, filename) in file_sizes {
         let content = "a".repeat(size);
         fs::write(temp_dir.path().join(filename), content).unwrap();
-        
+
         let start = Instant::now();
-        
+
         let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
         cmd.arg("get")
             .arg(temp_dir.path().join(filename).to_str().unwrap())
             .timeout(Duration::from_secs(10))
             .assert()
             .success();
-        
+
         let duration = start.elapsed();
-        
+
         // Get content should be fast regardless of file size
         assert!(duration < Duration::from_secs(5));
-        println!("Get content for {} ({} bytes) took: {:?}", filename, size, duration);
+        println!(
+            "Get content for {} ({} bytes) took: {:?}",
+            filename, size, duration
+        );
     }
 }
 
@@ -247,14 +253,12 @@ fn test_status_performance() {
         .success();
 
     let start = Instant::now();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("status")
-        .assert()
-        .success();
-    
+    cmd.arg("status").assert().success();
+
     let duration = start.elapsed();
-    
+
     // Status should be very fast
     assert!(duration < Duration::from_secs(2));
     println!("Status command took: {:?}", duration);
@@ -264,7 +268,7 @@ fn test_status_performance() {
 #[test]
 fn test_memory_usage_during_indexing() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create many small files to test memory efficiency
     for i in 0..500 {
         let content = format!("Content for file {} ", i).repeat(100);
@@ -272,16 +276,16 @@ fn test_memory_usage_during_indexing() {
     }
 
     let start = Instant::now();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
     cmd.arg("index")
         .arg(temp_dir.path().to_str().unwrap())
         .timeout(Duration::from_secs(120))
         .assert()
         .success();
-    
+
     let duration = start.elapsed();
-    
+
     // Should handle many files without excessive memory usage or timeout
     assert!(duration < Duration::from_secs(120));
     println!("Indexing 500 files took: {:?}", duration);
@@ -291,7 +295,7 @@ fn test_memory_usage_during_indexing() {
 #[test]
 fn test_different_file_types_performance() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create files of different types
     let file_types = vec![
         ("document.md", "# Markdown Document\n\nThis is a markdown file with various content."),
@@ -310,16 +314,16 @@ fn test_different_file_types_performance() {
     }
 
     let start = Instant::now();
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
     cmd.arg("index")
         .arg(temp_dir.path().to_str().unwrap())
         .timeout(Duration::from_secs(30))
         .assert()
         .success();
-    
+
     let duration = start.elapsed();
-    
+
     // Should handle different file types efficiently
     assert!(duration < Duration::from_secs(30));
     println!("Indexing different file types took: {:?}", duration);
@@ -329,7 +333,7 @@ fn test_different_file_types_performance() {
 #[test]
 fn test_incremental_indexing_performance() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create initial set of files
     for i in 0..50 {
         let content = format!("Initial content for file {}", i);
@@ -366,7 +370,7 @@ fn test_incremental_indexing_performance() {
     // (though this depends on implementation details)
     println!("Initial indexing took: {:?}", initial_duration);
     println!("Incremental indexing took: {:?}", incremental_duration);
-    
+
     // Both should complete within reasonable time
     assert!(initial_duration < Duration::from_secs(30));
     assert!(incremental_duration < Duration::from_secs(30));
@@ -376,12 +380,12 @@ fn test_incremental_indexing_performance() {
 #[test]
 fn test_end_to_end_performance_benchmark() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create a realistic directory structure
     for i in 0..20 {
         let subdir = temp_dir.path().join(format!("module_{}", i));
         fs::create_dir(&subdir).unwrap();
-        
+
         for j in 0..10 {
             let content = format!(
                 "Module {} File {}\n\nThis file contains important information about the system.\n\
@@ -394,7 +398,7 @@ fn test_end_to_end_performance_benchmark() {
     }
 
     println!("Starting end-to-end performance benchmark...");
-    
+
     // Benchmark indexing
     let start = Instant::now();
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
@@ -404,7 +408,7 @@ fn test_end_to_end_performance_benchmark() {
         .assert()
         .success();
     let index_duration = start.elapsed();
-    
+
     // Benchmark search
     let start = Instant::now();
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
@@ -414,20 +418,18 @@ fn test_end_to_end_performance_benchmark() {
         .assert()
         .success();
     let search_duration = start.elapsed();
-    
+
     // Benchmark status
     let start = Instant::now();
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("status")
-        .assert()
-        .success();
+    cmd.arg("status").assert().success();
     let status_duration = start.elapsed();
 
     println!("Performance Benchmark Results:");
     println!("  Indexing 200 files: {:?}", index_duration);
     println!("  Search query: {:?}", search_duration);
     println!("  Status check: {:?}", status_duration);
-    
+
     // Set reasonable performance expectations
     assert!(index_duration < Duration::from_secs(60));
     assert!(search_duration < Duration::from_secs(5));
