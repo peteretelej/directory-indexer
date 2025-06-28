@@ -163,6 +163,37 @@ The script runs:
 - `cargo test` - All tests
 - `cargo audit` - Security vulnerability scan (auto-installs if missing)
 
+### Local CI Testing with Act
+
+[Act](https://github.com/nektos/act) lets you run GitHub Actions workflows locally for faster feedback:
+
+```bash
+# Install act (if not already available)
+# See: https://github.com/nektos/act#installation
+
+# Run all CI jobs
+act
+
+# Run specific jobs
+act -j lint              # Fast linting checks
+act -j test-unit         # Unit tests only
+act -j test-integration  # Integration tests (needs Docker services)
+
+# List available workflows
+act -l
+
+# Run with custom event
+act pull_request
+```
+
+**Benefits:**
+- Test CI changes before pushing
+- Debug workflow issues locally  
+- Faster iteration than waiting for GitHub Actions
+- Works offline with cached Docker images
+
+**Note:** Integration tests require Docker services (Qdrant/Ollama) to be available.
+
 ## MCP Server Development
 
 ### Testing MCP Integration
