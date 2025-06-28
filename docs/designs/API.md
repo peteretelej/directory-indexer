@@ -60,8 +60,6 @@ directory-indexer search "authentication" --limit 5
 
 Find files similar to a given file.
 
-> **⚠️ Status**: Placeholder implementation - warns "not yet implemented"
-
 ```bash
 directory-indexer similar <file> [options]
 ```
@@ -86,8 +84,6 @@ directory-indexer similar ~/docs/api-guide.md --limit 5
 ### `get`
 
 Retrieve file content with optional chunk selection.
-
-> **⚠️ Status**: Placeholder implementation - warns "not yet implemented"
 
 ```bash
 directory-indexer get <file> [options]
@@ -213,8 +209,6 @@ Search indexed content semantically.
 
 Find files similar to a given file.
 
-> **⚠️ Status**: Placeholder implementation - returns "not yet implemented" message
-
 **Input Schema:**
 
 ```json
@@ -244,8 +238,6 @@ Find files similar to a given file.
 ### `get_content`
 
 Retrieve file content with optional chunk selection.
-
-> **⚠️ Status**: Placeholder implementation - returns "not yet implemented" message
 
 **Input Schema:**
 

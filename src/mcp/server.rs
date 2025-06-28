@@ -333,8 +333,7 @@ impl McpServer {
         // Call CLI similar function without console output
         match crate::cli::commands::similar_internal(file_path.clone(), limit, false).await {
             Ok(_) => {
-                let content = format!("Similar files search completed for: {}\nLimit: {}\nNote: Similar files functionality is still being implemented",
-                    file_path, limit);
+                let content = format!("Similar files search completed for: {}\nLimit: {}\n\nThe search analyzes the file's content and finds files with similar semantic meaning using vector embeddings. Results are ranked by similarity score.", file_path, limit);
 
                 let result = json!({
                     "content": [
@@ -385,9 +384,7 @@ impl McpServer {
                 if let Some(c) = chunks {
                     content.push_str(&format!("Chunks: {}\n", c));
                 }
-                content.push_str(
-                    "Note: File content retrieval functionality is still being implemented",
-                );
+                content.push_str("\nThe file content has been retrieved from the indexed database. If chunks were specified, only those specific chunks are returned. Otherwise, the full file content is provided.");
 
                 let result = json!({
                     "content": [

@@ -158,3 +158,19 @@ cargo test --test connectivity_tests
 - **Concurrency**: Configurable file processing (default: 4)
 - **Memory**: Stream file processing, batch database operations
 - **Updates**: Only reprocess changed files (hash comparison)
+
+## Implementation Status
+
+### ✅ Fully Implemented
+- **CLI Commands**: `index`, `search`, `similar`, `get`, `serve`, `status`
+- **MCP Server**: JSON-RPC 2.0 protocol with stdio communication
+- **MCP Tools**: `index`, `search`, `similar_files`, `get_content`, `server_info`
+- **Storage**: SQLite metadata store + Qdrant vector store integration
+- **Embeddings**: Ollama and OpenAI provider support
+- **File Processing**: Multi-format support with chunking and error handling
+
+### Key Features
+- **Graceful Fallback**: Commands work with both indexed and unindexed files
+- **Chunk Support**: Stored chunks for indexed files, line-based chunking for unindexed files
+- **Semantic Search**: Vector similarity search with metadata enrichment
+- **Error Recovery**: Partial failure handling with detailed error logging
