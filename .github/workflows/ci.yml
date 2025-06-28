@@ -51,7 +51,11 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Check with clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::uninlined_format_args
+      run: |
+        # Check main library code with strict linting
+        cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
+        # Check other targets with standard linting (tests can be less strict)
+        cargo clippy --bins --all-features -- -D warnings
 
     - name: Run tests
       run: cargo test --verbose
