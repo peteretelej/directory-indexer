@@ -49,7 +49,7 @@
    ```bash
    # If using native installation (recommended for GPU)
    ollama pull nomic-embed-text
-   
+
    # If using Docker (development only)
    docker exec ollama-dev ollama pull nomic-embed-text
    ```
@@ -68,7 +68,7 @@ Use the development script to start Qdrant and Ollama services:
 # Start dev services on standard ports
 ./scripts/start-dev-services.sh
 
-# Run integration tests  
+# Run integration tests
 ./scripts/test-integration-local.sh
 
 # Stop services
@@ -187,8 +187,9 @@ act pull_request
 ```
 
 **Benefits:**
+
 - Test CI changes before pushing
-- Debug workflow issues locally  
+- Debug workflow issues locally
 - Faster iteration than waiting for GitHub Actions
 - Works offline with cached Docker images
 
@@ -214,7 +215,7 @@ To keep CI fast, integration tests are **conditional**:
 - **Always run**: Lint, unit tests, build, smoke tests
 - **Integration tests run when**:
   - Pushing to `main` branch
-  - Opening PR to `main` branch  
+  - Opening PR to `main` branch
   - Including `[integration]` in commit message or PR title
 
 **For most development**: Fast feedback from unit tests and smoke tests  
@@ -340,68 +341,79 @@ DIRECTORY_INDEXER_DB=/tmp/test.db cargo test --test error_scenarios_tests
 
 ## Publishing
 
-### Pre-publish Steps
+### Automated Release Process
+
+Releases are fully automated through GitHub Actions. The process is triggered by pushing version tags.
+
+### Release Workflow
+
+1. **Pre-release Quality Checks**:
 
 ```bash
-# 1. Update versions
-# Edit Cargo.toml: version = "0.1.0"
-# Edit package.json: "version": "0.1.0"
-
-# 2. Run quality checks
+# Run all quality checks
 ./scripts/pre-push
 
-# 3. Check what will be included
+# Test local builds
+cargo build --release
+npm run build-all
+
+# Verify package contents
 cargo package --list
 npm pack --dry-run
-
-# 4. Test publish without uploading
-cargo publish --dry-run
-npm publish --dry-run
 ```
 
-### Publishing to crates.io
+2. **Create Release**:
 
 ```bash
-# Account setup at https://crates.io, then:
-cargo login
-cargo publish
-cargo install directory-indexer --force
-
-cargo search directory-indexer
-directory-indexer --version
+# Tag the release (triggers automated publishing)
+git tag v0.0.2
+git push origin v0.0.2
 ```
 
-### Publishing to npm
+3. **Automated Actions**:
+
+- Builds binaries for all platforms (Linux, macOS, Windows)
+- Creates GitHub release with downloadable binaries
+- Publishes to crates.io with version from tag
+- Publishes to npm with cross-platform binaries
+- Updates package versions automatically
+
+4. **Verify Release**:
 
 ```bash
-npm login
-npm run build-all
-npm publish
+# Test installations
+cargo install directory-indexer
 npm install -g directory-indexer
 
-npm view directory-indexer
+# Verify versions
 directory-indexer --version
 ```
 
-### Post-publish
+### Manual Testing (Optional)
+
+For testing before release:
 
 ```bash
-git add Cargo.toml package.json
-git commit -m "Release v0.1.0"
-git tag v0.1.0
-git push origin main --tags
+# Test cargo publishing (dry run)
+cargo publish --dry-run
+
+# Test npm packaging locally
+npm pack
 ```
 
-## Release Process
+### Release Notes
 
-### Automated Releases
+The automated workflow creates GitHub releases with:
 
-Releases are automated via GitHub Actions:
+- Cross-platform binaries (Linux, macOS, Windows ARM64/x64)
+- Automatic changelog from commit messages
+- Links to npm and crates.io packages
 
-1. **PR Checks**: Run tests, linting, and cross-platform builds
-2. **Release Build**: Triggered on version tags
-3. **npm Publishing**: Automated upload to npm registry
-4. **GitHub Release**: Create release with binaries
+### Version Management
+
+- **Source of truth**: Git tags (e.g., `v1.0.0`)
+- **Automatic sync**: CI updates both Cargo.toml and package.json
+- **No manual version editing**: Versions are extracted from git tags
 
 ## Troubleshooting
 

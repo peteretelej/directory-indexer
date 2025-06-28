@@ -23,20 +23,18 @@ function main() {
   makeExecutable(wrapperPath);
   
   // Make the platform-specific binary executable
-  let binaryName = 'directory-indexer';
-  let platformDir = '';
+  let binaryName, platformSuffix;
   
   if (platform === 'win32') {
-    binaryName += '.exe';
-    platformDir = 'win32-x64';
+    binaryName = 'directory-indexer.exe-win32-x64';
   } else if (platform === 'darwin') {
-    platformDir = arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64';
+    binaryName = arch === 'arm64' ? 'directory-indexer-darwin-arm64' : 'directory-indexer-darwin-x64';
   } else if (platform === 'linux') {
-    platformDir = 'linux-x64';
+    binaryName = 'directory-indexer-linux-x64';
   }
   
-  if (platformDir) {
-    const binaryPath = path.join(__dirname, '..', 'binaries', `${binaryName}-${platformDir}`);
+  if (binaryName) {
+    const binaryPath = path.join(__dirname, '..', 'binaries', binaryName);
     makeExecutable(binaryPath);
   }
   

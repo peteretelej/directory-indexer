@@ -9,192 +9,202 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release v${{ steps.get_version.outputs.VERSION }}
-        draft: false
-        prerelease: false
-
   build:
-    name: Build for ${{ matrix.target }}
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: create-release
-    
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            cross: false
           - target: x86_64-apple-darwin
-            os: macos-latest
-            cross: false
+            os: macos-13  # Intel Mac
           - target: aarch64-apple-darwin
-            os: macos-latest
-            cross: false
-          - target: x86_64-pc-windows-gnu
+            os: macos-latest  # Apple Silicon
+          - target: x86_64-pc-windows-msvc
             os: windows-latest
-            cross: false
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
         targets: ${{ matrix.target }}
 
-    - name: Cache Cargo
-      uses: actions/cache@v3
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
       with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.target }}
 
     - name: Build binary
       run: cargo build --release --target ${{ matrix.target }}
 
     - name: Package binary (Unix)
-      if: matrix.os != 'windows-latest'
+      if: runner.os != 'Windows'
       run: |
-        mkdir -p binaries
-        cp target/${{ matrix.target }}/release/directory-indexer binaries/directory-indexer-${{ matrix.target }}
-        chmod +x binaries/directory-indexer-${{ matrix.target }}
+        binary_name="directory-indexer"
+        binary_path="target/${{ matrix.target }}/release/$binary_name"
+        
+        # Create archive
+        case "${{ matrix.target }}" in
+          x86_64-unknown-linux-gnu)
+            archive_name="directory-indexer-linux-x64"
+            ;;
+          x86_64-apple-darwin)
+            archive_name="directory-indexer-darwin-x64"
+            ;;
+          aarch64-apple-darwin)
+            archive_name="directory-indexer-darwin-arm64"
+            ;;
+        esac
+        
+        mkdir -p dist
+        cp "$binary_path" "dist/$archive_name"
+        chmod +x "dist/$archive_name"
+        
+        # Create tarball for GitHub release
+        tar -czf "dist/$archive_name.tar.gz" -C dist "$archive_name"
 
     - name: Package binary (Windows)
-      if: matrix.os == 'windows-latest'
+      if: runner.os == 'Windows'
       run: |
-        mkdir binaries
-        cp target/${{ matrix.target }}/release/directory-indexer.exe binaries/directory-indexer-${{ matrix.target }}.exe
+        $binary_name = "directory-indexer.exe"
+        $binary_path = "target/${{ matrix.target }}/release/$binary_name"
+        $archive_name = "directory-indexer.exe-win32-x64"
+        
+        New-Item -ItemType Directory -Force -Path dist
+        Copy-Item $binary_path "dist/$archive_name"
+        
+        # Create zip for GitHub release
+        Compress-Archive -Path "dist/$archive_name" -DestinationPath "dist/directory-indexer-windows-x64.zip"
 
-    - name: Upload binary to release (Unix)
-      if: matrix.os != 'windows-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: binaries/directory-indexer-${{ matrix.target }}
-        asset_name: directory-indexer-${{ matrix.target }}
-        asset_content_type: application/octet-stream
+        name: binary-${{ matrix.target }}
+        path: dist/
+        retention-days: 1
 
-    - name: Upload binary to release (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: binaries/directory-indexer-${{ matrix.target }}.exe
-        asset_name: directory-indexer-${{ matrix.target }}.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload binaries as artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: binaries-${{ matrix.target }}
-        path: binaries/
-
-  npm-publish:
-    name: Publish to npm
+  create-release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [create-release, build]
+    needs: build
+    permissions:
+      contents: write
+    outputs:
+      upload_url: ${{ steps.release.outputs.upload_url }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+        merge-multiple: true
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.ref_name }}
+        name: Release v${{ steps.version.outputs.VERSION }}
+        generateReleaseNotes: true
+        artifacts: "artifacts/*.tar.gz,artifacts/*.zip"
+        draft: false
+        prerelease: false
+
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: build
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Set up Node.js
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Update Cargo.toml version
+      run: |
+        sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.VERSION }}"/' Cargo.toml
+
+    - name: Verify Cargo.toml
+      run: cargo check
+
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         registry-url: 'https://registry.npmjs.org'
 
-    - name: Download all binary artifacts
-      uses: actions/download-artifact@v3
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
       with:
         path: artifacts/
 
-    - name: Organize binaries
+    - name: Organize binaries for npm
       run: |
         mkdir -p binaries
-        find artifacts/ -name "directory-indexer-*" -exec cp {} binaries/ \;
+        
+        # Copy binaries to expected locations for postinstall.js
+        cp artifacts/binary-x86_64-unknown-linux-gnu/directory-indexer-linux-x64 binaries/
+        cp artifacts/binary-x86_64-apple-darwin/directory-indexer-darwin-x64 binaries/
+        cp artifacts/binary-aarch64-apple-darwin/directory-indexer-darwin-arm64 binaries/
+        cp artifacts/binary-x86_64-pc-windows-msvc/directory-indexer.exe-win32-x64 binaries/
+        
+        # Ensure Unix binaries are executable
+        chmod +x binaries/directory-indexer-linux-x64
+        chmod +x binaries/directory-indexer-darwin-x64
+        chmod +x binaries/directory-indexer-darwin-arm64
+        
         ls -la binaries/
 
     - name: Install dependencies
       run: npm ci
 
     - name: Get version from tag
-      id: get_version
+      id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
     - name: Update package.json version
       run: |
-        npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
+        npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+
+    - name: Verify package contents
+      run: npm pack --dry-run
 
     - name: Publish to npm
       run: npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  docker-publish:
-    name: Publish Docker Image
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download Linux binary
-      uses: actions/download-artifact@v3
-      with:
-        name: binaries-x86_64-unknown-linux-gnu
-        path: binaries/
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64
-        push: true
-        tags: |
-          peteretelej/directory-indexer:latest
-          peteretelej/directory-indexer:${{ steps.get_version.outputs.VERSION }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
