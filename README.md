@@ -64,6 +64,37 @@ docker exec ollama ollama pull nomic-embed-text
 
 - **OpenAI**: Requires API key
 
+## Configuration
+
+Directory Indexer uses environment variables for configuration. Set these if your services run on different ports or require API keys:
+
+```bash
+# Service endpoints (defaults shown)
+export QDRANT_ENDPOINT="http://localhost:6333"
+export OLLAMA_ENDPOINT="http://localhost:11434"
+
+# Optional API keys
+export QDRANT_API_KEY="your-qdrant-key"
+export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
+```
+
+**For MCP clients** (like Claude Desktop), configure with environment variables:
+
+```json
+{
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "directory-indexer",
+      "args": ["serve"],
+      "env": {
+        "QDRANT_ENDPOINT": "http://localhost:6333",
+        "OLLAMA_ENDPOINT": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
 ## CLI Usage
 
 ```bash

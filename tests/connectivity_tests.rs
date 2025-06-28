@@ -15,25 +15,25 @@ use tempfile::NamedTempFile;
 fn create_test_config() -> Config {
     let temp_db = NamedTempFile::new().unwrap();
 
-    // Use environment variables if available, otherwise fall back to defaults
-    let qdrant_url =
-        std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6333".to_string());
-    let ollama_endpoint =
-        std::env::var("OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://localhost:11434".to_string());
+    // Generate unique collection name per test
+    let test_collection = format!(
+        "test-conn-{}",
+        uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+    );
 
-    Config {
+    let mut config = Config {
         storage: StorageConfig {
             sqlite_path: temp_db.path().to_path_buf(),
             qdrant: QdrantConfig {
-                endpoint: qdrant_url,
-                collection: "test-directory-indexer".to_string(),
+                endpoint: "http://localhost:6333".to_string(),
+                collection: test_collection,
                 api_key: None,
             },
         },
         embedding: EmbeddingConfig {
             provider: "ollama".to_string(),
             model: "nomic-embed-text".to_string(),
-            endpoint: ollama_endpoint,
+            endpoint: "http://localhost:11434".to_string(),
             api_key: None,
         },
         indexing: IndexingConfig {
@@ -47,7 +47,18 @@ fn create_test_config() -> Config {
             file_watching: false,
             batch_size: 10,
         },
+    };
+
+    // Use the same environment variable override logic as Config::load()
+    if let Ok(qdrant_endpoint) = std::env::var("QDRANT_ENDPOINT") {
+        config.storage.qdrant.endpoint = qdrant_endpoint;
     }
+
+    if let Ok(ollama_endpoint) = std::env::var("OLLAMA_ENDPOINT") {
+        config.embedding.endpoint = ollama_endpoint;
+    }
+
+    config
 }
 
 #[tokio::test]

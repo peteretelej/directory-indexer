@@ -60,24 +60,22 @@
    npm test
    ```
 
-### Isolated Development Environment
+### Development Services
 
-In case you don't want to use the Ollama and Qdrant instances on the default ports, you can use docker to run them in differen ports using the script below:
+Use the development script to start Qdrant and Ollama services:
 
 ```bash
-# Start dev services (isolated ports for development)
+# Start dev services on standard ports
 ./scripts/start-dev-services.sh
 
-# Run tests
-cargo test --test connectivity_tests
+# Run integration tests  
+./scripts/test-integration-local.sh
 
 # Stop services
 ./scripts/stop-dev-services.sh
 ```
 
-The script runs them on different ports to avoid conflicts with existing instances and sets up environment variables for seamless integration.
-
-**Note**: The development script runs services on isolated ports (6335, 11435) and sets `QDRANT_URL` and `OLLAMA_ENDPOINT` environment variables for you. Your tests and development workflows will automatically use these when available.
+**Note**: The development script runs services on standard ports (6333, 11434) and sets `QDRANT_ENDPOINT` and `OLLAMA_ENDPOINT` environment variables for you. Your tests and development workflows will automatically use these when available.
 
 ## Project Structure
 
@@ -177,7 +175,9 @@ act
 # Run specific jobs
 act -j lint              # Fast linting checks
 act -j test-unit         # Unit tests only
-act -j test-integration  # Integration tests (needs Docker services)
+
+# For integration tests, use the local script instead
+./scripts/test-integration-local.sh  # Requires services running on standard ports
 
 # List available workflows
 act -l
@@ -192,7 +192,33 @@ act pull_request
 - Faster iteration than waiting for GitHub Actions
 - Works offline with cached Docker images
 
+**⚠️ Important - Act Cleanup:**
+Act doesn't clean up containers/networks after runs, which can cause port conflicts:
+
+```bash
+# Clean up act containers and networks
+docker stop $(docker ps -q --filter "name=act-") 2>/dev/null || true
+docker rm $(docker ps -aq --filter "name=act-") 2>/dev/null || true
+docker network ls | grep act | awk '{print $1}' | xargs -r docker network rm
+
+# Or use the helper script
+./scripts/cleanup-act.sh
+```
+
 **Note:** Integration tests require Docker services (Qdrant/Ollama) to be available.
+
+### CI Strategy
+
+To keep CI fast, integration tests are **conditional**:
+
+- **Always run**: Lint, unit tests, build, smoke tests
+- **Integration tests run when**:
+  - Pushing to `main` branch
+  - Opening PR to `main` branch  
+  - Including `[integration]` in commit message or PR title
+
+**For most development**: Fast feedback from unit tests and smoke tests  
+**For releases**: Full integration test coverage
 
 ## MCP Server Development
 
@@ -253,31 +279,36 @@ npm run build-all
 
 ## Configuration
 
-### Development Config
+### Development Environment
 
-Create `~/.directory-indexer/config.json`:
+Directory Indexer uses environment variables for configuration. The development scripts automatically set these for you:
 
-```json
-{
-  "embedding": {
-    "provider": "ollama",
-    "model": "nomic-embed-text",
-    "endpoint": "http://localhost:11434"
-  },
-  "storage": {
-    "sqlite_path": "./dev-data.db",
-    "qdrant": {
-      "endpoint": "http://localhost:6333",
-      "collection": "dev-documents"
-    }
-  },
-  "indexing": {
-    "chunk_size": 256,
-    "overlap": 25,
-    "max_file_size": 1048576,
-    "concurrency": 2
-  }
-}
+```bash
+# Set by ./scripts/start-dev-services.sh
+export QDRANT_ENDPOINT="http://localhost:6333"
+export OLLAMA_ENDPOINT="http://localhost:11434"
+
+# Optional API keys (if needed)
+export QDRANT_API_KEY="your-key"
+export OLLAMA_API_KEY="your-key"
+```
+
+### Manual Configuration
+
+If running services on different ports or using hosted services:
+
+```bash
+# Custom ports
+export QDRANT_ENDPOINT="http://localhost:6334"
+export OLLAMA_ENDPOINT="http://localhost:11435"
+
+# Qdrant Cloud
+export QDRANT_ENDPOINT="https://your-cluster.qdrant.io"
+export QDRANT_API_KEY="your-qdrant-cloud-key"
+
+# Hosted Ollama
+export OLLAMA_ENDPOINT="https://your-ollama-host.com"
+export OLLAMA_API_KEY="your-ollama-key"
 ```
 
 ## Testing

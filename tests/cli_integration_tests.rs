@@ -10,13 +10,13 @@ use fixtures::simple_test_files::SimpleTestDirectoryStructure;
 fn are_services_available() -> bool {
     // Quick check if required services are running
     // Use environment variables if available, otherwise fall back to defaults
-    let qdrant_url =
-        std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6333".to_string());
+    let qdrant_endpoint =
+        std::env::var("QDRANT_ENDPOINT").unwrap_or_else(|_| "http://localhost:6333".to_string());
     let ollama_endpoint =
         std::env::var("OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://localhost:11434".to_string());
 
     let qdrant_available = std::process::Command::new("curl")
-        .args(["-s", &format!("{}/", qdrant_url), "-o", "/dev/null"])
+        .args(["-s", &format!("{}/", qdrant_endpoint), "-o", "/dev/null"])
         .status()
         .map(|s| s.success())
         .unwrap_or(false);

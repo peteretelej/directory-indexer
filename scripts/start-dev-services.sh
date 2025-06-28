@@ -13,9 +13,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Development ports (different from production to avoid conflicts)
-DEV_QDRANT_PORT=6335
-DEV_OLLAMA_PORT=11435
+# Standard ports for development
+DEV_QDRANT_PORT=6333
+DEV_OLLAMA_PORT=11434
 
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
@@ -23,57 +23,55 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Start Qdrant on development port
+# Start Qdrant on standard port
 echo -e "${YELLOW}Starting Qdrant on port $DEV_QDRANT_PORT...${NC}"
-if docker ps --format 'table {{.Names}}' | grep -q "^qdrant-dev$"; then
-    echo -e "${YELLOW}Qdrant development container already running${NC}"
-else
-    docker run -d \
-        --name qdrant-dev \
-        -p 127.0.0.1:$DEV_QDRANT_PORT:6333 \
-        -v qdrant_dev_storage:/qdrant/storage \
-        qdrant/qdrant
-    
-    # Wait for Qdrant to be ready
-    echo -e "${YELLOW}Waiting for Qdrant to be ready...${NC}"
-    for i in {1..30}; do
-        if curl -s http://localhost:$DEV_QDRANT_PORT/health >/dev/null 2>&1; then
-            echo -e "${GREEN}Qdrant is ready on http://localhost:$DEV_QDRANT_PORT${NC}"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            echo -e "${RED}Qdrant failed to start after 30 seconds${NC}"
-            exit 1
-        fi
-        sleep 1
-    done
-fi
+docker stop qdrant-dev || true
+docker rm qdrant-dev || true
 
-# Start Ollama on development port
+docker run -d \
+    --name qdrant-dev \
+    -p $DEV_QDRANT_PORT:6333 \
+    -v qdrant_dev_storage:/qdrant/storage \
+    qdrant/qdrant
+
+# Wait for Qdrant to be ready
+echo -e "${YELLOW}Waiting for Qdrant to be ready...${NC}"
+for i in {1..30}; do
+    if curl -s http://localhost:$DEV_QDRANT_PORT/ >/dev/null 2>&1; then
+        echo -e "${GREEN}Qdrant is ready on http://localhost:$DEV_QDRANT_PORT${NC}"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo -e "${RED}Qdrant failed to start after 30 seconds${NC}"
+        exit 1
+    fi
+    sleep 1
+done
+
+# Start Ollama on standard port
 echo -e "${YELLOW}Starting Ollama on port $DEV_OLLAMA_PORT...${NC}"
-if docker ps --format 'table {{.Names}}' | grep -q "^ollama-dev$"; then
-    echo -e "${YELLOW}Ollama development container already running${NC}"
-else
-    docker run -d \
-        --name ollama-dev \
-        -p 127.0.0.1:$DEV_OLLAMA_PORT:11434 \
-        -v ollama_dev_data:/root/.ollama \
-        ollama/ollama
-    
-    # Wait for Ollama to be ready
-    echo -e "${YELLOW}Waiting for Ollama to be ready...${NC}"
-    for i in {1..30}; do
-        if curl -s http://localhost:$DEV_OLLAMA_PORT/api/tags >/dev/null 2>&1; then
-            echo -e "${GREEN}Ollama is ready on http://localhost:$DEV_OLLAMA_PORT${NC}"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            echo -e "${RED}Ollama failed to start after 30 seconds${NC}"
-            exit 1
-        fi
-        sleep 1
-    done
-fi
+docker stop ollama-dev || true
+docker rm ollama-dev || true
+
+docker run -d \
+    --name ollama-dev \
+    -p $DEV_OLLAMA_PORT:11434 \
+    -v ollama_dev_data:/root/.ollama \
+    ollama/ollama
+
+# Wait for Ollama to be ready
+echo -e "${YELLOW}Waiting for Ollama to be ready...${NC}"
+for i in {1..30}; do
+    if curl -s http://localhost:$DEV_OLLAMA_PORT/api/tags >/dev/null 2>&1; then
+        echo -e "${GREEN}Ollama is ready on http://localhost:$DEV_OLLAMA_PORT${NC}"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo -e "${RED}Ollama failed to start after 30 seconds${NC}"
+        exit 1
+    fi
+    sleep 1
+done
 
 # Pull required embedding model
 echo -e "${YELLOW}Ensuring nomic-embed-text model is available...${NC}"
@@ -86,7 +84,7 @@ else
 fi
 
 # Set environment variables for development
-export QDRANT_URL="http://localhost:$DEV_QDRANT_PORT"
+export QDRANT_ENDPOINT="http://localhost:$DEV_QDRANT_PORT"
 export OLLAMA_ENDPOINT="http://localhost:$DEV_OLLAMA_PORT"
 
 echo -e "${GREEN}Development services are ready!${NC}"
@@ -96,15 +94,15 @@ echo "  Qdrant: http://localhost:$DEV_QDRANT_PORT"
 echo "  Ollama: http://localhost:$DEV_OLLAMA_PORT"
 echo
 echo -e "${YELLOW}Environment variables set:${NC}"
-echo "  QDRANT_URL=$QDRANT_URL"
+echo "  QDRANT_ENDPOINT=$QDRANT_ENDPOINT"
 echo "  OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT"
 echo
 echo -e "${YELLOW}To use these services in your current shell:${NC}"
-echo "  export QDRANT_URL=$QDRANT_URL"
+echo "  export QDRANT_ENDPOINT=$QDRANT_ENDPOINT"
 echo "  export OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT"
 echo
 echo -e "${YELLOW}To stop services:${NC}"
 echo "  ./scripts/stop-dev-services.sh"
 echo
 echo -e "${YELLOW}To run tests with dev services:${NC}"
-echo "  QDRANT_URL=$QDRANT_URL OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT cargo test --test connectivity_tests"
+echo "  QDRANT_ENDPOINT=$QDRANT_ENDPOINT OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT cargo test --test connectivity_tests"

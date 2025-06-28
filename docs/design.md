@@ -82,28 +82,54 @@ directory-indexer status [--format json|text]
 
 ## Configuration
 
-Location: `~/.directory-indexer/config.json`
+Directory Indexer uses environment variables for configuration, following 12-factor app principles. Default values are used when environment variables are not set.
+
+### Environment Variables
+
+```bash
+# Service Endpoints
+QDRANT_ENDPOINT="http://localhost:6333"     # Qdrant vector database
+OLLAMA_ENDPOINT="http://localhost:11434"    # Ollama embedding service
+
+# Optional API Keys
+QDRANT_API_KEY="your-api-key"               # For Qdrant Cloud or secured instances
+OLLAMA_API_KEY="your-api-key"               # For hosted Ollama services
+```
+
+### Default Configuration Values
+
+```rust
+// Storage
+sqlite_path: ~/.directory-indexer/data.db
+qdrant.collection: "directory-indexer"
+
+// Embedding
+provider: "ollama"
+model: "nomic-embed-text"
+
+// Indexing  
+chunk_size: 512
+overlap: 50
+max_file_size: 10485760 (10MB)
+ignore_patterns: [".git", "node_modules", "target"]
+concurrency: 4
+```
+
+### MCP Client Configuration
+
+For AI assistants like Claude Desktop, set environment variables in the MCP server configuration:
 
 ```json
 {
-  "storage": {
-    "sqlite_path": "~/.directory-indexer/data.db",
-    "qdrant": {
-      "endpoint": "http://localhost:6333",
-      "collection": "directory-indexer"
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "directory-indexer",
+      "args": ["serve"],
+      "env": {
+        "QDRANT_ENDPOINT": "http://localhost:6333",
+        "OLLAMA_ENDPOINT": "http://localhost:11434"
+      }
     }
-  },
-  "embedding": {
-    "provider": "ollama",
-    "model": "nomic-embed-text", 
-    "endpoint": "http://localhost:11434"
-  },
-  "indexing": {
-    "chunk_size": 512,
-    "overlap": 50,
-    "max_file_size": 10485760,
-    "ignore_patterns": [".git", "node_modules", "target"],
-    "concurrency": 4
   }
 }
 ```

@@ -88,19 +88,26 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        let config_path = Self::default_config_path()?;
+        // Start with defaults
+        let mut config = Self::default();
 
-        if !config_path.exists() {
-            let config = Self::default();
-            config.save()?;
-            return Ok(config);
+        // Use environment variables as primary source
+        if let Ok(qdrant_endpoint) = std::env::var("QDRANT_ENDPOINT") {
+            config.storage.qdrant.endpoint = qdrant_endpoint;
         }
 
-        let settings = config::Config::builder()
-            .add_source(config::File::from(config_path))
-            .build()?;
+        if let Ok(ollama_endpoint) = std::env::var("OLLAMA_ENDPOINT") {
+            config.embedding.endpoint = ollama_endpoint;
+        }
 
-        let config: Config = settings.try_deserialize()?;
+        if let Ok(qdrant_api_key) = std::env::var("QDRANT_API_KEY") {
+            config.storage.qdrant.api_key = Some(qdrant_api_key);
+        }
+
+        if let Ok(ollama_api_key) = std::env::var("OLLAMA_API_KEY") {
+            config.embedding.api_key = Some(ollama_api_key);
+        }
+
         Ok(config)
     }
 
