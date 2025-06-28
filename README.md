@@ -76,6 +76,10 @@ export OLLAMA_ENDPOINT="http://localhost:11434"
 # Optional database path (default: ~/.directory-indexer/data.db)
 export DIRECTORY_INDEXER_DB="/path/to/your/database.db"
 
+# Optional Qdrant collection name (default: directory-indexer)
+# Note: Setting to "test" enables auto-cleanup for testing
+export DIRECTORY_INDEXER_QDRANT_COLLECTION="my-custom-collection"
+
 # Optional API keys
 export QDRANT_API_KEY="your-qdrant-key"
 export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama

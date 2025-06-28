@@ -104,6 +104,22 @@ impl Config {
             config.storage.sqlite_path = PathBuf::from(sqlite_path);
         }
 
+        if let Ok(qdrant_collection) = std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION") {
+            // If collection name is "test", make it unique per process for test isolation
+            if qdrant_collection == "test" {
+                config.storage.qdrant.collection = format!(
+                    "directory-indexer-test-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                );
+            } else {
+                config.storage.qdrant.collection = qdrant_collection;
+            }
+        }
+
         if let Ok(qdrant_api_key) = std::env::var("QDRANT_API_KEY") {
             config.storage.qdrant.api_key = Some(qdrant_api_key);
         }

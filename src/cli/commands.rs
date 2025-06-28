@@ -212,7 +212,8 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
     let embedding_provider = create_embedding_provider(&config.embedding)?;
 
     // Try to get file from database to retrieve chunks
-    let file_record = sqlite_store.get_file_by_path(&file_path.to_string_lossy())?;
+    let normalized_path = crate::utils::normalize_path(file_path)?;
+    let file_record = sqlite_store.get_file_by_path(&normalized_path)?;
 
     // Check if file is indexed
     let file_embedding = if let Some(file_record) = file_record {
@@ -371,7 +372,8 @@ pub async fn get_internal(
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
 
     // Try to get file from database
-    let file_record = sqlite_store.get_file_by_path(&file_path.to_string_lossy())?;
+    let normalized_path = crate::utils::normalize_path(file_path)?;
+    let file_record = sqlite_store.get_file_by_path(&normalized_path)?;
 
     // If chunks are stored in database, use those; otherwise read from file system
     let content = if let Some(file_record) = file_record {

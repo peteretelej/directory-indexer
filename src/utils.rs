@@ -26,16 +26,21 @@ pub fn normalize_path<P: AsRef<Path>>(path: P) -> Result<String> {
     let path_str = path.to_string_lossy();
     let mut normalized = path_str.replace('\\', "/");
 
-    // If it's a relative path, make it absolute
-    if !path.is_absolute() {
+    // Check if this is a Unix-style absolute path (starts with /)
+    // These should be preserved as-is, especially important for tests
+    let is_unix_absolute = normalized.starts_with('/');
+
+    // If it's a relative path (and not a Unix-style absolute path), make it absolute
+    if !path.is_absolute() && !is_unix_absolute {
         let abs_path = to_absolute_path(path)?;
         normalized = abs_path.to_string_lossy().replace('\\', "/");
     }
 
     // On Windows, normalize drive letters to lowercase if present
+    // but only for actual Windows paths, not Unix-style paths
     #[cfg(windows)]
     {
-        if normalized.len() >= 2 && normalized.chars().nth(1) == Some(':') {
+        if !is_unix_absolute && normalized.len() >= 2 && normalized.chars().nth(1) == Some(':') {
             let mut chars: Vec<char> = normalized.chars().collect();
             chars[0] = chars[0].to_ascii_lowercase();
             normalized = chars.into_iter().collect();
@@ -46,6 +51,7 @@ pub fn normalize_path<P: AsRef<Path>>(path: P) -> Result<String> {
 }
 
 /// Extract the filename from a normalized path
+/// Note: This assumes the path is already normalized (uses forward slashes)
 pub fn get_filename_from_path(path: &str) -> Option<String> {
     path.split('/').next_back().map(|s| s.to_string())
 }

@@ -77,6 +77,7 @@ jobs:
       run: npm run unit-test
       env:
         DIRECTORY_INDEXER_DB: /tmp/directory-indexer-test.db
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: test
 
     - name: Build release
       run: cargo build --release
@@ -186,6 +187,7 @@ jobs:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
         DIRECTORY_INDEXER_DB: /tmp/directory-indexer-integration.db
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: test
 
   # Security audit
   security:
@@ -286,6 +288,7 @@ jobs:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
         DIRECTORY_INDEXER_DB: /tmp/directory-indexer-coverage.db
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: test
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

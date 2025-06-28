@@ -265,10 +265,13 @@ mod file_scanning_tests {
                     .iter()
                     .any(|dir| dir.contains("subdir")));
             }
+            // Compare normalized paths since parent_dirs contains normalized paths
+            let normalized_base = directory_indexer::utils::normalize_path(base_path)
+                .expect("Failed to normalize base path");
             assert!(file_info
                 .parent_dirs
                 .iter()
-                .any(|dir| dir == base_path.to_str().unwrap()));
+                .any(|dir| dir == &normalized_base));
         }
     }
 

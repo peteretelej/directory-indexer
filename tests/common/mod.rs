@@ -98,5 +98,22 @@ pub fn setup_test_config() -> directory_indexer::Config {
         config.embedding.endpoint = ollama_endpoint;
     }
 
+    if let Ok(qdrant_collection) = std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION") {
+        config.storage.qdrant.collection = qdrant_collection;
+    }
+
     config
+}
+
+pub async fn cleanup_test_collection(collection_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let qdrant_endpoint = std::env::var("QDRANT_ENDPOINT")
+        .unwrap_or_else(|_| "http://localhost:6333".to_string());
+    
+    // Try to delete the collection, ignore errors if it doesn't exist
+    let client = reqwest::Client::new();
+    let url = format!("{}/collections/{}", qdrant_endpoint, collection_name);
+    
+    let _ = client.delete(&url).send().await; // Ignore response
+    
+    Ok(())
 }

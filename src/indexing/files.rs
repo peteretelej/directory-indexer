@@ -108,8 +108,17 @@ impl FileScanner {
                 }
             };
 
+            // Normalize path for consistent cross-platform storage
+            let normalized_path = match normalize_path(path) {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Failed to normalize path {path:?}: {e}");
+                    path.to_string_lossy().to_string()
+                }
+            };
+
             files.push(FileInfo {
-                path: path.to_string_lossy().to_string(),
+                path: normalized_path,
                 size,
                 modified_time,
                 hash,

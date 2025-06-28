@@ -63,6 +63,17 @@ impl QdrantStore {
     }
 
     async fn ensure_collection_exists(&self) -> Result<()> {
+        // For test collections, delete and recreate to ensure clean state
+        if self.collection_name.starts_with("directory-indexer-test-") {
+            info!(
+                "Test collection detected, ensuring clean state: {}",
+                self.collection_name
+            );
+            let _ = self.delete_collection().await; // Ignore errors if collection doesn't exist
+            self.create_collection().await?;
+            return Ok(());
+        }
+
         // Check if collection exists
         let url = format!(
             "{}/collections/{}/exists",
