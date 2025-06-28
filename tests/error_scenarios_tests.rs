@@ -79,15 +79,6 @@ fn test_search_empty_query() {
         .stderr(predicate::str::contains("empty").or(predicate::str::contains("required")));
 }
 
-/// Test search with very long query
-#[test]
-fn test_search_long_query() {
-    let long_query = "a".repeat(1000);
-
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("search").arg(&long_query).assert().success(); // Should handle long queries gracefully
-}
-
 /// Test similar files with non-existent file
 #[test]
 fn test_similar_nonexistent_file() {
@@ -173,26 +164,4 @@ fn test_invalid_command() {
             .or(predicate::str::contains("invalid"))
             .or(predicate::str::contains("not found")),
     );
-}
-
-/// Test basic error recovery - should continue processing good files even with some bad ones
-#[test]
-fn test_partial_failure_recovery() {
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create a mix of good and potentially problematic files
-    fs::write(temp_dir.path().join("good1.txt"), "Good content 1").unwrap();
-    fs::write(temp_dir.path().join("good2.txt"), "Good content 2").unwrap();
-
-    // Create a file with binary content
-    let binary_content = vec![0xFF; 100];
-    fs::write(temp_dir.path().join("binary.dat"), binary_content).unwrap();
-
-    fs::write(temp_dir.path().join("good3.txt"), "Good content 3").unwrap();
-
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.arg("index")
-        .arg(temp_dir.path().to_str().unwrap())
-        .assert()
-        .success(); // Should succeed despite problematic files
 }

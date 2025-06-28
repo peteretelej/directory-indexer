@@ -9,7 +9,10 @@
   "scripts": {
     "build": "cargo build --release",
     "build-all": "node scripts/build-all.js",
-    "test": "cargo test",
+    "test": "npm run unit-test",
+    "unit-test": "cargo test --lib && cargo test --test storage_tests",
+    "integration-test": "cargo test",
+    "lint": "cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings",
     "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [

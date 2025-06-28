@@ -74,18 +74,12 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Run unit tests
-      run: cargo test --lib
+      run: npm run unit-test
+      env:
+        DIRECTORY_INDEXER_DB: /tmp/directory-indexer-test.db
 
     - name: Build release
       run: cargo build --release
-
-    - name: Fast integration smoke tests
-      run: |
-        # Run tests that don't need external services
-        cargo test --test storage_tests
-        cargo test --test error_scenarios_tests -- --skip test_empty --skip test_unicode
-      env:
-        DIRECTORY_INDEXER_DB: /tmp/directory-indexer-test.db
 
   # Integration tests - need services (conditional)
   test-integration:
@@ -199,15 +193,11 @@ jobs:
         fi
 
     - name: Run integration tests
-      run: |
-        cargo test --test cli_integration_tests --test connectivity_tests --test integration_tests --test mcp_integration_tests
+      run: npm run integration-test
       env:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
         DIRECTORY_INDEXER_DB: /tmp/directory-indexer-integration.db
-
-    - name: Test npm scripts
-      run: npm test
 
   # Security audit
   security:

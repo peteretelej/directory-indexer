@@ -18,7 +18,7 @@ fn create_test_config() -> Config {
     // Generate unique collection name per test
     let test_collection = format!(
         "test-conn-{}",
-        uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+        &uuid::Uuid::new_v4().to_string().replace('-', "")[..8]
     );
 
     let mut config = Config {
