@@ -237,7 +237,12 @@ To keep CI fast, integration tests are **conditional**:
      "mcpServers": {
        "directory-indexer": {
          "command": "cargo",
-         "args": ["run", "--", "serve"]
+         "args": ["run", "--", "serve"],
+         "env": {
+           "QDRANT_ENDPOINT": "http://localhost:6333",
+           "OLLAMA_ENDPOINT": "http://localhost:11434",
+           "DIRECTORY_INDEXER_DB": "/path/to/dev/database.db"
+         }
        }
      }
    }
@@ -288,6 +293,9 @@ Directory Indexer uses environment variables for configuration. The development 
 export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
 
+# Optional database path (default: ~/.directory-indexer/data.db)
+export DIRECTORY_INDEXER_DB="/path/to/your/database.db"
+
 # Optional API keys (if needed)
 export QDRANT_API_KEY="your-key"
 export OLLAMA_API_KEY="your-key"
@@ -301,6 +309,9 @@ If running services on different ports or using hosted services:
 # Custom ports
 export QDRANT_ENDPOINT="http://localhost:6334"
 export OLLAMA_ENDPOINT="http://localhost:11435"
+
+# Custom database location
+export DIRECTORY_INDEXER_DB="/custom/path/to/database.db"
 
 # Qdrant Cloud
 export QDRANT_ENDPOINT="https://your-cluster.qdrant.io"
@@ -322,6 +333,9 @@ cargo test --test integration_tests
 
 # All tests
 ./scripts/pre-push
+
+# Tests with custom database location (useful for CI/testing)
+DIRECTORY_INDEXER_DB=/tmp/test.db cargo test --test error_scenarios_tests
 ```
 
 ## Publishing

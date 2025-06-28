@@ -73,6 +73,9 @@ Directory Indexer uses environment variables for configuration. Set these if you
 export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
 
+# Optional database path (default: ~/.directory-indexer/data.db)
+export DIRECTORY_INDEXER_DB="/path/to/your/database.db"
+
 # Optional API keys
 export QDRANT_API_KEY="your-qdrant-key"
 export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
@@ -88,7 +91,8 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
       "args": ["serve"],
       "env": {
         "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434"
+        "OLLAMA_ENDPOINT": "http://localhost:11434",
+        "DIRECTORY_INDEXER_DB": "/path/to/your/database.db"
       }
     }
   }

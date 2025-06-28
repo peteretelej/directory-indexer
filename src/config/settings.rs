@@ -100,6 +100,10 @@ impl Config {
             config.embedding.endpoint = ollama_endpoint;
         }
 
+        if let Ok(sqlite_path) = std::env::var("DIRECTORY_INDEXER_DB") {
+            config.storage.sqlite_path = PathBuf::from(sqlite_path);
+        }
+
         if let Ok(qdrant_api_key) = std::env::var("QDRANT_API_KEY") {
             config.storage.qdrant.api_key = Some(qdrant_api_key);
         }
