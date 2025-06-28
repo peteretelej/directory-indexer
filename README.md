@@ -2,6 +2,11 @@
 
 **Turn your directories into an AI-powered knowledge base.**
 
+[![npm](https://img.shields.io/npm/v/directory-indexer)](https://npmjs.com/package/directory-indexer)
+[![Crates.io](https://img.shields.io/crates/v/directory-indexer)](https://crates.io/crates/directory-indexer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/peteretelej/directory-indexer/workflows/CI/badge.svg)](https://github.com/peteretelej/directory-indexer/actions)
+
 Give AI assistants semantic search across your local files. Find relevant documents based on meaning, not just filenames.
 
 ## Quick Start
