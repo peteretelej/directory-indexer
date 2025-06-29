@@ -186,7 +186,10 @@ jobs:
         fi
 
     - name: Run integration tests with coverage
-      run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+      run: |
+        # Run coverage for all tests including library integration tests
+        # This captures both library functions and any binary code they call
+        cargo llvm-cov --all-features --lcov --output-path lcov.info
       env:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
