@@ -7,6 +7,15 @@ mod fixtures;
 use fixtures::create_test_files::TestDirectoryStructure;
 use fixtures::simple_test_files::SimpleTestDirectoryStructure;
 
+/// Helper to create a command with unique collection name per test
+fn test_command(test_name: &str) -> Command {
+    let collection_name = format!("di-test-cli-{}", test_name);
+    
+    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", collection_name);
+    cmd
+}
+
 fn are_services_available() -> bool {
     // Quick check if required services are running
     // Use environment variables if available, otherwise fall back to defaults
@@ -47,7 +56,7 @@ fn test_index_command_comprehensive() {
     let test_structure = TestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("index-command-comprehensive");
     cmd.arg("index")
         .arg(test_path)
         .timeout(std::time::Duration::from_secs(120)) // Increased timeout
@@ -68,7 +77,7 @@ fn test_index_command_simple() {
     let test_structure = SimpleTestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("index-command-simple");
     cmd.arg("index")
         .arg(test_path)
         .timeout(std::time::Duration::from_secs(30))
@@ -91,7 +100,7 @@ fn test_index_multiple_directories() {
     let path1 = test_structure1.path().to_str().unwrap();
     let path2 = test_structure2.path().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("index-multiple-directories");
     cmd.arg("index")
         .arg(path1)
         .arg(path2)
@@ -103,7 +112,7 @@ fn test_index_multiple_directories() {
 /// Test indexing non-existent directory
 #[test]
 fn test_index_nonexistent_directory() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("index-nonexistent-directory");
     cmd.arg("index")
         .arg("/path/that/does/not/exist")
         .assert()
@@ -122,7 +131,7 @@ fn test_index_relative_path() {
 
     let relative_path = test_structure.path().file_name().unwrap().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("index-relative-path");
     cmd.arg("index").arg(relative_path).assert().success();
 
     // Restore original directory
@@ -143,7 +152,7 @@ fn test_search_command_comprehensive() {
     ];
 
     for query in test_queries {
-        let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+        let mut cmd = test_command("search-command-comprehensive");
         cmd.arg("search")
             .arg(query)
             .timeout(std::time::Duration::from_secs(15))
@@ -159,7 +168,7 @@ fn test_search_with_directory_scope() {
     let test_structure = TestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("search-with-directory-scope");
     cmd.arg("search")
         .arg("database")
         .arg("--path")
@@ -171,7 +180,7 @@ fn test_search_with_directory_scope() {
 /// Test search with limit parameter
 #[test]
 fn test_search_with_limit() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("search-with-limit");
     cmd.arg("search")
         .arg("test")
         .arg("--limit")
@@ -183,7 +192,7 @@ fn test_search_with_limit() {
 /// Test search with empty query
 #[test]
 fn test_search_empty_query() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("search-empty-query");
     cmd.arg("search")
         .arg("")
         .assert()
@@ -206,7 +215,7 @@ fn test_similar_command_comprehensive() {
     for file_path in test_files {
         let full_path = test_structure.path().join(file_path);
         if full_path.exists() {
-            let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+            let mut cmd = test_command("similar-command-comprehensive");
             cmd.arg("similar")
                 .arg(full_path.to_str().unwrap())
                 .timeout(std::time::Duration::from_secs(15))
@@ -223,7 +232,7 @@ fn test_similar_with_limit() {
     let test_structure = TestDirectoryStructure::new();
     let readme_path = test_structure.path().join("docs/README.md");
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("similar-with-limit");
     cmd.arg("similar")
         .arg(readme_path.to_str().unwrap())
         .arg("--limit")
@@ -235,7 +244,7 @@ fn test_similar_with_limit() {
 /// Test similar files with non-existent file
 #[test]
 fn test_similar_nonexistent_file() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("similar-nonexistent-file");
     cmd.arg("similar")
         .arg("/path/to/nonexistent/file.txt")
         .assert()
@@ -257,7 +266,7 @@ fn test_get_command_comprehensive() {
     for file_path in test_files {
         let full_path = test_structure.path().join(file_path);
         if full_path.exists() {
-            let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+            let mut cmd = test_command("get-command-comprehensive");
             cmd.arg("get")
                 .arg(full_path.to_str().unwrap())
                 .assert()
@@ -273,7 +282,7 @@ fn test_get_with_chunks() {
     let test_structure = TestDirectoryStructure::new();
     let readme_path = test_structure.path().join("docs/README.md");
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("get-with-chunks");
     cmd.arg("get")
         .arg(readme_path.to_str().unwrap())
         .arg("--chunks")
@@ -288,7 +297,7 @@ fn test_get_single_chunk() {
     let test_structure = TestDirectoryStructure::new();
     let config_path = test_structure.path().join("config.json");
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("get-single-chunk");
     cmd.arg("get")
         .arg(config_path.to_str().unwrap())
         .arg("--chunks")
@@ -303,7 +312,7 @@ fn test_get_invalid_chunk_range() {
     let test_structure = TestDirectoryStructure::new();
     let readme_path = test_structure.path().join("docs/README.md");
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("get-invalid-chunk-range");
     cmd.arg("get")
         .arg(readme_path.to_str().unwrap())
         .arg("--chunks")
@@ -316,7 +325,7 @@ fn test_get_invalid_chunk_range() {
 /// Test status command
 #[test]
 fn test_status_command_comprehensive() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("status-command-comprehensive");
     cmd.arg("status").assert().success().stdout(
         predicate::str::contains("Status")
             .or(predicate::str::contains("indexed"))
@@ -327,7 +336,7 @@ fn test_status_command_comprehensive() {
 /// Test status with verbose flag
 #[test]
 fn test_status_verbose() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("status-verbose");
     cmd.arg("status")
         .arg("--verbose")
         .assert()
@@ -338,7 +347,7 @@ fn test_status_verbose() {
 /// Test status with JSON format
 #[test]
 fn test_status_json_format() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("status-json-format");
     cmd.arg("status")
         .arg("--format")
         .arg("json")
@@ -350,7 +359,7 @@ fn test_status_json_format() {
 /// Test serve command help (should not actually start server in CI)
 #[test]
 fn test_serve_command_help() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("serve-command-help");
     cmd.arg("serve")
         .arg("--help")
         .assert()
@@ -361,7 +370,7 @@ fn test_serve_command_help() {
 /// Test version command
 #[test]
 fn test_version_command() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("version-command");
     cmd.arg("--version")
         .assert()
         .success()
@@ -371,7 +380,7 @@ fn test_version_command() {
 /// Test help command
 #[test]
 fn test_help_command() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("help-command");
     cmd.arg("--help").assert().success().stdout(
         predicate::str::contains("USAGE")
             .or(predicate::str::contains("Commands"))
@@ -382,7 +391,7 @@ fn test_help_command() {
 /// Test invalid command
 #[test]
 fn test_invalid_command() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("invalid-command");
     cmd.arg("invalid-command").assert().failure().stderr(
         predicate::str::contains("unknown")
             .or(predicate::str::contains("invalid"))
@@ -393,7 +402,7 @@ fn test_invalid_command() {
 /// Test command with insufficient arguments
 #[test]
 fn test_insufficient_arguments_index() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("insufficient-arguments-index");
     cmd.arg("index")
         .assert()
         .failure()
@@ -402,7 +411,7 @@ fn test_insufficient_arguments_index() {
 
 #[test]
 fn test_insufficient_arguments_search() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("insufficient-arguments-search");
     cmd.arg("search")
         .assert()
         .failure()
@@ -411,7 +420,7 @@ fn test_insufficient_arguments_search() {
 
 #[test]
 fn test_insufficient_arguments_similar() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("insufficient-arguments-similar");
     cmd.arg("similar")
         .assert()
         .failure()
@@ -420,7 +429,7 @@ fn test_insufficient_arguments_similar() {
 
 #[test]
 fn test_insufficient_arguments_get() {
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("insufficient-arguments-get");
     cmd.arg("get")
         .assert()
         .failure()
@@ -450,7 +459,7 @@ fn test_with_custom_config() {
 
     fs::write(&config_path, config_content).unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("with-custom-config");
     cmd.arg("--config")
         .arg(config_path.to_str().unwrap())
         .arg("status")
@@ -470,7 +479,7 @@ fn test_end_to_end_workflow() {
     let test_path = test_structure.path().to_str().unwrap();
 
     // Step 1: Index the directory
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("end-to-end-workflow");
     cmd.arg("index")
         .arg(test_path)
         .timeout(std::time::Duration::from_secs(60))
@@ -478,11 +487,11 @@ fn test_end_to_end_workflow() {
         .success();
 
     // Step 2: Check status
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("end-to-end-workflow");
     cmd.arg("status").assert().success();
 
     // Step 3: Search for content
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("end-to-end-workflow");
     cmd.arg("search")
         .arg("database connection")
         .assert()
@@ -491,7 +500,7 @@ fn test_end_to_end_workflow() {
     // Step 4: Find similar files
     let readme_path = test_structure.path().join("docs/README.md");
     if readme_path.exists() {
-        let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+        let mut cmd = test_command("end-to-end-workflow");
         cmd.arg("similar")
             .arg(readme_path.to_str().unwrap())
             .assert()
@@ -501,7 +510,7 @@ fn test_end_to_end_workflow() {
     // Step 5: Get content
     let config_path = test_structure.path().join("config.json");
     if config_path.exists() {
-        let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+        let mut cmd = test_command("end-to-end-workflow");
         cmd.arg("get")
             .arg(config_path.to_str().unwrap())
             .assert()
@@ -514,7 +523,7 @@ fn test_end_to_end_workflow() {
 fn test_search_long_query() {
     let long_query = "a".repeat(1000);
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("search-long-query");
     cmd.arg("search").arg(&long_query).assert().success(); // Should handle long queries gracefully
 }
 
@@ -533,7 +542,7 @@ fn test_partial_failure_recovery() {
 
     fs::write(temp_dir.path().join("good3.txt"), "Good content 3").unwrap();
 
-    let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
+    let mut cmd = test_command("partial-failure-recovery");
     cmd.arg("index")
         .arg(temp_dir.path().to_str().unwrap())
         .assert()

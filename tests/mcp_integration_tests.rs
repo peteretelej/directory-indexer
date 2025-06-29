@@ -7,6 +7,9 @@ use std::time::Duration;
 mod fixtures;
 use fixtures::create_test_files::TestDirectoryStructure;
 
+mod common;
+use common::test_env::TestEnvironment;
+
 /// Helper struct to manage MCP server process
 struct McpServerHandle {
     process: std::process::Child,
@@ -116,8 +119,9 @@ fn test_server_info_tool() {
 }
 
 /// Test index tool
-#[test]
-fn test_index_tool() {
+#[tokio::test]
+async fn test_index_tool() {
+    let _env = TestEnvironment::new("mcp-index-tool").await;
     let test_structure = TestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 
@@ -151,8 +155,9 @@ fn test_index_tool() {
 }
 
 /// Test index tool with multiple directories
-#[test]
-fn test_index_tool_multiple_directories() {
+#[tokio::test]
+async fn test_index_tool_multiple_directories() {
+    let _env = TestEnvironment::new("mcp-index-tool-multiple").await;
     let test_structure1 = TestDirectoryStructure::new();
     let test_structure2 = TestDirectoryStructure::new();
 
@@ -676,8 +681,9 @@ fn test_nonexistent_tool() {
 }
 
 /// Test end-to-end MCP workflow
-#[test]
-fn test_mcp_end_to_end_workflow() {
+#[tokio::test]
+async fn test_mcp_end_to_end_workflow() {
+    let _env = TestEnvironment::new("mcp-end-to-end-workflow").await;
     let test_structure = TestDirectoryStructure::new();
     let test_path = test_structure.path().to_str().unwrap();
 

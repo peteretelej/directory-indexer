@@ -339,6 +339,15 @@ cargo test --test integration_tests
 DIRECTORY_INDEXER_DATA_DIR=/tmp/test-data cargo test --test error_scenarios_tests
 ```
 
+### Test Collections
+
+For tests using Qdrant collections, use `TestEnvironment` to prevent resource leaks:
+
+```rust
+let _env = TestEnvironment::new("test-name").await;
+// Automatic cleanup prevents collection littering
+```
+
 ## Publishing
 
 ### Automated Release Process

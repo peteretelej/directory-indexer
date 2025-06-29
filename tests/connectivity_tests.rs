@@ -1,72 +1,19 @@
 use directory_indexer::{
-    config::{
-        settings::{
-            EmbeddingConfig, IndexingConfig, MonitoringConfig, QdrantConfig, StorageConfig,
-        },
-        Config,
-    },
     embedding::{ollama::OllamaProvider, EmbeddingProvider},
     health::check_system_health,
     storage::QdrantStore,
 };
-use tempfile::NamedTempFile;
 
-// Helper to create test config with local services
-fn create_test_config() -> Config {
-    let temp_db = NamedTempFile::new().unwrap();
-
-    // Generate unique collection name per test
-    let test_collection = format!(
-        "test-conn-{}",
-        &uuid::Uuid::new_v4().to_string().replace('-', "")[..8]
-    );
-
-    let mut config = Config {
-        storage: StorageConfig {
-            sqlite_path: temp_db.path().to_path_buf(),
-            qdrant: QdrantConfig {
-                endpoint: "http://localhost:6333".to_string(),
-                collection: test_collection,
-                api_key: None,
-            },
-        },
-        embedding: EmbeddingConfig {
-            provider: "ollama".to_string(),
-            model: "nomic-embed-text".to_string(),
-            endpoint: "http://localhost:11434".to_string(),
-            api_key: None,
-        },
-        indexing: IndexingConfig {
-            chunk_size: 256,
-            overlap: 50,
-            max_file_size: 1024 * 1024,
-            ignore_patterns: vec![".git".to_string()],
-            concurrency: 1,
-        },
-        monitoring: MonitoringConfig {
-            file_watching: false,
-            batch_size: 10,
-        },
-    };
-
-    // Use the same environment variable override logic as Config::load()
-    if let Ok(qdrant_endpoint) = std::env::var("QDRANT_ENDPOINT") {
-        config.storage.qdrant.endpoint = qdrant_endpoint;
-    }
-
-    if let Ok(ollama_endpoint) = std::env::var("OLLAMA_ENDPOINT") {
-        config.embedding.endpoint = ollama_endpoint;
-    }
-
-    config
-}
+mod common;
+use common::test_env::TestEnvironment;
 
 #[tokio::test]
 async fn test_system_health_check() {
-    let config = create_test_config();
+    let _env = TestEnvironment::new("system-health-check").await;
+    let config = &_env.config;
 
     println!("Testing system health with local services...");
-    let health = check_system_health(&config).await;
+    let health = check_system_health(config).await;
 
     // Print detailed status for debugging
     println!("Health check results:");
@@ -93,10 +40,11 @@ async fn test_system_health_check() {
 
 #[tokio::test]
 async fn test_ollama_embedding_generation() {
-    let config = create_test_config();
+    let _env = TestEnvironment::new("ollama-embedding-generation").await;
+    let config = &_env.config;
 
     // Skip test if Ollama is not available
-    let health = check_system_health(&config).await;
+    let health = check_system_health(config).await;
     if !health.ollama_available {
         println!("Skipping Ollama test - service not available");
         return;
@@ -139,10 +87,11 @@ async fn test_ollama_embedding_generation() {
 
 #[tokio::test]
 async fn test_qdrant_operations() {
-    let config = create_test_config();
+    let _env = TestEnvironment::new("qdrant-operations").await;
+    let config = &_env.config;
 
     // Skip test if Qdrant is not available
-    let health = check_system_health(&config).await;
+    let health = check_system_health(config).await;
     if !health.qdrant_available {
         println!("Skipping Qdrant test - service not available");
         return;
@@ -196,10 +145,11 @@ async fn test_qdrant_operations() {
 
 #[tokio::test]
 async fn test_end_to_end_embedding_and_storage() {
-    let config = create_test_config();
+    let _env = TestEnvironment::new("end-to-end-embedding-and-storage").await;
+    let config = &_env.config;
 
     // Check if both services are available
-    let health = check_system_health(&config).await;
+    let health = check_system_health(config).await;
     if !health.ollama_available {
         println!("Skipping end-to-end test - Ollama not available");
         return;
@@ -216,17 +166,6 @@ async fn test_end_to_end_embedding_and_storage() {
         config.embedding.endpoint.clone(),
         config.embedding.model.clone(),
     );
-
-    // Clean up any existing test collection
-    let cleanup_store = QdrantStore::new_with_api_key(
-        &config.storage.qdrant.endpoint,
-        config.storage.qdrant.collection.clone(),
-        config.storage.qdrant.api_key.clone(),
-    )
-    .await;
-    if let Ok(store) = cleanup_store {
-        let _ = store.delete_collection().await; // Ignore errors if collection doesn't exist
-    }
 
     let vector_store = QdrantStore::new_with_api_key(
         &config.storage.qdrant.endpoint,
@@ -296,14 +235,6 @@ async fn test_end_to_end_embedding_and_storage() {
 
     assert!(!search_results.is_empty(), "Search should return results");
 
-    // Cleanup - delete test points
-    for i in 0..2 {
-        let file_path = format!("/test/document_{}.txt", i);
-        vector_store
-            .delete_points_by_file(&file_path)
-            .await
-            .expect("Failed to delete test points");
-    }
-
+    // Test points will be cleaned up automatically when TestEnvironment is dropped
     println!("✓ End-to-end test completed successfully");
 }
