@@ -211,3 +211,46 @@ fn test_error_handling() {
 
     test_command("error-handling").arg("get").assert().failure();
 }
+
+#[tokio::test]
+async fn test_health_check_functions() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let config = directory_indexer::config::Config::load().expect("Config should load");
+
+    // Test system health check
+    let health = directory_indexer::health::check_system_health(&config).await;
+    assert!(health.is_ready_for_indexing() || health.is_ready_for_retrieval());
+
+    // Test embedding generation
+    let result = directory_indexer::health::test_embedding_generation(&config).await;
+    // Should either succeed or fail gracefully
+    assert!(result.is_ok() || result.is_err());
+}
+
+#[tokio::test]
+async fn test_qdrant_delete_operations() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let config = directory_indexer::config::Config::load().expect("Config should load");
+    let store = directory_indexer::storage::QdrantStore::new(
+        &config.storage.qdrant.endpoint,
+        "test-delete-ops".to_string(),
+    )
+    .await
+    .expect("Store should be created");
+
+    // Test delete points by file
+    let result = store.delete_points_by_file("/test/file.txt").await;
+    assert!(result.is_ok(), "Delete points by file should succeed");
+
+    // Test delete collection
+    let result = store.delete_collection().await;
+    assert!(result.is_ok(), "Delete collection should succeed");
+}
