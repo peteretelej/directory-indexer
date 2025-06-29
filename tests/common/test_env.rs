@@ -6,6 +6,7 @@ use tempfile::NamedTempFile;
 
 /// Test environment with automatic Qdrant collection cleanup
 pub struct TestEnvironment {
+    #[allow(dead_code)]
     pub config: Config,
     collection_name: String,
 }

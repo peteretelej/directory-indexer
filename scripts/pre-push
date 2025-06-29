@@ -24,7 +24,12 @@ cargo fmt --check
 
 echo "Running essential tests..."
 # Only run fast, essential tests - skip the slow integration tests
+# Set test environment variables to match CI
+export DIRECTORY_INDEXER_DATA_DIR=/tmp/directory-indexer-test
+export DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer-test
+
 cargo test --lib
+cargo test --test config_integration_tests
 cargo test --test error_scenarios_tests  
 cargo test --test storage_tests
 

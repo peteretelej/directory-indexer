@@ -12,13 +12,29 @@ fn test_config_load_defaults() {
     assert_eq!(config.embedding.model, "nomic-embed-text");
     assert_eq!(config.indexing.chunk_size, 512);
     assert_eq!(config.indexing.concurrency, 4);
-    assert_eq!(config.storage.qdrant.collection, "directory-indexer");
+
+    // Collection name should be test-specific when running tests
+    // When cfg!(test) is true, default is "directory-indexer-test" which becomes unique: "directory-indexer-test-{pid}-{timestamp}"
+    assert!(
+        config
+            .storage
+            .qdrant
+            .collection
+            .starts_with("directory-indexer-test-"),
+        "Expected test collection name when running under cfg!(test), got: {}",
+        config.storage.qdrant.collection
+    );
+
     assert_eq!(config.monitoring.batch_size, 100);
     assert!(!config.monitoring.file_watching);
 
     // Endpoints should have reasonable defaults
     assert!(config.storage.qdrant.endpoint.starts_with("http://"));
     assert!(config.embedding.endpoint.starts_with("http://"));
+
+    // API keys should be None by default
+    assert_eq!(config.storage.qdrant.api_key, None);
+    assert_eq!(config.embedding.api_key, None);
 }
 
 #[test]

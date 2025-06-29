@@ -77,7 +77,7 @@ jobs:
       run: npm run unit-test
       env:
         DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-test
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: test
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-test
 
     - name: Build release
       run: cargo build --release
@@ -194,7 +194,7 @@ jobs:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
         DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-integration
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: test
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-test
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4

@@ -56,7 +56,14 @@ impl Default for Config {
                 sqlite_path: app_dir.join("data.db"),
                 qdrant: QdrantConfig {
                     endpoint: "http://localhost:6333".to_string(),
-                    collection: "directory-indexer".to_string(),
+                    collection: if std::env::var("CARGO_PKG_NAME").is_ok()
+                        && std::env::var("CARGO_MANIFEST_DIR").is_ok()
+                    {
+                        // We're running under cargo (likely tests or development)
+                        "directory-indexer-test".to_string()
+                    } else {
+                        "directory-indexer".to_string()
+                    },
                     api_key: None,
                 },
             },
@@ -108,20 +115,23 @@ impl Config {
             config.storage.sqlite_path = app_dir_path.join("data.db");
         }
 
+        // Handle environment variable override
         if let Ok(qdrant_collection) = std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION") {
-            // If collection name is "test", make it unique per process for test isolation
-            if qdrant_collection == "test" {
-                config.storage.qdrant.collection = format!(
-                    "directory-indexer-test-{}-{}",
-                    std::process::id(),
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos()
-                );
-            } else {
-                config.storage.qdrant.collection = qdrant_collection;
-            }
+            config.storage.qdrant.collection = qdrant_collection;
+        }
+
+        // If collection name is "test" or "directory-indexer-test", make it unique per process for test isolation
+        if config.storage.qdrant.collection == "test"
+            || config.storage.qdrant.collection == "directory-indexer-test"
+        {
+            config.storage.qdrant.collection = format!(
+                "directory-indexer-test-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            );
         }
 
         if let Ok(qdrant_api_key) = std::env::var("QDRANT_API_KEY") {
@@ -184,7 +194,8 @@ mod tests {
         let config = Config::default();
 
         assert_eq!(config.storage.qdrant.endpoint, "http://localhost:6333");
-        assert_eq!(config.storage.qdrant.collection, "directory-indexer");
+        // When running under cargo (tests), collection name should be "directory-indexer-test"
+        assert_eq!(config.storage.qdrant.collection, "directory-indexer-test");
         assert!(config.storage.qdrant.api_key.is_none());
 
         assert_eq!(config.embedding.provider, "ollama");
@@ -312,7 +323,8 @@ mod tests {
         assert!(config_path.exists());
 
         let content = fs::read_to_string(&config_path).expect("Failed to read config file");
-        assert!(content.contains("directory-indexer"));
+        // When running under cargo (tests), collection name should be "directory-indexer-test"
+        assert!(content.contains("directory-indexer-test"));
         assert!(content.contains("ollama"));
 
         if let Some(val) = original_data_dir {
