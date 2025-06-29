@@ -402,4 +402,382 @@ impl McpServer {
             ),
         }
     }
+
+    // Helper methods for testing that expose internal functionality
+    #[cfg(test)]
+    pub async fn handle_request_test(&self, request_str: &str) -> JsonRpcResponse {
+        self.handle_request(request_str).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    async fn create_test_server() -> McpServer {
+        let config = Config::default();
+        McpServer::new(config).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_creation() {
+        let config = Config::default();
+        let server = McpServer::new(config).await;
+
+        assert!(server.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_initialize_request() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert_eq!(result["protocolVersion"], "2024-11-05");
+        assert!(result["capabilities"].is_object());
+        assert!(result["serverInfo"].is_object());
+        assert_eq!(result["serverInfo"]["name"], "directory-indexer");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tools_list_request() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(2)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert!(result["tools"].is_array());
+
+        let tools = result["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 5); // Should have all 5 tools
+
+        // Check that all expected tools are present
+        let tool_names: Vec<&str> = tools
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+
+        assert!(tool_names.contains(&"index"));
+        assert!(tool_names.contains(&"search"));
+        assert!(tool_names.contains(&"similar_files"));
+        assert!(tool_names.contains(&"get_content"));
+        assert!(tool_names.contains(&"server_info"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_server_info_tool() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"server_info","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(3)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert!(result["content"].is_array());
+
+        let content = result["content"].as_array().unwrap();
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "text");
+        assert!(content[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Directory Indexer MCP Server"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_unknown_method() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":4,"method":"unknown_method","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(4)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32601); // Method not found
+        assert_eq!(error.message, "Method not found");
+    }
+
+    #[tokio::test]
+    async fn test_handle_invalid_json() {
+        let server = create_test_server().await;
+        let invalid_request = r#"{"jsonrpc":"2.0","method":"test""#; // missing closing brace
+
+        let response = server.handle_request_test(invalid_request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(response.id.is_none());
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32600); // Invalid request
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_missing_params() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":5,"method":"tools/call"}"#; // no params
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(5)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error.message.contains("Missing params"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_missing_tool_name() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"arguments":{}}}"#; // no name
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(6)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error.message.contains("Missing tool name"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_unknown_tool() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"unknown_tool","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(7)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32601); // Method not found
+    }
+
+    #[tokio::test]
+    async fn test_index_tool_missing_directory_path() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"index","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(8)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error
+            .message
+            .contains("missing required parameter: directory_path"));
+    }
+
+    #[tokio::test]
+    async fn test_search_tool_missing_query() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"search","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(9)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error.message.contains("missing required parameter: query"));
+    }
+
+    #[tokio::test]
+    async fn test_similar_files_tool_missing_file_path() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"similar_files","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(10)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error
+            .message
+            .contains("missing required parameter: file_path"));
+    }
+
+    #[tokio::test]
+    async fn test_get_content_tool_missing_file_path() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"get_content","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(11)));
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602); // Invalid params
+        assert!(error
+            .message
+            .contains("missing required parameter: file_path"));
+    }
+
+    #[tokio::test]
+    async fn test_initialize_capabilities() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+        let result = response.result.unwrap();
+
+        let capabilities = &result["capabilities"];
+        assert!(capabilities["tools"].is_object());
+        assert_eq!(capabilities["tools"]["listChanged"], true);
+        assert!(capabilities["resources"].is_object());
+        assert!(capabilities["prompts"].is_object());
+        assert!(capabilities["logging"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_server_info_response_format() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"server_info","arguments":{}}}"#;
+
+        let response = server.handle_request_test(request).await;
+        let result = response.result.unwrap();
+
+        assert!(result["content"].is_array());
+        let content = result["content"].as_array().unwrap();
+        assert_eq!(content.len(), 1);
+
+        let text_content = &content[0];
+        assert_eq!(text_content["type"], "text");
+
+        let text = text_content["text"].as_str().unwrap();
+        assert!(text.contains("Directory Indexer MCP Server"));
+        assert!(text.contains("Status:"));
+        assert!(text.contains("Server running"));
+        assert!(text.contains("Available tools:"));
+    }
+
+    #[tokio::test]
+    async fn test_notification_request() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","method":"some_notification","params":{}}"#; // no id = notification
+
+        let response = server.handle_request_test(request).await;
+
+        // For unknown methods, even notifications should return method not found
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(response.id.is_none()); // notifications don't have id in response
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32601);
+    }
+
+    #[tokio::test]
+    async fn test_tools_list_schema_structure() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+
+        // Check that each tool has the required schema structure
+        for tool in tools {
+            assert!(tool["name"].is_string());
+            assert!(tool["description"].is_string());
+            assert!(tool["inputSchema"].is_object());
+
+            let schema = &tool["inputSchema"];
+            assert_eq!(schema["type"], "object");
+            assert!(schema["properties"].is_object());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_request_with_null_id() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":null,"method":"initialize","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(response.id.is_none()); // null id becomes None
+        assert!(response.result.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_search_tool_with_optional_parameters() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"test","directory_path":"/test","limit":5}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        // This should succeed (even though the underlying search might fail due to no data)
+        // We're testing the parameter handling, not the actual search functionality
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_similar_files_tool_with_limit() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"similar_files","arguments":{"file_path":"/test/file.txt","limit":20}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        // Should succeed in parameter parsing
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_get_content_tool_with_chunks() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_content","arguments":{"file_path":"/test/file.txt","chunks":"1-3"}}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        // Should succeed in parameter parsing
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+    }
 }

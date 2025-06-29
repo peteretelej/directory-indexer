@@ -1,4 +1,4 @@
-use directory_indexer::{Config, IndexerError};
+use directory_indexer::Config;
 use std::env;
 use std::fs;
 use tempfile::TempDir;

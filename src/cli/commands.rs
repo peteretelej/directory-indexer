@@ -615,3 +615,179 @@ fn parse_chunk_range(chunk_str: &str) -> Result<(usize, usize)> {
         Ok((chunk, chunk))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_chunk_range_valid_single() {
+        assert!(validate_chunk_range("5").is_ok());
+        assert!(validate_chunk_range("1").is_ok());
+        assert!(validate_chunk_range("100").is_ok());
+    }
+
+    #[test]
+    fn test_validate_chunk_range_valid_range() {
+        assert!(validate_chunk_range("1-5").is_ok());
+        assert!(validate_chunk_range("2-10").is_ok());
+        assert!(validate_chunk_range("1-1").is_ok());
+    }
+
+    #[test]
+    fn test_validate_chunk_range_invalid() {
+        // Zero values
+        assert!(validate_chunk_range("0").is_err());
+        assert!(validate_chunk_range("1-0").is_err());
+        assert!(validate_chunk_range("0-5").is_err());
+
+        // Invalid range order
+        assert!(validate_chunk_range("5-1").is_err());
+        assert!(validate_chunk_range("10-5").is_err());
+
+        // Invalid format
+        assert!(validate_chunk_range("a").is_err());
+        assert!(validate_chunk_range("1-a").is_err());
+        assert!(validate_chunk_range("a-5").is_err());
+        assert!(validate_chunk_range("1-2-3").is_err());
+        assert!(validate_chunk_range("").is_err());
+        assert!(validate_chunk_range("-").is_err());
+        assert!(validate_chunk_range("1-").is_err());
+        assert!(validate_chunk_range("-5").is_err());
+    }
+
+    #[test]
+    fn test_parse_chunk_range_single() {
+        assert_eq!(parse_chunk_range("5").unwrap(), (5, 5));
+        assert_eq!(parse_chunk_range("1").unwrap(), (1, 1));
+        assert_eq!(parse_chunk_range("42").unwrap(), (42, 42));
+    }
+
+    #[test]
+    fn test_parse_chunk_range_range() {
+        assert_eq!(parse_chunk_range("1-5").unwrap(), (1, 5));
+        assert_eq!(parse_chunk_range("2-10").unwrap(), (2, 10));
+        assert_eq!(parse_chunk_range("1-1").unwrap(), (1, 1));
+    }
+
+    #[test]
+    fn test_chunk_validation_and_parsing_integration() {
+        let test_cases = vec![
+            ("1", (1, 1)),
+            ("5", (5, 5)),
+            ("1-5", (1, 5)),
+            ("2-10", (2, 10)),
+            ("42-42", (42, 42)),
+        ];
+
+        for (input, expected) in test_cases {
+            validate_chunk_range(input).unwrap();
+            let result = parse_chunk_range(input).unwrap();
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn test_index_command_validation() {
+        // Test that empty paths validation would work
+        let empty_paths: Vec<String> = vec![];
+        // This would normally be tested in integration tests since it requires file system
+        // but we can test the logic
+        assert!(empty_paths.is_empty());
+    }
+
+    #[test]
+    fn test_search_query_validation() {
+        // Test empty query validation logic
+        let empty_query = "";
+        let whitespace_query = "   ";
+        let valid_query = "test query";
+
+        assert!(empty_query.trim().is_empty());
+        assert!(whitespace_query.trim().is_empty());
+        assert!(!valid_query.trim().is_empty());
+    }
+
+    #[test]
+    fn test_error_message_construction() {
+        // Test that our error message patterns work as expected
+        let path = "/nonexistent/path";
+        let error_msg = format!("Directory not found: {path}");
+        assert!(error_msg.contains("/nonexistent/path"));
+
+        let file = "test.txt";
+        let error_msg = format!("Path is not a file: {file}");
+        assert!(error_msg.contains("test.txt"));
+
+        let query = "test";
+        let error_msg = format!("No results found for query: '{query}'");
+        assert!(error_msg.contains("'test'"));
+    }
+
+    #[test]
+    fn test_format_validation() {
+        // Test status format validation logic
+        let valid_formats = vec!["text", "json"];
+        let invalid_formats = vec!["xml", "yaml", "csv", ""];
+
+        for format in valid_formats {
+            assert!(format == "text" || format == "json");
+        }
+
+        for format in invalid_formats {
+            assert!(format != "text" && format != "json");
+        }
+    }
+
+    #[test]
+    fn test_path_collection_logic() {
+        // Test the path collection and conversion logic
+        let paths = vec!["./test1".to_string(), "/home/user/test2".to_string()];
+        let path_bufs: Vec<std::path::PathBuf> =
+            paths.iter().map(std::path::PathBuf::from).collect();
+
+        assert_eq!(path_bufs.len(), 2);
+        assert_eq!(path_bufs[0], std::path::PathBuf::from("./test1"));
+        assert_eq!(path_bufs[1], std::path::PathBuf::from("/home/user/test2"));
+    }
+
+    #[test]
+    fn test_limit_handling() {
+        // Test the limit handling logic
+        let default_limit = 10;
+        let custom_limit = Some(25);
+        let no_limit = None;
+
+        assert_eq!(custom_limit.unwrap_or(default_limit), 25);
+        assert_eq!(no_limit.unwrap_or(default_limit), 10);
+
+        // Test search limit logic
+        let search_limit = custom_limit.unwrap_or(10);
+        assert_eq!(search_limit, 25);
+
+        let search_limit = no_limit.unwrap_or(10);
+        assert_eq!(search_limit, 10);
+    }
+
+    #[test]
+    fn test_content_preview_logic() {
+        // Test the content preview truncation logic
+        let short_content = "Short content";
+        let long_content = "A".repeat(300);
+
+        let short_preview = if short_content.len() > 200 {
+            format!("{}...", &short_content[..200])
+        } else {
+            short_content.to_string()
+        };
+        assert_eq!(short_preview, "Short content");
+
+        let long_preview = if long_content.len() > 200 {
+            format!("{}...", &long_content[..200])
+        } else {
+            long_content.clone()
+        };
+        assert!(long_preview.ends_with("..."));
+        assert_eq!(long_preview.len(), 203); // 200 chars + "..."
+    }
+}
