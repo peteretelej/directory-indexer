@@ -10,7 +10,7 @@ use fixtures::simple_test_files::SimpleTestDirectoryStructure;
 /// Helper to create a command with unique collection name per test
 fn test_command(test_name: &str) -> Command {
     let collection_name = format!("di-test-cli-{}", test_name);
-    
+
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
     cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", collection_name);
     cmd

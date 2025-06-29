@@ -29,7 +29,6 @@ impl TestEnvironment {
         }
     }
 
-
     fn create_test_config(collection_name: &str) -> Config {
         let temp_db = NamedTempFile::new().unwrap();
 
@@ -109,5 +108,4 @@ mod tests {
         let env = TestEnvironment::new("sample-test").await;
         assert_eq!(env.collection_name, "di-test-sample-test");
     }
-
 }
