@@ -1,4 +1,4 @@
-use log::info;
+use log::{error, info};
 use std::path::{Path, PathBuf};
 
 use crate::embedding::create_embedding_provider;
@@ -46,7 +46,10 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
     let config = Config::load()?;
 
     // Validate environment before proceeding
-    crate::environment::validate_environment(&config).await?;
+    if let Err(e) = crate::environment::validate_environment(&config).await {
+        error!("{e}");
+        return Err(e);
+    }
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
@@ -119,7 +122,10 @@ pub async fn search_internal(
     let config = Config::load()?;
 
     // Validate environment before proceeding
-    crate::environment::validate_environment(&config).await?;
+    if let Err(e) = crate::environment::validate_environment(&config).await {
+        error!("{e}");
+        return Err(e);
+    }
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
@@ -207,7 +213,10 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
     let config = Config::load()?;
 
     // Validate environment before proceeding
-    crate::environment::validate_environment(&config).await?;
+    if let Err(e) = crate::environment::validate_environment(&config).await {
+        error!("{e}");
+        return Err(e);
+    }
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
@@ -478,7 +487,10 @@ pub async fn serve() -> Result<()> {
     let config = Config::load()?;
 
     // Validate environment before proceeding
-    crate::environment::validate_environment(&config).await?;
+    if let Err(e) = crate::environment::validate_environment(&config).await {
+        error!("{e}");
+        return Err(e);
+    }
 
     // Create and start MCP server
     let server = McpServer::new(config).await?;

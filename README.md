@@ -28,6 +28,9 @@ docker run -d --name qdrant \
     qdrant/qdrant
 ```
 
+- This option requires [Docker](https://docs.docker.com/get-docker/)
+- Runs Qdrant on docker container, uses a named volume `qdrant_storage` for persistent storage.
+
 **Alternative:** Install natively from [qdrant.tech](https://qdrant.tech/documentation/guides/installation/)
 
 ### 2. Embedding Provider
@@ -44,6 +47,9 @@ curl -fsSL https://ollama.ai/install.sh | sh  # Linux/macOS
 # Pull the embedding model
 ollama pull nomic-embed-text
 ```
+
+- You can also [run Ollama via Docker](https://ollama.com/blog/ollama-is-now-available-as-an-official-docker-image)
+  - GPU support may require additional configuration
 
 **Option B: OpenAI (requires paid API key)**
 

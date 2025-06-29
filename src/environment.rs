@@ -1,5 +1,5 @@
 use crate::{Config, Result};
-use log::debug;
+use log::{debug, info};
 
 pub async fn validate_environment(config: &Config) -> Result<()> {
     // Test Qdrant connection
@@ -8,14 +8,15 @@ pub async fn validate_environment(config: &Config) -> Result<()> {
         Ok(response) => {
             if !response.status().is_success() {
                 return Err(crate::error::IndexerError::environment_setup(format!(
-                    "Qdrant not accessible at {}\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements",
+                    "Qdrant not accessible at {}. Setup required: https://github.com/peteretelej/directory-indexer#setup",
                     config.storage.qdrant.endpoint
                 )));
             }
+            info!("Connected to Qdrant at {}", config.storage.qdrant.endpoint);
         }
         Err(_) => {
             return Err(crate::error::IndexerError::environment_setup(format!(
-                "Cannot connect to Qdrant at {}\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements",
+                "Cannot connect to Qdrant at {}. Setup required: https://github.com/peteretelej/directory-indexer#setup",
                 config.storage.qdrant.endpoint
             )));
         }
@@ -29,14 +30,15 @@ pub async fn validate_environment(config: &Config) -> Result<()> {
                 Ok(response) => {
                     if !response.status().is_success() {
                         return Err(crate::error::IndexerError::environment_setup(format!(
-                            "Ollama not accessible at {}\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements",
+                            "Ollama not accessible at {}. Setup required: https://github.com/peteretelej/directory-indexer#setup",
                             config.embedding.endpoint
                         )));
                     }
+                    info!("Connected to Ollama at {}", config.embedding.endpoint);
                 }
                 Err(_) => {
                     return Err(crate::error::IndexerError::environment_setup(format!(
-                        "Cannot connect to Ollama at {}\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements",
+                        "Cannot connect to Ollama at {}. Setup required: https://github.com/peteretelej/directory-indexer#setup",
                         config.embedding.endpoint
                     )));
                 }
@@ -45,13 +47,14 @@ pub async fn validate_environment(config: &Config) -> Result<()> {
         "openai" => {
             if config.embedding.api_key.is_none() {
                 return Err(crate::error::IndexerError::environment_setup(
-                    "OpenAI API key required but not provided (set OPENAI_API_KEY)\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements".to_string()
+                    "OpenAI API key required but not provided (set OPENAI_API_KEY). Setup required: https://github.com/peteretelej/directory-indexer#setup".to_string()
                 ));
             }
+            info!("OpenAI API key configured for embeddings");
         }
         _ => {
             return Err(crate::error::IndexerError::environment_setup(format!(
-                "Unknown embedding provider: {}\n\nSetup required: https://github.com/peteretelej/directory-indexer#requirements",
+                "Unknown embedding provider: {}. Setup required: https://github.com/peteretelej/directory-indexer#setup",
                 config.embedding.provider
             )));
         }

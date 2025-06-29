@@ -130,8 +130,8 @@ cargo run -- serve
 # Format code
 cargo fmt
 
-# Check linting
-cargo clippy
+# Check linting (with strict format string enforcement)
+cargo clippy -- -D clippy::uninlined_format_args
 
 # Fix common issues
 cargo clippy --fix
