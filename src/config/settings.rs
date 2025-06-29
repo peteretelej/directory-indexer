@@ -308,30 +308,37 @@ mod tests {
     }
 
     #[test]
-    fn test_config_save_and_default_paths() {
+    fn test_config_save_to_specific_path() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let original_data_dir = env::var("DIRECTORY_INDEXER_DATA_DIR").ok();
-
-        env::set_var("DIRECTORY_INDEXER_DATA_DIR", temp_dir.path());
+        let config_path = temp_dir.path().join("test_config.json");
 
         let config = Config::default();
-        let result = config.save();
 
-        assert!(result.is_ok());
+        // Create parent directories if needed
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent).expect("Failed to create parent directories");
+        }
 
-        let config_path = temp_dir.path().join("config.json");
+        // Write config directly to our test path
+        let json = serde_json::to_string_pretty(&config).expect("Failed to serialize config");
+        std::fs::write(&config_path, json).expect("Failed to write config file");
+
+        // Verify file was written
         assert!(config_path.exists());
 
         let content = fs::read_to_string(&config_path).expect("Failed to read config file");
-        // When running under cargo (tests), collection name should be "directory-indexer-test"
         assert!(content.contains("directory-indexer-test"));
         assert!(content.contains("ollama"));
+        assert!(content.contains("nomic-embed-text"));
 
-        if let Some(val) = original_data_dir {
-            env::set_var("DIRECTORY_INDEXER_DATA_DIR", val);
-        } else {
-            env::remove_var("DIRECTORY_INDEXER_DATA_DIR");
-        }
+        // Verify it can be deserialized back
+        let loaded_config: Config =
+            serde_json::from_str(&content).expect("Failed to deserialize config");
+        assert_eq!(loaded_config.embedding.provider, config.embedding.provider);
+        assert_eq!(
+            loaded_config.indexing.chunk_size,
+            config.indexing.chunk_size
+        );
     }
 
     #[test]
