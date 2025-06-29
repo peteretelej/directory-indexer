@@ -1,5 +1,13 @@
 # Directory Indexer API Reference
 
+## Table of Contents
+
+- [CLI Commands](#cli-commands)
+- [MCP Tools](#mcp-tools)
+- [Configuration](#configuration)
+- [Supported File Types](#supported-file-types)
+- [Error Handling](#error-handling)
+
 ## CLI Commands
 
 ### `index`
@@ -22,9 +30,12 @@ directory-indexer index <paths...> [options]
 **Examples:**
 
 ```bash
-directory-indexer index ~/Documents
-directory-indexer index ~/work/docs ~/personal/notes
-directory-indexer -v index ~/Documents
+# Linux/macOS
+directory-indexer index /home/user/projects/api-docs
+directory-indexer index /mnt/work/docs /opt/company/runbooks
+# Windows
+directory-indexer index "C:\work\documentation" "D:\projects\my-app\docs"
+directory-indexer -v index "C:\work\documentation"
 ```
 
 ---
@@ -50,7 +61,10 @@ directory-indexer search <query> [options]
 
 ```bash
 directory-indexer search "Redis connection timeout"
-directory-indexer search "error handling" --path ~/work/docs
+# Linux/macOS
+directory-indexer search "error handling" --path /mnt/work/docs
+# Windows
+directory-indexer search "error handling" --path "C:\work\documentation"
 directory-indexer search "authentication" --limit 5
 ```
 
@@ -75,8 +89,12 @@ directory-indexer similar <file> [options]
 **Examples:**
 
 ```bash
-directory-indexer similar ~/work/incidents/database-outage.md
-directory-indexer similar ~/docs/api-guide.md --limit 5
+# Linux/macOS
+directory-indexer similar /mnt/work/incidents/database-outage.md
+directory-indexer similar /home/user/projects/api-docs/auth-guide.md --limit 5
+# Windows
+directory-indexer similar "C:\work\incidents\database-outage.md"
+directory-indexer similar "D:\projects\docs\api-guide.md" --limit 5
 ```
 
 ---
@@ -100,8 +118,12 @@ directory-indexer get <file> [options]
 **Examples:**
 
 ```bash
-directory-indexer get ~/work/docs/api-guide.md
-directory-indexer get ~/work/docs/deployment.md --chunks 2-4
+# Linux/macOS
+directory-indexer get /home/user/projects/api-docs/auth-guide.md
+directory-indexer get /mnt/work/docs/deployment.md --chunks 2-4
+# Windows
+directory-indexer get "C:\work\docs\api-guide.md"
+directory-indexer get "D:\projects\docs\deployment.md" --chunks 2-4
 ```
 
 ---
@@ -154,7 +176,7 @@ Index directories for semantic search.
 
 ```json
 {
-  "directory_paths": ["~/Documents", "~/work/docs"]
+  "directory_path": "/home/user/projects/api-docs,/mnt/work/docs"
 }
 ```
 
@@ -181,7 +203,7 @@ Search indexed content semantically.
 ```json
 {
   "query": "Redis connection timeout",
-  "directory_path": "~/work/docs", // optional
+  "directory_path": "/mnt/work/docs", // optional
   "limit": 10 // optional, default: 10
 }
 ```
@@ -213,7 +235,7 @@ Find files similar to a given file.
 
 ```json
 {
-  "file_path": "~/work/incidents/database-outage.md",
+  "file_path": "/mnt/work/incidents/database-outage.md",
   "limit": 10 // optional, default: 10
 }
 ```
@@ -243,7 +265,7 @@ Retrieve file content with optional chunk selection.
 
 ```json
 {
-  "file_path": "~/work/docs/api-guide.md",
+  "file_path": "/home/user/projects/api-docs/auth-guide.md",
   "chunks": "2-5" // optional
 }
 ```

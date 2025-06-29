@@ -7,40 +7,59 @@ This document describes the key operational flows in the directory indexer syste
 ### CLI Flow
 ```mermaid
 graph TB
-    CLI[CLI Interface] --> Engine[Indexing Engine]
-    CLI --> Search[Search Engine]
+    User[User] --> CLI[CLI Commands]
+    CLI --> IndexCmd[index command]
+    CLI --> SearchCmd[search command]
+    CLI --> SimilarCmd[similar command]
+    CLI --> GetCmd[get command]
+    CLI --> StatusCmd[status command]
     
-    Engine --> SQLite[(SQLite DB)]
-    Engine --> Qdrant[(Qdrant Vector Store)]
-    Engine --> Files[File System]
-    Engine --> Embed[Embedding Provider]
+    IndexCmd --> IndexEngine[Indexing Engine]
+    SearchCmd --> SearchEngine[Search Engine]
+    SimilarCmd --> SearchEngine
+    GetCmd --> Storage[Storage Layer]
+    StatusCmd --> Storage
     
-    Search --> SQLite
-    Search --> Qdrant
-    Search --> Embed
+    IndexEngine --> SQLite[(SQLite DB)]
+    IndexEngine --> Qdrant[(Qdrant Vector Store)]
+    IndexEngine --> FileSystem[File System]
+    IndexEngine --> EmbedProvider[Embedding Provider]
     
-    Embed --> Ollama[Ollama API]
-    Embed --> OpenAI[OpenAI API]
+    SearchEngine --> SQLite
+    SearchEngine --> Qdrant
+    SearchEngine --> EmbedProvider
+    
+    EmbedProvider --> Ollama[Ollama API]
+    EmbedProvider --> OpenAI[OpenAI API]
 ```
 
 ### MCP Server Flow
 ```mermaid
 graph TB
     AI[AI Assistant] --> MCP[MCP Server]
-    MCP --> Engine[Indexing Engine]
-    MCP --> Search[Search Engine]
+    MCP --> IndexTool[index tool]
+    MCP --> SearchTool[search tool]
+    MCP --> SimilarTool[similar_files tool]
+    MCP --> GetTool[get_content tool]
+    MCP --> InfoTool[server_info tool]
     
-    Engine --> SQLite[(SQLite DB)]
-    Engine --> Qdrant[(Qdrant Vector Store)]
-    Engine --> Files[File System]
-    Engine --> Embed[Embedding Provider]
+    IndexTool --> IndexEngine[Indexing Engine]
+    SearchTool --> SearchEngine[Search Engine]
+    SimilarTool --> SearchEngine
+    GetTool --> Storage[Storage Layer]
+    InfoTool --> Storage
     
-    Search --> SQLite
-    Search --> Qdrant
-    Search --> Embed
+    IndexEngine --> SQLite[(SQLite DB)]
+    IndexEngine --> Qdrant[(Qdrant Vector Store)]
+    IndexEngine --> FileSystem[File System]
+    IndexEngine --> EmbedProvider[Embedding Provider]
     
-    Embed --> Ollama[Ollama API]
-    Embed --> OpenAI[OpenAI API]
+    SearchEngine --> SQLite
+    SearchEngine --> Qdrant
+    SearchEngine --> EmbedProvider
+    
+    EmbedProvider --> Ollama[Ollama API]
+    EmbedProvider --> OpenAI[OpenAI API]
 ```
 
 ## Indexing Flow
@@ -49,7 +68,7 @@ graph TB
 
 ```mermaid
 flowchart TD
-    START([CLI: index ~/docs]) --> VALIDATE{Input Validation}
+    START([CLI: index /home/user/projects/docs]) --> VALIDATE{Input Validation}
     VALIDATE -->|Invalid| ERROR1[Error: Invalid path]
     VALIDATE -->|Valid| CONVERT[Convert to absolute path]
     
@@ -131,7 +150,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([User: search Redis timeout]) --> EMBED[Generate query embedding]
+    START([User: search database timeout]) --> EMBED[Generate query embedding]
     EMBED -->|Success| SEARCH[Vector search in Qdrant]
     EMBED -->|Failure| ERROR[Error: Embedding failed]
     

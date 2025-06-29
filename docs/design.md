@@ -2,9 +2,9 @@
 
 ## Overview
 
-Rust-based semantic search system for local directories. Generates vector embeddings of file content and provides search via CLI and MCP server.
+Self-hosted semantic search for local files. Cross-platform Rust application that generates vector embeddings of file content and provides search via CLI and MCP server integration.
 
-**Dependencies**: Keep minimal - only essential crates for core functionality.
+**Dependencies**: Minimal essential crates for core functionality, no heavy frameworks.
 
 ## Related Documentation
 
@@ -54,16 +54,19 @@ CREATE TABLE files (
 
 ```bash
 # Index directories
-directory-indexer index <paths...>
+# Linux/macOS
+directory-indexer index /home/user/projects/docs /mnt/work/runbooks
+# Windows
+directory-indexer index "C:\work\documentation" "D:\projects\api-docs"
 
 # Search content
-directory-indexer search <query> [--path PATH] [--limit N]
+directory-indexer search "database timeout" [--path /mnt/work/docs] [--limit 10]
 
 # Find similar files  
-directory-indexer similar <file> [--limit N]
+directory-indexer similar /home/user/incidents/outage.md [--limit 10]
 
 # Get file content
-directory-indexer get <file> [--chunks RANGE]
+directory-indexer get /home/user/docs/api-guide.md [--chunks 2-5]
 
 # Start MCP server
 directory-indexer serve
@@ -74,7 +77,7 @@ directory-indexer status [--format json|text]
 
 ### MCP Tools
 
-**index(directory_paths: string[])** - Index directories  
+**index(directory_path: string)** - Index directories (comma-separated paths)
 **search(query: string, directory_path?: string, limit?: number)** - Semantic search  
 **similar_files(file_path: string, limit?: number)** - Find similar files  
 **get_content(file_path: string, chunks?: string)** - Retrieve file content  
@@ -92,7 +95,7 @@ QDRANT_ENDPOINT="http://localhost:6333"     # Qdrant vector database
 OLLAMA_ENDPOINT="http://localhost:11434"    # Ollama embedding service
 
 # Database Path  
-DIRECTORY_INDEXER_DATA_DIR="/path/to/data" # Data directory (contains data.db, config.json)
+DIRECTORY_INDEXER_DATA_DIR="/opt/directory-indexer-data" # Data directory (contains data.db)
 
 # Optional API Keys
 QDRANT_API_KEY="your-api-key"               # For Qdrant Cloud or secured instances
@@ -130,7 +133,8 @@ For AI assistants like Claude Desktop, set environment variables in the MCP serv
       "args": ["serve"],
       "env": {
         "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434"
+        "OLLAMA_ENDPOINT": "http://localhost:11434",
+        "DIRECTORY_INDEXER_DATA_DIR": "/opt/directory-indexer-data"
       }
     }
   }

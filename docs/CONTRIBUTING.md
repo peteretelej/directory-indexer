@@ -119,8 +119,11 @@ cargo test
 cargo test --test integration_tests
 
 # Test CLI commands
-cargo run -- index ./test-docs
+# Linux/macOS
+cargo run -- index /tmp/test-docs
 cargo run -- search "test query"
+# Windows
+cargo run -- index "C:\temp\test-docs"
 cargo run -- serve
 ```
 
@@ -242,7 +245,7 @@ To keep CI fast, integration tests are **conditional**:
          "env": {
            "QDRANT_ENDPOINT": "http://localhost:6333",
            "OLLAMA_ENDPOINT": "http://localhost:11434",
-           "DIRECTORY_INDEXER_DATA_DIR": "/path/to/dev/data"
+           "DIRECTORY_INDEXER_DATA_DIR": "/opt/directory-indexer-dev"
          }
        }
      }
@@ -253,13 +256,16 @@ To keep CI fast, integration tests are **conditional**:
 
    ```bash
    # Test indexing
-   cargo run -- index ~/Documents/test
+   # Linux/macOS
+   cargo run -- index /tmp/test-docs
+   # Windows
+   cargo run -- index "C:\temp\test-docs"
 
    # Test search
    cargo run -- search "test query"
 
    # Test similar files
-   cargo run -- similar ~/Documents/test/file.md
+   cargo run -- similar /tmp/test-docs/sample.md
    ```
 
 ## Cross-Platform Support
@@ -295,7 +301,10 @@ export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
 
 # Optional data directory (default: ~/.directory-indexer)  
-export DIRECTORY_INDEXER_DATA_DIR="/path/to/data"
+# Linux/macOS
+export DIRECTORY_INDEXER_DATA_DIR="/opt/directory-indexer-dev"
+# Windows
+set DIRECTORY_INDEXER_DATA_DIR=D:\dev\directory-indexer
 
 # Optional API keys (if needed)
 export QDRANT_API_KEY="your-key"
@@ -312,7 +321,10 @@ export QDRANT_ENDPOINT="http://localhost:6334"
 export OLLAMA_ENDPOINT="http://localhost:11435"
 
 # Custom data directory
+# Linux/macOS
 export DIRECTORY_INDEXER_DATA_DIR="/custom/path/to/data"
+# Windows
+set DIRECTORY_INDEXER_DATA_DIR=D:\custom\data
 
 # Qdrant Cloud
 export QDRANT_ENDPOINT="https://your-cluster.qdrant.io"

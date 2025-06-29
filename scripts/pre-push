@@ -13,6 +13,21 @@ if [ ! -f "Cargo.toml" ]; then
     exit 1
 fi
 
+echo "Checking version synchronization..."
+# Extract version from Cargo.toml
+CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+# Extract version from package.json
+NPM_VERSION=$(grep '"version":' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+
+if [ "$CARGO_VERSION" != "$NPM_VERSION" ]; then
+    echo "ERROR: Version mismatch detected!"
+    echo "  Cargo.toml version: $CARGO_VERSION"
+    echo "  package.json version: $NPM_VERSION"
+    echo "  Please ensure both files have the same version."
+    exit 1
+fi
+
 echo "Running clippy (linter)..."
 # Check main library code with strict linting
 cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
