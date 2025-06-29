@@ -7,45 +7,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/peteretelej/directory-indexer/workflows/CI/badge.svg)](https://github.com/peteretelej/directory-indexer/actions)
 
-Give AI assistants semantic search across your local files. Find relevant documents based on meaning, not just filenames.
-
-## Quick Start
-
-```bash
-# Install via npm
-npm install -g directory-indexer
-
-# Index your directories
-directory-indexer index ~/Documents ~/work/docs
-
-# Start MCP server for AI assistants
-directory-indexer serve
-```
-
-**Configure with Claude Desktop:**
-
-```json
-{
-  "mcpServers": {
-    "directory-indexer": {
-      "command": "directory-indexer",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will search your indexed documents semantically.
+Gives AI assistants semantic search across your local files using this self-hosted MCP server.
 
 ## Setup
 
-Before using directory-indexer, you need to set up two services:
+Directory Indexer runs locally on your machine or server. It uses an embedding provider (such as Ollama) to create vector embeddings of your files and stores them in a Qdrant vector database for fast semantic search. Both services can run remotely if needed.
+
+Setup requires two services:
 
 ### 1. Qdrant Vector Database
 
 Choose one option:
 
 **Docker (recommended for most users):**
+
 ```bash
 docker run -d --name qdrant \
     -p 127.0.0.1:6333:6333 \
@@ -60,6 +35,7 @@ docker run -d --name qdrant \
 Choose one option:
 
 **Option A: Ollama (recommended - free, runs locally)**
+
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.ai/install.sh | sh  # Linux/macOS
@@ -70,6 +46,7 @@ ollama pull nomic-embed-text
 ```
 
 **Option B: OpenAI (requires paid API key)**
+
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
@@ -77,15 +54,66 @@ export OPENAI_API_KEY="your-api-key-here"
 ### Quick Verification
 
 Test your setup:
+
 ```bash
 # Check Qdrant
 curl http://localhost:6333/collections
 
-# Check Ollama  
+# Check Ollama
 curl http://localhost:11434/api/tags
 ```
 
 If either fails, directory-indexer will show a helpful error with setup guidance.
+
+## Installation
+
+```bash
+npm install -g directory-indexer
+```
+
+## Usage
+
+### MCP Integration
+
+Configure with Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "directory-indexer",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Start the MCP server:
+
+```bash
+directory-indexer serve
+```
+
+Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will search your indexed documents semantically.
+
+### CLI Commands
+
+```bash
+# Index your directories
+directory-indexer index ~/Documents ~/work/docs
+
+# Search semantically
+directory-indexer search "database timeout errors"
+
+# Find similar files
+directory-indexer similar ~/incidents/redis-outage.md
+
+# Get file content
+directory-indexer get ~/docs/api-guide.md
+
+# Show status
+directory-indexer status
+```
 
 ## Configuration
 
@@ -124,25 +152,6 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
     }
   }
 }
-```
-
-## CLI Usage
-
-```bash
-# Index your directories
-directory-indexer index ~/Documents ~/work/docs
-
-# Search semantically
-directory-indexer search "database timeout errors"
-
-# Find similar files
-directory-indexer similar ~/incidents/redis-outage.md
-
-# Get file content
-directory-indexer get ~/docs/api-guide.md
-
-# Show status
-directory-indexer status
 ```
 
 ## Supported Files
