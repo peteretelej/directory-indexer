@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::error::{IndexerError, Result};
+use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -49,12 +49,11 @@ pub struct MonitoringConfig {
 
 impl Default for Config {
     fn default() -> Self {
+        let app_dir = Self::default_app_dir();
+
         Self {
             storage: StorageConfig {
-                sqlite_path: dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join(".directory-indexer")
-                    .join("data.db"),
+                sqlite_path: app_dir.join("data.db"),
                 qdrant: QdrantConfig {
                     endpoint: "http://localhost:6333".to_string(),
                     collection: "directory-indexer".to_string(),
@@ -91,6 +90,9 @@ impl Config {
         // Start with defaults
         let mut config = Self::default();
 
+        // Ensure the app directory exists
+        config.ensure_app_dir_exists()?;
+
         // Use environment variables as primary source
         if let Ok(qdrant_endpoint) = std::env::var("QDRANT_ENDPOINT") {
             config.storage.qdrant.endpoint = qdrant_endpoint;
@@ -100,8 +102,10 @@ impl Config {
             config.embedding.endpoint = ollama_endpoint;
         }
 
-        if let Ok(sqlite_path) = std::env::var("DIRECTORY_INDEXER_DB") {
-            config.storage.sqlite_path = PathBuf::from(sqlite_path);
+        // Override app directory if specified
+        if let Ok(app_dir) = std::env::var("DIRECTORY_INDEXER_DATA_DIR") {
+            let app_dir_path = PathBuf::from(app_dir);
+            config.storage.sqlite_path = app_dir_path.join("data.db");
         }
 
         if let Ok(qdrant_collection) = std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION") {
@@ -144,13 +148,26 @@ impl Config {
         Ok(())
     }
 
-    fn default_config_path() -> Result<PathBuf> {
-        let home = dirs::home_dir().ok_or_else(|| {
-            IndexerError::Config(config::ConfigError::Message(
-                "Could not determine home directory".to_string(),
-            ))
-        })?;
+    fn default_app_dir() -> PathBuf {
+        std::env::var("DIRECTORY_INDEXER_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".directory-indexer")
+            })
+    }
 
-        Ok(home.join(".directory-indexer").join("config.json"))
+    fn default_config_path() -> Result<PathBuf> {
+        Ok(Self::default_app_dir().join("config.json"))
+    }
+
+    fn ensure_app_dir_exists(&self) -> Result<()> {
+        if let Some(parent_dir) = self.storage.sqlite_path.parent() {
+            if !parent_dir.exists() {
+                std::fs::create_dir_all(parent_dir)?;
+            }
+        }
+        Ok(())
     }
 }

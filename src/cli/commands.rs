@@ -45,6 +45,9 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
     // Load configuration
     let config = Config::load()?;
 
+    // Validate environment before proceeding
+    crate::environment::validate_environment(&config).await?;
+
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
     let vector_store = QdrantStore::new(
@@ -114,6 +117,9 @@ pub async fn search_internal(
 
     // Load configuration
     let config = Config::load()?;
+
+    // Validate environment before proceeding
+    crate::environment::validate_environment(&config).await?;
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
@@ -199,6 +205,9 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
 
     // Load configuration
     let config = Config::load()?;
+
+    // Validate environment before proceeding
+    crate::environment::validate_environment(&config).await?;
 
     // Initialize storage
     let sqlite_store = SqliteStore::new(&config.storage.sqlite_path)?;
@@ -467,6 +476,9 @@ pub async fn serve() -> Result<()> {
 
     // Load configuration
     let config = Config::load()?;
+
+    // Validate environment before proceeding
+    crate::environment::validate_environment(&config).await?;
 
     // Create and start MCP server
     let server = McpServer::new(config).await?;

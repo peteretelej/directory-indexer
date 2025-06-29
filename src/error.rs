@@ -36,6 +36,9 @@ pub enum IndexerError {
 
     #[error("MCP protocol error: {message}")]
     Mcp { message: String },
+
+    #[error("Environment setup required: {message}")]
+    EnvironmentSetup { message: String },
 }
 
 impl IndexerError {
@@ -71,6 +74,12 @@ impl IndexerError {
 
     pub fn mcp<S: Into<String>>(message: S) -> Self {
         Self::Mcp {
+            message: message.into(),
+        }
+    }
+
+    pub fn environment_setup<S: Into<String>>(message: S) -> Self {
+        Self::EnvironmentSetup {
             message: message.into(),
         }
     }

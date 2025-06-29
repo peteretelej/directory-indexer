@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod config;
 pub mod embedding;
+pub mod environment;
 pub mod error;
 pub mod health;
 pub mod indexing;

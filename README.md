@@ -37,10 +37,15 @@ directory-indexer serve
 
 Now ask Claude: _"Find files similar to my Redis incident reports"_ and it will search your indexed documents semantically.
 
-## Requirements
+## Setup
 
-- **Qdrant**: Vector database for semantic search
+Before using directory-indexer, you need to set up two services:
 
+### 1. Qdrant Vector Database
+
+Choose one option:
+
+**Docker (recommended for most users):**
 ```bash
 docker run -d --name qdrant \
     -p 127.0.0.1:6333:6333 \
@@ -48,26 +53,39 @@ docker run -d --name qdrant \
     qdrant/qdrant
 ```
 
-**Embedding Provider** (choose one):
+**Alternative:** Install natively from [qdrant.tech](https://qdrant.tech/documentation/guides/installation/)
 
-- **Ollama** (recommended): Self-hosted embeddings
+### 2. Embedding Provider
 
+Choose one option:
+
+**Option A: Ollama (recommended - free, runs locally)**
 ```bash
-# Install Ollama natively for GPU support (recommended)
-curl -fsSL https://ollama.ai/install.sh | sh
-# Visit https://ollama.ai for Windows installer
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh  # Linux/macOS
+# For Windows: Download from https://ollama.ai
+
+# Pull the embedding model
 ollama pull nomic-embed-text
-
-# OR use Docker (CPU-only, slower)
-docker run -d --name ollama \
-    -p 127.0.0.1:11434:11434 \
-    -v ollama_data:/root/.ollama \
-    ollama/ollama
-
-docker exec ollama ollama pull nomic-embed-text
 ```
 
-- **OpenAI**: Requires API key
+**Option B: OpenAI (requires paid API key)**
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+### Quick Verification
+
+Test your setup:
+```bash
+# Check Qdrant
+curl http://localhost:6333/collections
+
+# Check Ollama  
+curl http://localhost:11434/api/tags
+```
+
+If either fails, directory-indexer will show a helpful error with setup guidance.
 
 ## Configuration
 
@@ -78,8 +96,8 @@ Directory Indexer uses environment variables for configuration. Set these if you
 export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
 
-# Optional database path (default: ~/.directory-indexer/data.db)
-export DIRECTORY_INDEXER_DB="/path/to/your/database.db"
+# Optional data directory (default: ~/.directory-indexer)
+export DIRECTORY_INDEXER_DATA_DIR="/path/to/data"
 
 # Optional Qdrant collection name (default: directory-indexer)
 # Note: Setting to "test" enables auto-cleanup for testing
@@ -101,7 +119,7 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
       "env": {
         "QDRANT_ENDPOINT": "http://localhost:6333",
         "OLLAMA_ENDPOINT": "http://localhost:11434",
-        "DIRECTORY_INDEXER_DB": "/path/to/your/database.db"
+        "DIRECTORY_INDEXER_DATA_DIR": "/path/to/data"
       }
     }
   }

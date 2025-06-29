@@ -92,7 +92,7 @@ QDRANT_ENDPOINT="http://localhost:6333"     # Qdrant vector database
 OLLAMA_ENDPOINT="http://localhost:11434"    # Ollama embedding service
 
 # Database Path  
-DIRECTORY_INDEXER_DB="/path/to/database.db" # SQLite database file path
+DIRECTORY_INDEXER_DATA_DIR="/path/to/data" # Data directory (contains data.db, config.json)
 
 # Optional API Keys
 QDRANT_API_KEY="your-api-key"               # For Qdrant Cloud or secured instances
