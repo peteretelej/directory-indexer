@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::embedding::create_embedding_provider;
 use crate::indexing::engine::IndexingEngine;
 use crate::mcp::McpServer;
-use crate::storage::{QdrantStore, SqliteStore};
+use crate::storage::{qdrant::SearchResult, QdrantStore, SqliteStore};
 use crate::{Config, IndexerError, Result};
 
 pub async fn index(paths: Vec<String>) -> Result<()> {
@@ -85,7 +85,8 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
 }
 
 pub async fn search(query: String, path: Option<String>, limit: Option<usize>) -> Result<()> {
-    search_internal(query, path, limit, true).await
+    search_internal(query, path, limit, true).await?;
+    Ok(())
 }
 
 pub async fn search_internal(
@@ -93,7 +94,7 @@ pub async fn search_internal(
     path: Option<String>,
     limit: Option<usize>,
     output_to_console: bool,
-) -> Result<()> {
+) -> Result<Vec<SearchResult>> {
     info!("Searching for: '{query}' in path: {path:?}, limit: {limit:?}");
 
     if query.trim().is_empty() {
@@ -184,11 +185,12 @@ pub async fn search_internal(
         }
     }
 
-    Ok(())
+    Ok(search_results)
 }
 
 pub async fn similar(file: String, limit: usize) -> Result<()> {
-    similar_internal(file, limit, true).await
+    similar_internal(file, limit, true).await?;
+    Ok(())
 }
 
 pub async fn similar_internal(file: String, limit: usize, output_to_console: bool) -> Result<()> {
@@ -348,7 +350,8 @@ pub async fn similar_internal(file: String, limit: usize, output_to_console: boo
 }
 
 pub async fn get(file: String, chunks: Option<String>) -> Result<()> {
-    get_internal(file, chunks, true).await
+    get_internal(file, chunks, true).await?;
+    Ok(())
 }
 
 pub async fn get_internal(

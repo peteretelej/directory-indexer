@@ -295,8 +295,10 @@ fn test_semantic_search_authentication() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("api_guide.md") || stdout.contains("Search Results"), 
-            "Should find API guide when searching for authentication");
+    assert!(
+        stdout.contains("api_guide.md") || stdout.contains("Search Results"),
+        "Should find API guide when searching for authentication"
+    );
 }
 
 #[test]
@@ -327,11 +329,13 @@ fn test_semantic_search_error_handling() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("troubleshooting.md") || stdout.contains("Search Results"),
-            "Should find troubleshooting guide when searching for error handling");
+    assert!(
+        stdout.contains("troubleshooting.md") || stdout.contains("Search Results"),
+        "Should find troubleshooting guide when searching for error handling"
+    );
 }
 
-#[test] 
+#[test]
 fn test_semantic_search_programming() {
     if !are_services_available() {
         println!("Skipping test - required services not available");
@@ -359,8 +363,12 @@ fn test_semantic_search_programming() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("rust.txt") || stdout.contains("hello.rs") || stdout.contains("Search Results"),
-            "Should find Rust files when searching for rust programming");
+    assert!(
+        stdout.contains("rust.txt")
+            || stdout.contains("hello.rs")
+            || stdout.contains("Search Results"),
+        "Should find Rust files when searching for rust programming"
+    );
 }
 
 #[test]
@@ -375,7 +383,7 @@ fn test_search_with_path_filter() {
 
     // Index test_data first
     test_command("search-path-filter")
-        .arg("index") 
+        .arg("index")
         .arg(&test_data_path)
         .timeout(std::time::Duration::from_secs(120))
         .assert()
@@ -404,7 +412,7 @@ fn test_search_with_limit() {
     // Index test_data first
     test_command("search-limit")
         .arg("index")
-        .arg(&test_data_path) 
+        .arg(&test_data_path)
         .timeout(std::time::Duration::from_secs(120))
         .assert()
         .success();

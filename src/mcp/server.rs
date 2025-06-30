@@ -311,15 +311,35 @@ impl McpServer {
         )
         .await
         {
-            Ok(_) => {
+            Ok(search_results) => {
                 let mut content = format!("Search completed for query: '{query}'\n");
-                if let Some(path) = directory_path {
+                if let Some(path) = &directory_path {
                     content.push_str(&format!("Scope: {path}\n"));
                 }
                 if let Some(l) = limit {
                     content.push_str(&format!("Limit: {l}\n"));
                 }
-                content.push_str("Note: Search functionality is still being implemented");
+                content.push_str(&format!("Found {} results\n\n", search_results.len()));
+
+                if search_results.is_empty() {
+                    content.push_str("No results found for the given query.");
+                } else {
+                    content.push_str("Search Results:\n");
+                    content.push_str("==============\n");
+                    
+                    for (i, result) in search_results.iter().enumerate() {
+                        content.push_str(&format!(
+                            "\n{}. {} (score: {:.3})\n",
+                            i + 1,
+                            result.file_path,
+                            result.score
+                        ));
+                        content.push_str(&format!("   Chunk: {}\n", result.chunk_id));
+                        if !result.parent_directories.is_empty() {
+                            content.push_str(&format!("   Path: {}\n", result.parent_directories.join(" > ")));
+                        }
+                    }
+                }
 
                 let result = json!({
                     "content": [

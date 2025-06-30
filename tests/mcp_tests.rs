@@ -364,7 +364,7 @@ fn test_mcp_resources_templates_list() {
 }
 
 // ============================================================================
-// Full Workflow Tests using test_data  
+// Full Workflow Tests using test_data
 // ============================================================================
 
 fn get_test_data_path() -> String {
@@ -396,7 +396,9 @@ async fn test_mcp_full_workflow() {
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
-    server.send_request(initialize_request).expect("Initialize failed");
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
 
     // Index test_data
     let index_request = json!({
@@ -435,7 +437,8 @@ async fn test_mcp_full_workflow() {
         }
     });
 
-    let search_response = server.send_request(search_request)
+    let search_response = server
+        .send_request(search_request)
         .expect("Failed to call search");
 
     assert_eq!(search_response["jsonrpc"], "2.0");
@@ -464,7 +467,9 @@ async fn test_mcp_search_with_parameters() {
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
-    server.send_request(initialize_request).expect("Initialize failed");
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
 
     // Index test_data first
     let index_request = json!({
@@ -501,7 +506,8 @@ async fn test_mcp_search_with_parameters() {
         }
     });
 
-    let response = server.send_request(search_request)
+    let response = server
+        .send_request(search_request)
         .expect("Failed to call search with parameters");
 
     assert_eq!(response["jsonrpc"], "2.0");
@@ -530,7 +536,9 @@ async fn test_mcp_similar_files_tool() {
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
-    server.send_request(initialize_request).expect("Initialize failed");
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
 
     // Index test_data first
     let index_request = json!({
@@ -566,7 +574,8 @@ async fn test_mcp_similar_files_tool() {
         }
     });
 
-    let response = server.send_request(similar_request)
+    let response = server
+        .send_request(similar_request)
         .expect("Failed to call similar_files");
 
     assert_eq!(response["jsonrpc"], "2.0");
@@ -595,7 +604,9 @@ async fn test_mcp_get_content_tool() {
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
-    server.send_request(initialize_request).expect("Initialize failed");
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
 
     // Index test_data first
     let index_request = json!({
@@ -630,10 +641,282 @@ async fn test_mcp_get_content_tool() {
         }
     });
 
-    let response = server.send_request(get_request)
+    let response = server
+        .send_request(get_request)
         .expect("Failed to call get_content");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 3);
     assert!(response.get("result").is_some() || response.get("error").is_some());
+}
+
+// ============================================================================
+// MCP Content Validation Tests - Test actual search results with specific content
+// ============================================================================
+
+#[tokio::test]
+async fn test_mcp_search_authentication_content() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Search for authentication - should find api_guide.md
+    let search_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": "authentication"
+            }
+        }
+    });
+
+    let search_response = server
+        .send_request(search_request)
+        .expect("Failed to call search");
+
+    assert_eq!(search_response["jsonrpc"], "2.0");
+    assert_eq!(search_response["id"], 3);
+    assert!(search_response.get("result").is_some());
+
+    // Validate that the response contains actual search results
+    if let Some(result) = search_response.get("result") {
+        if let Some(content_array) = result.get("content") {
+            if let Some(content_items) = content_array.as_array() {
+                if let Some(first_content) = content_items.first() {
+                    if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                        // Should contain actual results, not placeholder message
+                        assert!(
+                            !text.contains("Search functionality is still being implemented"),
+                            "Should not contain placeholder message"
+                        );
+                        assert!(
+                            text.contains("api_guide.md") || text.contains("Found") && text.contains("results"),
+                            "Should find api_guide.md or show actual search results. Got: {}",
+                            text
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_search_rust_programming_content() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Search for rust programming - should find rust.txt or hello.rs
+    let search_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": "rust programming"
+            }
+        }
+    });
+
+    let search_response = server
+        .send_request(search_request)
+        .expect("Failed to call search");
+
+    assert_eq!(search_response["jsonrpc"], "2.0");
+    assert_eq!(search_response["id"], 3);
+    assert!(search_response.get("result").is_some());
+
+    // Validate that the response contains actual search results
+    if let Some(result) = search_response.get("result") {
+        if let Some(content_array) = result.get("content") {
+            if let Some(content_items) = content_array.as_array() {
+                if let Some(first_content) = content_items.first() {
+                    if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                        // Should contain actual results, not placeholder message
+                        assert!(
+                            !text.contains("Search functionality is still being implemented"),
+                            "Should not contain placeholder message"
+                        );
+                        assert!(
+                            text.contains("rust.txt") || text.contains("hello.rs") || (text.contains("Found") && text.contains("results")),
+                            "Should find rust.txt or hello.rs or show actual search results. Got: {}",
+                            text
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_search_machine_learning_content() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server
+        .send_request(initialize_request)
+        .expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Search for machine learning - should find ai.txt
+    let search_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": "machine learning"
+            }
+        }
+    });
+
+    let search_response = server
+        .send_request(search_request)
+        .expect("Failed to call search");
+
+    assert_eq!(search_response["jsonrpc"], "2.0");
+    assert_eq!(search_response["id"], 3);
+    assert!(search_response.get("result").is_some());
+
+    // Validate that the response contains actual search results
+    if let Some(result) = search_response.get("result") {
+        if let Some(content_array) = result.get("content") {
+            if let Some(content_items) = content_array.as_array() {
+                if let Some(first_content) = content_items.first() {
+                    if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                        // Should contain actual results, not placeholder message
+                        assert!(
+                            !text.contains("Search functionality is still being implemented"),
+                            "Should not contain placeholder message"
+                        );
+                        assert!(
+                            text.contains("ai.txt") || (text.contains("Found") && text.contains("results")),
+                            "Should find ai.txt or show actual search results. Got: {}",
+                            text
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
