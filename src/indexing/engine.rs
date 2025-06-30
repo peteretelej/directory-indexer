@@ -41,6 +41,39 @@ impl IndexingEngine {
         })
     }
 
+    /// Validates consistency between SQLite metadata and Qdrant vectors
+    /// If SQLite claims files are indexed but Qdrant collection is empty, clears SQLite state
+    pub async fn validate_state_consistency(&self) -> Result<()> {
+        info!("Validating state consistency between SQLite and Qdrant");
+
+        // Get SQLite stats to see if we have indexed files
+        let (_, file_count, _) = self.sqlite_store.get_stats()?;
+
+        // Get Qdrant collection info to see if we have vectors
+        let collection_info = self.vector_store.get_collection_info().await?;
+
+        info!(
+            "State check: SQLite has {file_count} files, Qdrant has {} vectors",
+            collection_info.points_count
+        );
+
+        // Check for state mismatch: SQLite has files but Qdrant has no vectors
+        if file_count > 0 && collection_info.points_count == 0 {
+            warn!(
+                "State mismatch detected: SQLite has {file_count} indexed files but Qdrant collection is empty. Clearing SQLite state to force re-indexing."
+            );
+
+            // Clear SQLite tracking state to force re-indexing
+            self.sqlite_store.clear_all_files()?;
+
+            info!("SQLite state cleared. Files will be re-indexed.");
+        } else {
+            info!("State consistency validated: no mismatch detected");
+        }
+
+        Ok(())
+    }
+
     pub async fn index_directories(&self, paths: Vec<PathBuf>) -> Result<IndexingStats> {
         info!("Starting indexing for {len} directories", len = paths.len());
 

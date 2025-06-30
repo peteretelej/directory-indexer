@@ -3,7 +3,73 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
+use std::sync::Mutex;
 use tempfile::TempDir;
+
+// Mutex to ensure only one test creates the shared collection at a time
+static COLLECTION_INIT_LOCK: Mutex<()> = Mutex::new(());
+
+fn ensure_shared_collection_exists() {
+    let _lock = COLLECTION_INIT_LOCK.lock().unwrap();
+
+    // Use a semantic test name to get the shared collection
+    let shared_test_name = "semantic-init";
+
+    eprintln!("=== ensure_shared_collection_exists: Starting ===");
+
+    // Check if collection already has data to avoid re-indexing
+    eprintln!("=== Checking if collection has data ===");
+    let test_search = test_command(shared_test_name)
+        .arg("search")
+        .arg("test")
+        .arg("--limit")
+        .arg("1")
+        .timeout(std::time::Duration::from_secs(10))
+        .output();
+
+    match test_search {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("=== Search test output ===");
+            eprintln!("STDOUT: {}", stdout);
+            eprintln!("STDERR: {}", stderr);
+            eprintln!("Exit code: {}", output.status);
+
+            if !stdout.contains("No results found") {
+                eprintln!("=== Collection has data, skipping indexing ===");
+                return;
+            } else {
+                eprintln!("=== No results found, need to index ===");
+            }
+        }
+        Err(e) => {
+            eprintln!("=== Search failed: {}, need to index ===", e);
+        }
+    }
+
+    // Collection doesn't exist or is empty, index test data
+    let test_data_path = get_test_data_path();
+    eprintln!("=== Indexing test data from: {} ===", test_data_path);
+
+    let index_result = test_command(shared_test_name)
+        .arg("index")
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .output()
+        .expect("Failed to run index command");
+
+    eprintln!("=== Index result ===");
+    eprintln!("STDOUT: {}", String::from_utf8_lossy(&index_result.stdout));
+    eprintln!("STDERR: {}", String::from_utf8_lossy(&index_result.stderr));
+    eprintln!("Exit code: {}", index_result.status);
+
+    if !index_result.status.success() {
+        panic!("Index command failed: {:?}", index_result.status);
+    }
+
+    eprintln!("=== ensure_shared_collection_exists: Complete ===");
+}
 
 fn test_command(test_name: &str) -> Command {
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
@@ -17,14 +83,21 @@ fn test_command(test_name: &str) -> Command {
     {
         // Use shared collection for tests that work with test_data
         std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION")
-            .unwrap_or_else(|_| "directory-indexer-ci".to_string())
+            .unwrap_or_else(|_| "directory-indexer-integration-test".to_string())
     } else {
         // Use unique collection for tests with temp data
         format!("di-test-cli-{}", test_name)
     };
 
     cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", &collection_name);
-    eprintln!("Test '{}' using collection: {}", test_name, collection_name);
+    eprintln!(
+        "Test '{}' using collection env var: {}",
+        test_name, collection_name
+    );
+    eprintln!(
+        "CI should have pre-indexed into: {}",
+        std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION").unwrap_or("NOT_SET".to_string())
+    );
     cmd
 }
 
@@ -290,15 +363,8 @@ fn test_semantic_search_authentication() {
         return;
     }
 
-    let test_data_path = get_test_data_path();
-
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("semantic-auth")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Search for authentication - should find API guide
     let output = test_command("semantic-auth")
@@ -327,15 +393,8 @@ fn test_semantic_search_error_handling() {
         return;
     }
 
-    let test_data_path = get_test_data_path();
-
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("semantic-error")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Search for error handling - should find troubleshooting docs
     let output = test_command("semantic-error")
@@ -363,15 +422,8 @@ fn test_semantic_search_programming() {
         return;
     }
 
-    let test_data_path = get_test_data_path();
-
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("semantic-prog")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Search for rust programming - should find rust files
     let output = test_command("semantic-prog")
@@ -405,13 +457,8 @@ fn test_search_with_path_filter() {
     let test_data_path = get_test_data_path();
     let programming_path = std::path::Path::new(&test_data_path).join("programming");
 
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("search-path-filter")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Search within programming directory only
     test_command("search-path-filter")
@@ -431,15 +478,8 @@ fn test_search_with_limit() {
         return;
     }
 
-    let test_data_path = get_test_data_path();
-
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("search-limit")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Search with limit
     test_command("search-limit")
@@ -464,13 +504,8 @@ fn test_similar_files_workflow() {
         .join("programming")
         .join("hello.rs");
 
-    // Index test_data (fast if already pre-indexed by CI)
-    test_command("similar-workflow")
-        .arg("index")
-        .arg(&test_data_path)
-        .timeout(std::time::Duration::from_secs(120))
-        .assert()
-        .success();
+    // Ensure shared collection exists and has test data
+    ensure_shared_collection_exists();
 
     // Find files similar to hello.rs
     test_command("similar-workflow")

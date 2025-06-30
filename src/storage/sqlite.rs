@@ -1,3 +1,4 @@
+use log::info;
 use rusqlite::Connection;
 use serde_json::Value;
 use std::path::Path;
@@ -214,6 +215,13 @@ impl SqliteStore {
         let normalized_path = normalize_path(path)?;
         let mut stmt = self.conn.prepare("DELETE FROM files WHERE path = ?1")?;
         stmt.execute([&normalized_path])?;
+        Ok(())
+    }
+
+    pub fn clear_all_files(&self) -> Result<()> {
+        info!("Clearing all file tracking data from SQLite");
+        let mut stmt = self.conn.prepare("DELETE FROM files")?;
+        stmt.execute([])?;
         Ok(())
     }
 

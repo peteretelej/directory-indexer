@@ -67,6 +67,9 @@ pub async fn index_internal(paths: Vec<String>, output_to_console: bool) -> Resu
     let engine =
         IndexingEngine::new(config, sqlite_store, vector_store, embedding_provider).await?;
 
+    // Check for state mismatch between SQLite and Qdrant
+    engine.validate_state_consistency().await?;
+
     // Convert paths to PathBuf
     let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
 
