@@ -1,6 +1,6 @@
 [package]
 name = "directory-indexer"
-version = "0.0.8"
+version = "0.0.9"
 edition = "2021"
 description = "AI-powered directory indexing with semantic search for MCP servers"
 license = "MIT"

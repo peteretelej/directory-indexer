@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::info;
 use std::path::PathBuf;
 
 use crate::{
@@ -26,13 +26,10 @@ pub struct SearchQuery {
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
-    pub file_path: PathBuf,
+    pub file_path: String,
     pub chunk_id: usize,
     pub score: f32,
-    pub content_snippet: Option<String>,
     pub parent_directories: Vec<String>,
-    pub file_size: u64,
-    pub modified_time: u64,
 }
 
 impl SearchEngine {
@@ -112,9 +109,10 @@ impl SearchEngine {
         directory_filter: &Option<PathBuf>,
     ) -> Vec<SearchResult> {
         if let Some(filter_dir) = directory_filter {
+            let filter_str = filter_dir.to_string_lossy();
             results
                 .into_iter()
-                .filter(|result| result.file_path.starts_with(filter_dir))
+                .filter(|result| result.file_path.starts_with(filter_str.as_ref()))
                 .collect()
         } else {
             results
@@ -153,17 +151,33 @@ impl SearchEngine {
         let limit = query.limit;
         info!("Searching for: '{text}' with limit: {limit}");
 
-        // TODO: Implement actual search logic
-        // This would include:
-        // 1. Generate embedding for the query
-        // 2. Search vector store for similar chunks
-        // 3. Enrich results with metadata from SQLite
-        // 4. Apply directory filtering if specified
-        // 5. Rank and return results
+        // Validate query
+        self.validate_query(&query)?;
 
-        warn!("Search not yet implemented - returning empty results");
+        // Generate embedding for the query
+        let query_embedding = self
+            .embedding_provider
+            .generate_embedding(query.text.clone())
+            .await?;
 
-        Ok(Vec::new())
+        // Perform vector search
+        let search_results = self.vector_store.search(query_embedding, limit).await?;
+
+        // Apply directory filtering if specified
+        let filtered_results =
+            self.filter_results_by_directory(search_results, &query.directory_filter);
+
+        // Apply similarity threshold if specified
+        let threshold_results =
+            self.apply_similarity_threshold(filtered_results, query.similarity_threshold);
+
+        // Rank results
+        let ranked_results = self.rank_results(threshold_results);
+
+        // Limit results
+        let final_results = self.limit_results(ranked_results, limit);
+
+        Ok(final_results)
     }
 
     pub async fn find_similar_files(
@@ -173,17 +187,113 @@ impl SearchEngine {
     ) -> Result<Vec<SearchResult>> {
         info!("Finding files similar to: {file_path:?} with limit: {limit}");
 
-        // TODO: Implement similar file search
-        // This would include:
-        // 1. Get the file's chunks from the database
-        // 2. Average the chunk embeddings or use the first chunk
-        // 3. Search for similar chunks in vector store
-        // 4. Group results by file and rank by average similarity
-        // 5. Return top similar files
+        if !file_path.exists() {
+            return Err(IndexerError::not_found(format!(
+                "File not found: {}",
+                file_path.display()
+            )));
+        }
+        if !file_path.is_file() {
+            return Err(IndexerError::invalid_input(format!(
+                "Path is not a file: {}",
+                file_path.display()
+            )));
+        }
 
-        warn!("Similar file search not yet implemented - returning empty results");
+        // Try to get file from database to retrieve chunks
+        let normalized_path = crate::utils::normalize_path(&file_path)?;
+        let file_record = self.sqlite_store.get_file_by_path(&normalized_path)?;
 
-        Ok(Vec::new())
+        // Generate embedding for the file
+        let file_embedding = if let Some(file_record) = file_record {
+            // Parse chunks JSON to get file chunks
+            let chunks = match file_record.chunks_json {
+                Some(chunks_json) => {
+                    serde_json::from_value::<Vec<String>>(chunks_json).map_err(|e| {
+                        IndexerError::file_processing(format!("Failed to parse chunks: {e}"))
+                    })?
+                }
+                None => {
+                    return Err(IndexerError::not_found(format!(
+                        "No chunks found for file: {}",
+                        file_path.display()
+                    )));
+                }
+            };
+
+            if chunks.is_empty() {
+                return Err(IndexerError::not_found(format!(
+                    "No chunks found for file: {}",
+                    file_path.display()
+                )));
+            }
+
+            // Use the first chunk as representative of the file
+            let representative_chunk = &chunks[0];
+            self.embedding_provider
+                .generate_embedding(representative_chunk.clone())
+                .await?
+        } else {
+            // File not indexed, read from filesystem and generate embedding
+            let content = std::fs::read_to_string(&file_path)
+                .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
+
+            // Use first 512 chars as representative content
+            let representative_content = if content.len() > 512 {
+                &content[..512]
+            } else {
+                &content
+            };
+
+            self.embedding_provider
+                .generate_embedding(representative_content.to_string())
+                .await?
+        };
+
+        // Search for similar chunks
+        let search_results = self.vector_store.search(file_embedding, limit + 5).await?;
+
+        // Filter out results from the same file and group by file path
+        let mut file_scores: std::collections::HashMap<String, (f32, usize)> =
+            std::collections::HashMap::new();
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        for result in search_results {
+            // Skip if it's the same file
+            if result.file_path == file_path_str {
+                continue;
+            }
+
+            // Keep track of the best score for each file
+            let entry = file_scores
+                .entry(result.file_path.clone())
+                .or_insert((0.0, 0));
+            if result.score > entry.0 {
+                entry.0 = result.score;
+                entry.1 = result.chunk_id;
+            }
+        }
+
+        // Sort by score and take top results, convert to SearchResult
+        let mut similar_files: Vec<_> = file_scores.into_iter().collect();
+        similar_files.sort_by(|a, b| {
+            b.1 .0
+                .partial_cmp(&a.1 .0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        similar_files.truncate(limit);
+
+        let results: Vec<SearchResult> = similar_files
+            .into_iter()
+            .map(|(file_path, (score, chunk_id))| SearchResult {
+                file_path,
+                chunk_id,
+                score,
+                parent_directories: vec![], // Could be populated if needed
+            })
+            .collect();
+
+        Ok(results)
     }
 
     pub async fn get_file_content(
@@ -193,19 +303,120 @@ impl SearchEngine {
     ) -> Result<String> {
         info!("Getting content for: {file_path:?} with chunks: {chunk_range:?}");
 
-        // TODO: Implement file content retrieval
-        // This would include:
-        // 1. Get file record from SQLite
-        // 2. If chunk_range is specified, extract only those chunks
-        // 3. Otherwise, read the full file content
-        // 4. Return the content
+        if !file_path.exists() {
+            return Err(IndexerError::not_found(format!(
+                "File not found: {}",
+                file_path.display()
+            )));
+        }
+        if !file_path.is_file() {
+            return Err(IndexerError::invalid_input(format!(
+                "Path is not a file: {}",
+                file_path.display()
+            )));
+        }
 
-        warn!("File content retrieval not yet implemented");
+        // Try to get file from database
+        let normalized_path = crate::utils::normalize_path(&file_path)?;
+        let file_record = self.sqlite_store.get_file_by_path(&normalized_path)?;
 
-        Err(IndexerError::not_found(
-            "File content retrieval not implemented",
-        ))
+        // If chunks are stored in database, use those; otherwise read from file system
+        let content = if let Some(file_record) = file_record {
+            if let Some(chunks_json) = file_record.chunks_json {
+                let chunks = serde_json::from_value::<Vec<String>>(chunks_json).map_err(|e| {
+                    IndexerError::file_processing(format!("Failed to parse chunks: {e}"))
+                })?;
+
+                if let Some((start, end)) = chunk_range {
+                    // Return specific chunk range (1-indexed to 0-indexed)
+                    let start_idx = start.saturating_sub(1);
+                    let end_idx = end.min(chunks.len());
+
+                    if start_idx >= chunks.len() {
+                        return Err(IndexerError::invalid_input(format!(
+                            "Chunk range {start}-{end} exceeds available chunks ({})",
+                            chunks.len()
+                        )));
+                    }
+
+                    chunks[start_idx..end_idx].join("\n")
+                } else {
+                    // Return all chunks
+                    chunks.join("\n")
+                }
+            } else {
+                // File indexed but no chunks stored, read from filesystem
+                let content = std::fs::read_to_string(&file_path).map_err(|e| {
+                    IndexerError::file_processing(format!("Failed to read file: {e}"))
+                })?;
+
+                if let Some((start, end)) = chunk_range {
+                    // Split content into chunks on-the-fly for files without stored chunks
+                    let lines: Vec<&str> = content.lines().collect();
+                    let lines_per_chunk = lines.len().div_ceil(10); // Approximate 10 chunks
+                    let total_chunks = lines.len().div_ceil(lines_per_chunk);
+
+                    if start > total_chunks || start == 0 {
+                        return Err(IndexerError::invalid_input(format!(
+                            "Chunk {start} is out of range. File has {total_chunks} estimated chunks"
+                        )));
+                    }
+
+                    let start_line = (start - 1) * lines_per_chunk;
+                    let end_line = (end * lines_per_chunk).min(lines.len());
+
+                    lines[start_line..end_line].join("\n")
+                } else {
+                    content
+                }
+            }
+        } else {
+            // File not indexed, read directly from file system
+            let content = std::fs::read_to_string(&file_path)
+                .map_err(|e| IndexerError::file_processing(format!("Failed to read file: {e}")))?;
+
+            if let Some((start, end)) = chunk_range {
+                // Split content into chunks on-the-fly for unindexed files
+                let lines: Vec<&str> = content.lines().collect();
+                let lines_per_chunk = lines.len().div_ceil(10); // Approximate 10 chunks
+                let total_chunks = lines.len().div_ceil(lines_per_chunk);
+
+                if start > total_chunks || start == 0 {
+                    return Err(IndexerError::invalid_input(format!(
+                        "Chunk {start} is out of range. File has {total_chunks} estimated chunks"
+                    )));
+                }
+
+                let start_line = (start - 1) * lines_per_chunk;
+                let end_line = (end * lines_per_chunk).min(lines.len());
+
+                lines[start_line..end_line].join("\n")
+            } else {
+                content
+            }
+        };
+
+        Ok(content)
     }
+}
+
+pub async fn create_search_engine() -> Result<SearchEngine> {
+    let config = crate::Config::load()?;
+    crate::environment::validate_environment(&config).await?;
+
+    let sqlite_store = crate::storage::SqliteStore::new(&config.storage.sqlite_path)?;
+    let vector_store = crate::storage::QdrantStore::new(
+        &config.storage.qdrant.endpoint,
+        config.storage.qdrant.collection.clone(),
+    )
+    .await?;
+    let embedding_provider = crate::embedding::create_embedding_provider(&config.embedding)?;
+
+    Ok(SearchEngine::new(
+        sqlite_store,
+        vector_store,
+        embedding_provider,
+    ))
 }
 
 #[cfg(test)]
@@ -216,40 +427,28 @@ mod tests {
     fn create_sample_search_results() -> Vec<SearchResult> {
         vec![
             SearchResult {
-                file_path: PathBuf::from("/home/user/docs/readme.md"),
+                file_path: "/home/user/docs/readme.md".to_string(),
                 chunk_id: 0,
                 score: 0.9,
-                content_snippet: Some("This is a readme file".to_string()),
                 parent_directories: vec!["docs".to_string()],
-                file_size: 1024,
-                modified_time: 1234567890,
             },
             SearchResult {
-                file_path: PathBuf::from("/home/user/code/main.rs"),
+                file_path: "/home/user/code/main.rs".to_string(),
                 chunk_id: 1,
                 score: 0.8,
-                content_snippet: Some("fn main() { println!(\"Hello\"); }".to_string()),
                 parent_directories: vec!["code".to_string()],
-                file_size: 512,
-                modified_time: 1234567891,
             },
             SearchResult {
-                file_path: PathBuf::from("/home/user/docs/api.md"),
+                file_path: "/home/user/docs/api.md".to_string(),
                 chunk_id: 0,
                 score: 0.7,
-                content_snippet: Some("API documentation".to_string()),
                 parent_directories: vec!["docs".to_string()],
-                file_size: 2048,
-                modified_time: 1234567892,
             },
             SearchResult {
-                file_path: PathBuf::from("/home/user/other/test.txt"),
+                file_path: "/home/user/other/test.txt".to_string(),
                 chunk_id: 0,
                 score: 0.5,
-                content_snippet: Some("Test content".to_string()),
                 parent_directories: vec!["other".to_string()],
-                file_size: 256,
-                modified_time: 1234567893,
             },
         ]
     }
@@ -491,21 +690,15 @@ mod tests {
     #[test]
     fn test_search_result_creation() {
         let result = SearchResult {
-            file_path: PathBuf::from("/test/file.txt"),
+            file_path: "/test/file.txt".to_string(),
             chunk_id: 1,
             score: 0.85,
-            content_snippet: Some("test content".to_string()),
             parent_directories: vec!["test".to_string()],
-            file_size: 1024,
-            modified_time: 1234567890,
         };
 
-        assert_eq!(result.file_path, PathBuf::from("/test/file.txt"));
+        assert_eq!(result.file_path, "/test/file.txt");
         assert_eq!(result.chunk_id, 1);
         assert_eq!(result.score, 0.85);
-        assert_eq!(result.content_snippet, Some("test content".to_string()));
         assert_eq!(result.parent_directories, vec!["test".to_string()]);
-        assert_eq!(result.file_size, 1024);
-        assert_eq!(result.modified_time, 1234567890);
     }
 }
