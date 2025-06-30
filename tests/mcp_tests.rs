@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use tokio::time::timeout;
 
 struct McpServerHandle {
     process: std::process::Child,
@@ -154,8 +155,8 @@ fn test_mcp_list_tools() {
     }
 }
 
-#[test]
-fn test_mcp_index_tool() {
+#[tokio::test]
+async fn test_mcp_index_tool() {
     if !are_services_available() {
         println!("Skipping test - required services not available");
         return;
@@ -178,7 +179,13 @@ fn test_mcp_index_tool() {
         .send_request(initialize_request)
         .expect("Initialize failed");
 
-    // Test index tool with simple mock call
+    // Test index tool with test data directory
+    let test_data_path = std::env::current_dir()
+        .unwrap()
+        .join("test_data")
+        .to_string_lossy()
+        .to_string();
+
     let index_request = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -186,14 +193,18 @@ fn test_mcp_index_tool() {
         "params": {
             "name": "index",
             "arguments": {
-                "directory_path": "/tmp"
+                "directory_path": test_data_path
             }
         }
     });
 
-    let response = server
-        .send_request(index_request)
-        .expect("Failed to call index");
+    // Add timeout to prevent hanging (2 minutes should be plenty for test data)
+    let response = timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out after 2 minutes")
+    .expect("Failed to call index");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 2);
