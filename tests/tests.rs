@@ -123,17 +123,15 @@ fn test_cli_validation() {
 
 #[test]
 fn test_config_defaults() {
-    let config = Config::load().expect("Config should load");
+    // Test default config without any environment variable influence
+    let config = Config::default();
 
     assert_eq!(config.embedding.provider, "ollama");
     assert_eq!(config.embedding.model, "nomic-embed-text");
     assert_eq!(config.indexing.chunk_size, 512);
     assert_eq!(config.indexing.concurrency, 4);
-    assert!(config
-        .storage
-        .qdrant
-        .collection
-        .starts_with("directory-indexer-test-"));
+    // Default config should use "directory-indexer-test" when running under cargo
+    assert_eq!(config.storage.qdrant.collection, "directory-indexer-test");
     assert_eq!(config.monitoring.batch_size, 100);
     assert!(!config.monitoring.file_watching);
     assert!(config.storage.qdrant.endpoint.starts_with("http://"));

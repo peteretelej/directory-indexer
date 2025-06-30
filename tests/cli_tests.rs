@@ -74,29 +74,24 @@ fn ensure_shared_collection_exists() {
 fn test_command(test_name: &str) -> Command {
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
 
-    // Determine collection name based on whether we're using temp data or test_data
+    // Hardcoded collection names - no environment variable dependencies
     let collection_name = if test_name.starts_with("semantic-")
         || test_name.contains("test-data")
         || test_name == "search-path-filter"
         || test_name == "search-limit"
         || test_name == "similar-workflow"
     {
-        // Use shared collection for tests that work with test_data
-        std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION")
-            .unwrap_or_else(|_| "directory-indexer-integration-test".to_string())
+        // Shared collection for tests that use pre-indexed test_data
+        "directory-indexer-integration-test".to_string()
     } else {
-        // Use unique collection for tests with temp data
-        format!("di-test-cli-{}", test_name)
+        // Individual collections for tests with temporary data
+        format!("di-test-{}", test_name)
     };
 
     cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", &collection_name);
     eprintln!(
-        "Test '{}' using collection env var: {}",
+        "Test '{}' using hardcoded collection: {}",
         test_name, collection_name
-    );
-    eprintln!(
-        "CI should have pre-indexed into: {}",
-        std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION").unwrap_or("NOT_SET".to_string())
     );
     cmd
 }

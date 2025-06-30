@@ -77,7 +77,6 @@ jobs:
         run: cargo test --lib
         env:
           DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-test
-          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-integration-test
 
       - name: Build release
         run: cargo build --release
@@ -213,7 +212,6 @@ jobs:
         env:
           QDRANT_ENDPOINT: http://localhost:6333
           OLLAMA_ENDPOINT: http://localhost:11434
-          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-integration-test
           RUST_LOG: debug
           RUST_BACKTRACE: 1
 
