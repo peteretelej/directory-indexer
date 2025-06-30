@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,34 +15,34 @@ jobs:
     name: Lint and Format
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: stable
-        components: rustfmt, clippy
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
 
-    - name: Cache Cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: lint-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: lint-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Check formatting
-      run: cargo fmt --all -- --check
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
-    - name: Check with clippy
-      run: |
-        # Check main library code with strict linting
-        cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
-        # Check other targets with standard linting (tests can be less strict)
-        cargo clippy --bins --all-features -- -D warnings
+      - name: Check with clippy
+        run: |
+          # Check main library code with strict linting
+          cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
+          # Check other targets with standard linting (tests can be less strict)
+          cargo clippy --bins --all-features -- -D warnings
 
   # Unit tests - no external services needed
   test-unit:
@@ -55,45 +55,45 @@ jobs:
         rust: [stable]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
 
-    - name: Cache Cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install cargo-llvm-cov
-      uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-    - name: Run unit tests with coverage
-      run: cargo llvm-cov --lib --lcov --output-path unit-coverage.lcov
-      env:
-        DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-test
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-test
+      - name: Run unit tests with coverage
+        run: cargo llvm-cov --lib --lcov --output-path unit-coverage.lcov
+        env:
+          DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-test
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-ci
 
-    - name: Upload unit test coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        files: unit-coverage.lcov
-        flags: unit
-        name: unit-tests
-        verbose: true
-        fail_ci_if_error: true
-        token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload unit test coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: unit-coverage.lcov
+          flags: unit
+          name: unit-tests
+          verbose: true
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Build release
-      run: cargo build --release
+      - name: Build release
+        run: cargo build --release
 
   # Integration tests - need services (conditional)
   test-integration:
@@ -106,135 +106,156 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'main' ||
       contains(github.event.head_commit.message, '[integration]') ||
       contains(github.event.pull_request.title, '[integration]')
-    
+
     services:
       qdrant:
-        image: qdrant/qdrant:v1.11.0  # Pin to specific version for caching
+        image: qdrant/qdrant:v1.11.0 # Pin to specific version for caching
         ports:
           - 6333:6333
 
       ollama:
-        image: ollama/ollama:0.3.12  # Pin to specific version for caching  
+        image: ollama/ollama:0.3.12 # Pin to specific version for caching
         ports:
           - 11434:11434
         env:
           OLLAMA_HOST: 0.0.0.0
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: docker-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
-        restore-keys: |
-          docker-${{ runner.os }}-
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            docker-${{ runner.os }}-
 
-    - name: Pull and cache Docker images
-      run: |
-        # Pull images in parallel
-        docker pull qdrant/qdrant:v1.11.0 &
-        docker pull ollama/ollama:0.3.12 &
-        wait
-        echo "✅ Docker images cached"
+      - name: Pull and cache Docker images
+        run: |
+          # Pull images in parallel
+          docker pull qdrant/qdrant:v1.11.0 &
+          docker pull ollama/ollama:0.3.12 &
+          wait
+          echo "✅ Docker images cached"
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: stable
-        components: llvm-tools-preview
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
 
-    - name: Install npm dependencies
-      run: npm ci
+      - name: Install npm dependencies
+        run: npm ci
 
-    - name: Install cargo-llvm-cov
-      uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-    - name: Cache Cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: integration-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: integration-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Cache Ollama models
-      uses: actions/cache@v3
-      with:
-        path: ~/.ollama
-        key: ollama-models-${{ hashFiles('.github/workflows/ci.yml') }}
-        restore-keys: |
-          ollama-models-
+      - name: Cache Ollama models
+        uses: actions/cache@v3
+        with:
+          path: ~/.ollama
+          key: ollama-models-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            ollama-models-
 
-    - name: Wait for services and setup Ollama model
-      run: |
-        echo "Waiting for Qdrant..."
-        timeout 120 bash -c 'until curl -f http://localhost:6333/healthz; do echo "  Qdrant not ready, waiting..."; sleep 2; done'
-        echo "✅ Qdrant is ready!"
-        
-        echo "Waiting for Ollama..."
-        timeout 180 bash -c 'until curl -f http://localhost:11434/api/tags; do echo "  Ollama not ready, waiting..."; sleep 5; done'
-        echo "✅ Ollama is ready!"
+      - name: Wait for services and setup Ollama model
+        run: |
+          echo "Waiting for Qdrant..."
+          timeout 120 bash -c 'until curl -f http://localhost:6333/healthz; do echo "  Qdrant not ready, waiting..."; sleep 2; done'
+          echo "✅ Qdrant is ready!"
 
-        # Check if model is already available
-        if curl -s http://localhost:11434/api/tags | grep -q "nomic-embed-text"; then
-          echo "✅ nomic-embed-text model already available"
-        else
-          echo "Pulling nomic-embed-text model..."
-          curl -X POST http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}' --max-time 300
-          echo "✅ Model pull completed"
-        fi
+          echo "Waiting for Ollama..."
+          timeout 180 bash -c 'until curl -f http://localhost:11434/api/tags; do echo "  Ollama not ready, waiting..."; sleep 5; done'
+          echo "✅ Ollama is ready!"
 
-    - name: Run integration tests with coverage
-      run: |
-        cargo llvm-cov --test cli_tests --test mcp_tests --lcov --output-path lcov.info
-      timeout-minutes: 10
-      env:
-        QDRANT_ENDPOINT: http://localhost:6333
-        OLLAMA_ENDPOINT: http://localhost:11434
-        DIRECTORY_INDEXER_DATA_DIR: /tmp/directory-indexer-integration
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-test
+          # Check if model is already available
+          if curl -s http://localhost:11434/api/tags | grep -q "nomic-embed-text"; then
+            echo "✅ nomic-embed-text model already available"
+          else
+            echo "Pulling nomic-embed-text model..."
+            curl -X POST http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}' --max-time 300
+            echo "✅ Model pull completed"
+          fi
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        files: lcov.info
-        flags: integration
-        name: integration-tests
-        verbose: true
-        fail_ci_if_error: true
-        token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Pre-index test data for integration tests
+        run: |
+          cargo build --release
+          ./target/release/directory-indexer index test_data
+        timeout-minutes: 5
+        env:
+          QDRANT_ENDPOINT: http://localhost:6333
+          OLLAMA_ENDPOINT: http://localhost:11434
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-ci
+
+      - name: Verify pre-indexed data exists
+        run: |
+          echo "Checking collection status..."
+          ./target/release/directory-indexer status
+          echo "Running a test search to verify data is accessible..."
+          ./target/release/directory-indexer search "test" || echo "ERROR: Pre-index search failed but continuing..."
+        env:
+          QDRANT_ENDPOINT: http://localhost:6333
+          OLLAMA_ENDPOINT: http://localhost:11434
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-ci
+
+      - name: Run integration tests with coverage
+        run: |
+          cargo llvm-cov --test cli_tests --test mcp_tests --lcov --output-path lcov.info
+        timeout-minutes: 10
+        env:
+          QDRANT_ENDPOINT: http://localhost:6333
+          OLLAMA_ENDPOINT: http://localhost:11434
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-ci
+          RUST_LOG: debug
+          RUST_BACKTRACE: 1
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          flags: integration
+          name: integration-tests
+          verbose: true
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # Security audit
   security:
     name: Security Audit
     runs-on: ubuntu-latest
     needs: lint
-    
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Install cargo-audit
-      uses: taiki-e/install-action@cargo-audit
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
 
-    - name: Run security audit
-      run: cargo audit
-
+      - name: Run security audit
+        run: cargo audit

@@ -302,15 +302,25 @@ impl McpServer {
             .and_then(|v| v.as_u64())
             .map(|l| l as usize);
 
-        // Call CLI search function without console output
-        match crate::cli::commands::search_internal(
-            query.clone(),
-            directory_path.clone(),
-            limit,
-            false,
-        )
-        .await
-        {
+        // Use SearchEngine directly
+        let search_engine = match crate::search::engine::create_search_engine().await {
+            Ok(engine) => engine,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::internal_error(format!("Failed to create search engine: {e}")),
+                )
+            }
+        };
+
+        let search_query = crate::search::engine::SearchQuery {
+            text: query.clone(),
+            directory_filter: directory_path.as_ref().map(std::path::PathBuf::from),
+            limit: limit.unwrap_or(10),
+            similarity_threshold: None,
+        };
+
+        match search_engine.search(search_query).await {
             Ok(search_results) => {
                 let mut content = format!("Search completed for query: '{query}'\n");
                 if let Some(path) = &directory_path {
@@ -326,7 +336,7 @@ impl McpServer {
                 } else {
                     content.push_str("Search Results:\n");
                     content.push_str("==============\n");
-                    
+
                     for (i, result) in search_results.iter().enumerate() {
                         content.push_str(&format!(
                             "\n{}. {} (score: {:.3})\n",
@@ -336,7 +346,10 @@ impl McpServer {
                         ));
                         content.push_str(&format!("   Chunk: {}\n", result.chunk_id));
                         if !result.parent_directories.is_empty() {
-                            content.push_str(&format!("   Path: {}\n", result.parent_directories.join(" > ")));
+                            content.push_str(&format!(
+                                "   Path: {}\n",
+                                result.parent_directories.join(" > ")
+                            ));
                         }
                     }
                 }
@@ -384,10 +397,45 @@ impl McpServer {
             .map(|l| l as usize)
             .unwrap_or(10);
 
-        // Call CLI similar function without console output
-        match crate::cli::commands::similar_internal(file_path.clone(), limit, false).await {
-            Ok(_) => {
-                let content = format!("Similar files search completed for: {file_path}\nLimit: {limit}\n\nThe search analyzes the file's content and finds files with similar semantic meaning using vector embeddings. Results are ranked by similarity score.");
+        // Use SearchEngine directly
+        let search_engine = match crate::search::engine::create_search_engine().await {
+            Ok(engine) => engine,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::internal_error(format!("Failed to create search engine: {e}")),
+                )
+            }
+        };
+
+        match search_engine
+            .find_similar_files(std::path::PathBuf::from(&file_path), limit)
+            .await
+        {
+            Ok(similar_results) => {
+                let mut content =
+                    format!("Similar files search completed for: {file_path}\nLimit: {limit}\n");
+                content.push_str(&format!(
+                    "Found {} similar files\n\n",
+                    similar_results.len()
+                ));
+
+                if similar_results.is_empty() {
+                    content.push_str("No similar files found.");
+                } else {
+                    content.push_str("Similar Files:\n");
+                    content.push_str("==============\n");
+
+                    for (i, result) in similar_results.iter().enumerate() {
+                        content.push_str(&format!(
+                            "\n{}. {} (score: {:.3})\n",
+                            i + 1,
+                            result.file_path,
+                            result.score
+                        ));
+                        content.push_str(&format!("   Best matching chunk: {}\n", result.chunk_id));
+                    }
+                }
 
                 let result = json!({
                     "content": [
@@ -431,20 +479,58 @@ impl McpServer {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        // Call CLI get function without console output
-        match crate::cli::commands::get_internal(file_path.clone(), chunks.clone(), false).await {
-            Ok(_) => {
-                let mut content = format!("Content retrieved from: {file_path}\n");
-                if let Some(c) = chunks {
-                    content.push_str(&format!("Chunks: {c}\n"));
+        // Parse chunk range if provided
+        let chunk_range = if let Some(ref chunk_str) = chunks {
+            match crate::cli::commands::validate_chunk_range(chunk_str) {
+                Ok(_) => match crate::cli::commands::parse_chunk_range(chunk_str) {
+                    Ok(range) => Some(range),
+                    Err(e) => {
+                        return JsonRpcResponse::error(
+                            id,
+                            JsonRpcError::invalid_params(format!("Invalid chunk range: {e}")),
+                        )
+                    }
+                },
+                Err(e) => {
+                    return JsonRpcResponse::error(
+                        id,
+                        JsonRpcError::invalid_params(format!("Invalid chunk range: {e}")),
+                    )
                 }
-                content.push_str("\nThe file content has been retrieved from the indexed database. If chunks were specified, only those specific chunks are returned. Otherwise, the full file content is provided.");
+            }
+        } else {
+            None
+        };
+
+        // Use SearchEngine directly
+        let search_engine = match crate::search::engine::create_search_engine().await {
+            Ok(engine) => engine,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::internal_error(format!("Failed to create search engine: {e}")),
+                )
+            }
+        };
+
+        match search_engine
+            .get_file_content(std::path::PathBuf::from(&file_path), chunk_range)
+            .await
+        {
+            Ok(file_content) => {
+                let mut header = format!("Content retrieved from: {file_path}\n");
+                if let Some(c) = &chunks {
+                    header.push_str(&format!("Chunks: {c}\n"));
+                }
+                header.push_str("\n--- FILE CONTENT ---\n");
+
+                let full_content = format!("{header}{file_content}");
 
                 let result = json!({
                     "content": [
                         {
                             "type": "text",
-                            "text": content
+                            "text": full_content
                         }
                     ]
                 });

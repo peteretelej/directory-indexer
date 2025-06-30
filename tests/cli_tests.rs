@@ -6,9 +6,25 @@ use std::fs;
 use tempfile::TempDir;
 
 fn test_command(test_name: &str) -> Command {
-    let collection_name = format!("di-test-cli-{}", test_name);
     let mut cmd = Command::cargo_bin("directory-indexer").unwrap();
-    cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", collection_name);
+
+    // Determine collection name based on whether we're using temp data or test_data
+    let collection_name = if test_name.starts_with("semantic-")
+        || test_name.contains("test-data")
+        || test_name == "search-path-filter"
+        || test_name == "search-limit"
+        || test_name == "similar-workflow"
+    {
+        // Use shared collection for tests that work with test_data
+        std::env::var("DIRECTORY_INDEXER_QDRANT_COLLECTION")
+            .unwrap_or_else(|_| "directory-indexer-ci".to_string())
+    } else {
+        // Use unique collection for tests with temp data
+        format!("di-test-cli-{}", test_name)
+    };
+
+    cmd.env("DIRECTORY_INDEXER_QDRANT_COLLECTION", &collection_name);
+    eprintln!("Test '{}' using collection: {}", test_name, collection_name);
     cmd
 }
 
@@ -276,7 +292,7 @@ fn test_semantic_search_authentication() {
 
     let test_data_path = get_test_data_path();
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("semantic-auth")
         .arg("index")
         .arg(&test_data_path)
@@ -295,9 +311,12 @@ fn test_semantic_search_authentication() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stdout.contains("api_guide.md") || stdout.contains("Search Results"),
-        "Should find API guide when searching for authentication"
+        "Should find API guide when searching for authentication. \nSTDOUT: {}\nSTDERR: {}",
+        stdout,
+        stderr
     );
 }
 
@@ -310,7 +329,7 @@ fn test_semantic_search_error_handling() {
 
     let test_data_path = get_test_data_path();
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("semantic-error")
         .arg("index")
         .arg(&test_data_path)
@@ -329,9 +348,11 @@ fn test_semantic_search_error_handling() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stdout.contains("troubleshooting.md") || stdout.contains("Search Results"),
-        "Should find troubleshooting guide when searching for error handling"
+        "Should find troubleshooting guide when searching for error handling. \nSTDOUT: {}\nSTDERR: {}",
+        stdout, stderr
     );
 }
 
@@ -344,7 +365,7 @@ fn test_semantic_search_programming() {
 
     let test_data_path = get_test_data_path();
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("semantic-prog")
         .arg("index")
         .arg(&test_data_path)
@@ -363,11 +384,14 @@ fn test_semantic_search_programming() {
         .clone();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stdout.contains("rust.txt")
             || stdout.contains("hello.rs")
             || stdout.contains("Search Results"),
-        "Should find Rust files when searching for rust programming"
+        "Should find Rust files when searching for rust programming. \nSTDOUT: {}\nSTDERR: {}",
+        stdout,
+        stderr
     );
 }
 
@@ -381,7 +405,7 @@ fn test_search_with_path_filter() {
     let test_data_path = get_test_data_path();
     let programming_path = std::path::Path::new(&test_data_path).join("programming");
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("search-path-filter")
         .arg("index")
         .arg(&test_data_path)
@@ -409,7 +433,7 @@ fn test_search_with_limit() {
 
     let test_data_path = get_test_data_path();
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("search-limit")
         .arg("index")
         .arg(&test_data_path)
@@ -440,7 +464,7 @@ fn test_similar_files_workflow() {
         .join("programming")
         .join("hello.rs");
 
-    // Index test_data first
+    // Index test_data (fast if already pre-indexed by CI)
     test_command("similar-workflow")
         .arg("index")
         .arg(&test_data_path)

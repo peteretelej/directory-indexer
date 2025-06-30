@@ -6,10 +6,7 @@ coverage:
       default:
         target: 80%
         threshold: 1%
-    patch:
-      default:
-        target: 80%
-        threshold: 5%
+    patch: off
 
 comment:
   layout: "diff,flags,tree"

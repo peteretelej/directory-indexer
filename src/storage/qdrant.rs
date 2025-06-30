@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::error::{IndexerError, Result};
+use crate::search::engine::SearchResult;
 
 pub struct QdrantStore {
     client: Client,
@@ -16,14 +17,6 @@ pub struct VectorPoint {
     pub vector: Vec<f32>,
     pub file_path: String,
     pub chunk_id: usize,
-    pub parent_directories: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    pub file_path: String,
-    pub chunk_id: usize,
-    pub score: f32,
     pub parent_directories: Vec<String>,
 }
 

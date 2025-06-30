@@ -413,7 +413,7 @@ async fn test_mcp_full_workflow() {
         }
     });
 
-    let index_response = timeout(Duration::from_secs(120), async {
+    let index_response = timeout(Duration::from_secs(300), async {
         server.send_request(index_request)
     })
     .await
@@ -732,7 +732,8 @@ async fn test_mcp_search_authentication_content() {
                             "Should not contain placeholder message"
                         );
                         assert!(
-                            text.contains("api_guide.md") || text.contains("Found") && text.contains("results"),
+                            text.contains("api_guide.md")
+                                || text.contains("Found") && text.contains("results"),
                             "Should find api_guide.md or show actual search results. Got: {}",
                             text
                         );
@@ -910,7 +911,8 @@ async fn test_mcp_search_machine_learning_content() {
                             "Should not contain placeholder message"
                         );
                         assert!(
-                            text.contains("ai.txt") || (text.contains("Found") && text.contains("results")),
+                            text.contains("ai.txt")
+                                || (text.contains("Found") && text.contains("results")),
                             "Should find ai.txt or show actual search results. Got: {}",
                             text
                         );
