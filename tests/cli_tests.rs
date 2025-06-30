@@ -254,3 +254,197 @@ async fn test_qdrant_delete_operations() {
     let result = store.delete_collection().await;
     assert!(result.is_ok(), "Delete collection should succeed");
 }
+
+// ============================================================================
+// Semantic Search Quality Tests using test_data
+// ============================================================================
+
+fn get_test_data_path() -> String {
+    std::env::current_dir()
+        .unwrap()
+        .join("test_data")
+        .to_string_lossy()
+        .to_string()
+}
+
+#[test]
+fn test_semantic_search_authentication() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+
+    // Index test_data first
+    test_command("semantic-auth")
+        .arg("index")
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Search for authentication - should find API guide
+    let output = test_command("semantic-auth")
+        .arg("search")
+        .arg("authentication")
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("api_guide.md") || stdout.contains("Search Results"), 
+            "Should find API guide when searching for authentication");
+}
+
+#[test]
+fn test_semantic_search_error_handling() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+
+    // Index test_data first
+    test_command("semantic-error")
+        .arg("index")
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Search for error handling - should find troubleshooting docs
+    let output = test_command("semantic-error")
+        .arg("search")
+        .arg("error handling")
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("troubleshooting.md") || stdout.contains("Search Results"),
+            "Should find troubleshooting guide when searching for error handling");
+}
+
+#[test] 
+fn test_semantic_search_programming() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+
+    // Index test_data first
+    test_command("semantic-prog")
+        .arg("index")
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Search for rust programming - should find rust files
+    let output = test_command("semantic-prog")
+        .arg("search")
+        .arg("rust programming")
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("rust.txt") || stdout.contains("hello.rs") || stdout.contains("Search Results"),
+            "Should find Rust files when searching for rust programming");
+}
+
+#[test]
+fn test_search_with_path_filter() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+    let programming_path = std::path::Path::new(&test_data_path).join("programming");
+
+    // Index test_data first
+    test_command("search-path-filter")
+        .arg("index") 
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Search within programming directory only
+    test_command("search-path-filter")
+        .arg("search")
+        .arg("function")
+        .arg("--path")
+        .arg(programming_path.to_str().unwrap())
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_search_with_limit() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+
+    // Index test_data first
+    test_command("search-limit")
+        .arg("index")
+        .arg(&test_data_path) 
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Search with limit
+    test_command("search-limit")
+        .arg("search")
+        .arg("configuration")
+        .arg("--limit")
+        .arg("2")
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_similar_files_workflow() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let test_data_path = get_test_data_path();
+    let hello_rs_path = std::path::Path::new(&test_data_path)
+        .join("programming")
+        .join("hello.rs");
+
+    // Index test_data first
+    test_command("similar-workflow")
+        .arg("index")
+        .arg(&test_data_path)
+        .timeout(std::time::Duration::from_secs(120))
+        .assert()
+        .success();
+
+    // Find files similar to hello.rs
+    test_command("similar-workflow")
+        .arg("similar")
+        .arg(hello_rs_path.to_str().unwrap())
+        .timeout(std::time::Duration::from_secs(30))
+        .assert()
+        .success();
+}

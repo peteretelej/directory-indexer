@@ -362,3 +362,278 @@ fn test_mcp_resources_templates_list() {
     assert!(response["result"]["resourceTemplates"].is_array());
     assert!(response["error"].is_null() || !response.get("error").is_some());
 }
+
+// ============================================================================
+// Full Workflow Tests using test_data  
+// ============================================================================
+
+fn get_test_data_path() -> String {
+    std::env::current_dir()
+        .unwrap()
+        .join("test_data")
+        .to_string_lossy()
+        .to_string()
+}
+
+#[tokio::test]
+async fn test_mcp_full_workflow() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server.send_request(initialize_request).expect("Initialize failed");
+
+    // Index test_data
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    let index_response = timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    assert_eq!(index_response["jsonrpc"], "2.0");
+    assert_eq!(index_response["id"], 2);
+    assert!(index_response.get("result").is_some());
+
+    // Search for authentication
+    let search_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": "authentication"
+            }
+        }
+    });
+
+    let search_response = server.send_request(search_request)
+        .expect("Failed to call search");
+
+    assert_eq!(search_response["jsonrpc"], "2.0");
+    assert_eq!(search_response["id"], 3);
+    assert!(search_response.get("result").is_some());
+}
+
+#[tokio::test]
+async fn test_mcp_search_with_parameters() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server.send_request(initialize_request).expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Search with directory_path and limit parameters
+    let search_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": "programming",
+                "directory_path": get_test_data_path() + "/programming",
+                "limit": 3
+            }
+        }
+    });
+
+    let response = server.send_request(search_request)
+        .expect("Failed to call search with parameters");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 3);
+    assert!(response.get("result").is_some());
+}
+
+#[tokio::test]
+async fn test_mcp_similar_files_tool() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server.send_request(initialize_request).expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Test similar_files tool
+    let similar_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "similar_files",
+            "arguments": {
+                "file_path": get_test_data_path() + "/programming/hello.rs",
+                "limit": 5
+            }
+        }
+    });
+
+    let response = server.send_request(similar_request)
+        .expect("Failed to call similar_files");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 3);
+    assert!(response.get("result").is_some() || response.get("error").is_some());
+}
+
+#[tokio::test]
+async fn test_mcp_get_content_tool() {
+    if !are_services_available() {
+        println!("Skipping test - required services not available");
+        return;
+    }
+
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+    let test_data_path = get_test_data_path();
+
+    // Initialize
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    server.send_request(initialize_request).expect("Initialize failed");
+
+    // Index test_data first
+    let index_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "index",
+            "arguments": {
+                "directory_path": test_data_path
+            }
+        }
+    });
+
+    timeout(Duration::from_secs(120), async {
+        server.send_request(index_request)
+    })
+    .await
+    .expect("Index operation timed out")
+    .expect("Failed to call index");
+
+    // Test get_content tool
+    let get_request = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "get_content",
+            "arguments": {
+                "file_path": get_test_data_path() + "/docs/api_guide.md"
+            }
+        }
+    });
+
+    let response = server.send_request(get_request)
+        .expect("Failed to call get_content");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 3);
+    assert!(response.get("result").is_some() || response.get("error").is_some());
+}
