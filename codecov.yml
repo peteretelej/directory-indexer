@@ -1,4 +1,6 @@
 coverage:
+  ignore:
+    - "test_data/**/*"
   status:
     project:
       default:

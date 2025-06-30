@@ -1,0 +1,2 @@
+# Exclude test data from GitHub language detection
+test_data/** linguist-documentation

@@ -201,6 +201,7 @@ jobs:
     - name: Run integration tests with coverage
       run: |
         cargo llvm-cov --test cli_tests --test mcp_tests --lcov --output-path lcov.info
+      timeout-minutes: 10
       env:
         QDRANT_ENDPOINT: http://localhost:6333
         OLLAMA_ENDPOINT: http://localhost:11434
