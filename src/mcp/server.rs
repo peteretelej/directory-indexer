@@ -79,8 +79,11 @@ impl McpServer {
 
         match request.method.as_str() {
             "initialize" => self.handle_initialize(request.id, request.params).await,
+            "notifications/initialized" => self.handle_notifications_initialized(request.id).await,
             "tools/list" => self.handle_tools_list(request.id).await,
             "tools/call" => self.handle_tools_call(request.id, request.params).await,
+            "resources/list" => self.handle_resources_list(request.id).await,
+            "resources/templates/list" => self.handle_resources_templates_list(request.id).await,
             _ => {
                 warn!("Unknown method: {}", request.method);
                 JsonRpcResponse::error(request.id, JsonRpcError::method_not_found())
@@ -99,7 +102,10 @@ impl McpServer {
             "tools": {
                 "listChanged": true
             },
-            "resources": {},
+            "resources": {
+                "subscribe": false,
+                "listChanged": false
+            },
             "prompts": {},
             "logging": {}
         });
@@ -111,6 +117,35 @@ impl McpServer {
                 "name": "directory-indexer",
                 "version": env!("CARGO_PKG_VERSION")
             }
+        });
+
+        JsonRpcResponse::success(id, result)
+    }
+
+    async fn handle_notifications_initialized(&self, id: Option<Value>) -> JsonRpcResponse {
+        info!("Handling notifications/initialized");
+        // For notifications, we typically don't send a response
+        // But if we do, it should be a success with no result
+        JsonRpcResponse::success(id, json!({}))
+    }
+
+    async fn handle_resources_list(&self, id: Option<Value>) -> JsonRpcResponse {
+        info!("Handling resources/list request");
+
+        // Return empty resources list for now
+        let result = json!({
+            "resources": []
+        });
+
+        JsonRpcResponse::success(id, result)
+    }
+
+    async fn handle_resources_templates_list(&self, id: Option<Value>) -> JsonRpcResponse {
+        info!("Handling resources/templates/list request");
+
+        // Return empty resource templates list for now
+        let result = json!({
+            "resourceTemplates": []
         });
 
         JsonRpcResponse::success(id, result)
@@ -779,5 +814,53 @@ mod tests {
         // Should succeed in parameter parsing
         assert_eq!(response.jsonrpc, "2.0");
         assert_eq!(response.id, Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_notifications_initialized() {
+        let server = create_test_server().await;
+        let request =
+            r#"{"jsonrpc":"2.0","id":1,"method":"notifications/initialized","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_resources_list() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert!(result["resources"].is_array());
+        assert_eq!(result["resources"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_resources_templates_list() {
+        let server = create_test_server().await;
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"resources/templates/list","params":{}}"#;
+
+        let response = server.handle_request_test(request).await;
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+        assert!(response.result.is_some());
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert!(result["resourceTemplates"].is_array());
+        assert_eq!(result["resourceTemplates"].as_array().unwrap().len(), 0);
     }
 }

@@ -286,3 +286,68 @@ fn test_mcp_error_handling() {
     assert_eq!(response["id"], 2);
     assert!(response["error"].is_object());
 }
+
+#[test]
+fn test_mcp_notifications_initialized() {
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+
+    let notifications_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "notifications/initialized",
+        "params": {}
+    });
+
+    let response = server
+        .send_request(notifications_request)
+        .expect("Failed to send notifications/initialized");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+    assert!(response["result"].is_object());
+    assert!(response["error"].is_null() || !response.get("error").is_some());
+}
+
+#[test]
+fn test_mcp_resources_list() {
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+
+    let resources_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "resources/list",
+        "params": {}
+    });
+
+    let response = server
+        .send_request(resources_request)
+        .expect("Failed to send resources/list");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+    assert!(response["result"].is_object());
+    assert!(response["result"]["resources"].is_array());
+    assert!(response["error"].is_null() || !response.get("error").is_some());
+}
+
+#[test]
+fn test_mcp_resources_templates_list() {
+    let mut server = McpServerHandle::new().expect("Failed to start MCP server");
+
+    let templates_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "resources/templates/list",
+        "params": {}
+    });
+
+    let response = server
+        .send_request(templates_request)
+        .expect("Failed to send resources/templates/list");
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+    assert!(response["result"].is_object());
+    assert!(response["result"]["resourceTemplates"].is_array());
+    assert!(response["error"].is_null() || !response.get("error").is_some());
+}
