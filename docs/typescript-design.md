@@ -4,6 +4,8 @@
 
 This document outlines the design for rewriting directory-indexer from Rust to TypeScript/Node.js to eliminate binary installation issues on Windows while maintaining full functionality.
 
+**Note**: The original Rust implementation has been moved to `rust-reference/` for reference during migration and will be removed once the TypeScript version is complete and validated.
+
 ## Goals
 
 1. **Eliminate binary downloads** - Pure Node.js solution, no platform-specific binaries

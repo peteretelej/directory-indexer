@@ -1,209 +1,221 @@
-# Directory Indexer Design
+# Directory Indexer - Node.js Design
 
 ## Overview
 
-Self-hosted semantic search for local files. Cross-platform Rust application that generates vector embeddings of file content and provides search via CLI and MCP server integration.
-
-**Dependencies**: Minimal essential crates for core functionality, no heavy frameworks.
-
-## Related Documentation
-
-- [System Flow Diagrams](designs/flows.md) - Visual flow charts for all major operations
-- [API Reference](designs/API.md) - Complete CLI and MCP API documentation
+Pure Node.js/TypeScript implementation for AI-powered semantic search of local files. Eliminates binary installation issues while maintaining full feature parity with the Rust version.
 
 ## Architecture
 
-- **CLI**: Single binary with subcommands
-- **Storage**: SQLite (metadata) + Qdrant (vectors via REST API)  
-- **Embeddings**: Ollama/OpenAI via HTTP
-- **MCP Server**: Model Context Protocol for AI assistant integration
+**Core Services**
+- SQLite (metadata) + Qdrant (vectors) + Ollama/OpenAI (embeddings)
+- CLI commands + MCP server
+- Simple functions, no classes
 
-## Storage Design
+**Key Benefits**
+- No binary downloads (pure npm package)
+- Cross-platform compatibility  
+- Standard npm install process
 
-### SQLite (Source of Truth)
-```sql
--- Directories table
-CREATE TABLE directories (
-    id INTEGER PRIMARY KEY,
-    path TEXT UNIQUE NOT NULL,
-    status TEXT DEFAULT 'pending',
-    indexed_at INTEGER DEFAULT 0
-);
+## Project Structure
 
--- Files table  
-CREATE TABLE files (
-    id INTEGER PRIMARY KEY,
-    path TEXT UNIQUE NOT NULL,
-    size INTEGER NOT NULL,
-    modified_time INTEGER NOT NULL,
-    hash TEXT NOT NULL,
-    parent_dirs TEXT NOT NULL, -- JSON array
-    chunks_json TEXT,          -- JSON array of chunks
-    errors_json TEXT           -- JSON array of errors
-);
+```
+src/
+├── cli.ts              # Main CLI entry point with commander.js
+├── config.ts           # Configuration loading and validation
+├── storage.ts          # SQLite + Qdrant operations
+├── embedding.ts        # Ollama/OpenAI providers
+├── indexing.ts         # File scanning and processing
+├── search.ts           # Search and similarity
+├── mcp.ts              # MCP server implementation
+└── utils.ts            # Path/file utilities
+
+tests/
+├── integration.test.ts # Main test (covers most paths)
+├── unit.test.ts        # Fast unit tests
+├── fixtures/           # Test markdown/code files
+└── test_data/          # Real file corpus for testing
 ```
 
-### Qdrant Vector Store
-- **Collections**: Single `directory-indexer` collection
-- **Points**: UUID IDs with minimal payload (file_path, chunk_id, parent_directories)
-- **API**: Direct REST calls, no SDK dependency
+## Implementation Phases
 
-## API Reference
+### Phase 1: Core Foundation
+**Files**: `config.ts`, `utils.ts`, `storage.ts`
 
-### CLI Commands
+- **Configuration System** - Environment variables with defaults
+- **Path Utilities** - Cross-platform path handling  
+- **SQLite Setup** - Database schema and basic operations
+- **Qdrant Client** - HTTP REST API calls
 
+**Data Types**:
+```typescript
+type Config = {
+  storage: { sqlitePath: string; qdrantEndpoint: string; qdrantCollection: string };
+  embedding: { provider: 'ollama' | 'openai' | 'mock'; model: string; endpoint: string };
+  indexing: { chunkSize: number; maxFileSize: number; ignorePatterns: string[] };
+  dataDir: string;
+  verbose: boolean;
+};
+
+type FileRecord = {
+  path: string; size: number; modifiedTime: Date; hash: string;
+  parentDirs: string[]; chunks: ChunkInfo[]; errors?: string[];
+};
+```
+
+### Phase 2: Embedding & Indexing
+**Files**: `embedding.ts`, `indexing.ts`
+
+- **Embedding Providers** - Ollama, OpenAI, Mock implementations
+- **File Scanner** - Directory traversal with ignore patterns
+- **Text Chunker** - Sliding window with overlap
+- **Indexing Engine** - Orchestrate scan → chunk → embed → store
+
+**Core Functions**:
+```typescript
+export async function generateEmbedding(text: string, config: Config): Promise<number[]>
+export async function scanDirectory(path: string, options: ScanOptions): Promise<FileInfo[]>
+export async function chunkText(content: string, chunkSize: number, overlap: number): Promise<Chunk[]>
+export async function indexDirectories(paths: string[], config: Config): Promise<IndexResult>
+```
+
+### Phase 3: Search & Retrieval  
+**Files**: `search.ts`
+
+- **Semantic Search** - Query embedding + vector search + metadata enrichment
+- **Similar Files** - File-to-file similarity matching
+- **Content Retrieval** - Get file content with chunk selection
+- **Result Ranking** - Score-based sorting and filtering
+
+**Core Functions**:
+```typescript
+export async function searchContent(query: string, options: SearchOptions): Promise<SearchResult[]>
+export async function findSimilarFiles(filePath: string, limit: number): Promise<SimilarFile[]>
+export async function getFileContent(filePath: string, chunks?: string): Promise<string>
+```
+
+### Phase 4: CLI Interface
+**Files**: `cli.ts`
+
+- **Command Parsing** - Commander.js setup with subcommands
+- **CLI Commands** - index, search, similar, get, status, serve
+- **Progress Display** - User feedback and error handling
+- **Cross-platform Support** - Windows/Unix path handling
+
+**Command Structure**:
 ```bash
-# Index directories
-# Linux/macOS
-directory-indexer index /home/user/projects/docs /mnt/work/runbooks
-# Windows
-directory-indexer index "C:\work\documentation" "D:\projects\api-docs"
-
-# Search content
-directory-indexer search "database timeout" [--path /mnt/work/docs] [--limit 10]
-
-# Find similar files  
-directory-indexer similar /home/user/incidents/outage.md [--limit 10]
-
-# Get file content
-directory-indexer get /home/user/docs/api-guide.md [--chunks 2-5]
-
-# Start MCP server
+directory-indexer index <paths...>
+directory-indexer search <query> [--limit 10]
+directory-indexer similar <file> [--limit 10]  
+directory-indexer get <file> [--chunks 2-5]
 directory-indexer serve
-
-# Show status
-directory-indexer status [--format json|text]
+directory-indexer status
 ```
 
-### MCP Tools
+### Phase 5: MCP Server
+**Files**: `mcp.ts`
 
-**index(directory_path: string)** - Index directories (comma-separated paths)
-**search(query: string, directory_path?: string, limit?: number)** - Semantic search  
-**similar_files(file_path: string, limit?: number)** - Find similar files  
-**get_content(file_path: string, chunks?: string)** - Retrieve file content  
-**server_info()** - Get server status and configuration
+- **MCP Protocol** - JSON-RPC 2.0 over stdio
+- **Tool Definitions** - index, search, similar_files, get_content, server_info
+- **Error Handling** - Proper MCP error responses
+- **Integration** - Reuse CLI logic for tool implementations
+
+**MCP Tools**:
+```typescript
+const tools = {
+  index: (args: { directory_path: string }) => indexDirectories(args.directory_path.split(',')),
+  search: (args: { query: string; limit?: number }) => searchContent(args.query, { limit }),
+  similar_files: (args: { file_path: string; limit?: number }) => findSimilarFiles(args.file_path, args.limit),
+  get_content: (args: { file_path: string; chunks?: string }) => getFileContent(args.file_path, args.chunks),
+  server_info: () => getServerInfo()
+};
+```
+
+## Data Flow
+
+**Indexing**: `scanDirectory()` → `chunkText()` → `generateEmbedding()` → `storeInSQLite()` + `storeInQdrant()`
+
+**Search**: `generateEmbedding(query)` → `vectorSearch()` → `enrichWithMetadata()` → `rankResults()`
+
+**Storage**: SQLite as source of truth, Qdrant synced for vectors
+
+## Storage Schema
+
+**SQLite Tables** (matches Rust implementation):
+```sql
+CREATE TABLE directories (id INTEGER PRIMARY KEY, path TEXT UNIQUE, status TEXT, indexed_at INTEGER);
+CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT UNIQUE, size INTEGER, modified_time INTEGER, 
+                   hash TEXT, parent_dirs TEXT, chunks_json TEXT, errors_json TEXT);
+```
+
+**Qdrant Points**:
+```typescript
+{ id: uuid, vector: number[], payload: { filePath: string, chunkId: string, parentDirectories: string[] } }
+```
 
 ## Configuration
 
-Directory Indexer uses environment variables for configuration, following 12-factor app principles. Default values are used when environment variables are not set.
-
-### Environment Variables
+Environment variables with sensible defaults:
 
 ```bash
-# Service Endpoints
-QDRANT_ENDPOINT="http://localhost:6333"     # Qdrant vector database
-OLLAMA_ENDPOINT="http://localhost:11434"    # Ollama embedding service
-
-# Database Path  
-DIRECTORY_INDEXER_DATA_DIR="/opt/directory-indexer-data" # Data directory (contains data.db)
-
-# Optional API Keys
-QDRANT_API_KEY="your-api-key"               # For Qdrant Cloud or secured instances
-OLLAMA_API_KEY="your-api-key"               # For hosted Ollama services
+QDRANT_ENDPOINT=http://localhost:6333
+OLLAMA_ENDPOINT=http://localhost:11434
+DIRECTORY_INDEXER_DATA_DIR=~/.directory-indexer
+DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer
 ```
 
-### Default Configuration Values
-
-```rust
-// Storage
-sqlite_path: ~/.directory-indexer/data.db
-qdrant.collection: "directory-indexer"
-
-// Embedding
-provider: "ollama"
-model: "nomic-embed-text"
-
-// Indexing  
-chunk_size: 512
-overlap: 50
-max_file_size: 10485760 (10MB)
-ignore_patterns: [".git", "node_modules", "target"]
-concurrency: 4
-```
-
-### MCP Client Configuration
-
-For AI assistants like Claude Desktop, set environment variables in the MCP server configuration:
-
-```json
-{
-  "mcpServers": {
-    "directory-indexer": {
-      "command": "directory-indexer",
-      "args": ["serve"],
-      "env": {
-        "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434",
-        "DIRECTORY_INDEXER_DATA_DIR": "/opt/directory-indexer-data"
-      }
-    }
-  }
-}
-```
-
-## Indexing Process
-
-1. Walk directory tree, filter by ignore patterns
-2. Extract file metadata (size, mtime, hash)
-3. Compare with SQLite to detect changes
-4. Read and chunk file content
-5. Generate embeddings via HTTP API
-6. Store metadata in SQLite, vectors in Qdrant
-7. Update directory status
-
-## Search Process
-
-1. Generate query embedding
-2. Vector search in Qdrant via REST API
-3. Fetch file metadata from SQLite
-4. Rank by similarity score
-5. Return results with content previews
-
-## Development
-
-### Quick Start
-```bash
-# Start dev services (Qdrant on 6333, Ollama on 11434)
-./scripts/start-dev-services.sh
-
-# Run tests
-cargo test --test connectivity_tests
-
-# Stop services
-./scripts/stop-dev-services.sh
-```
-
-### File Types Supported
-- Text: .md, .txt, .rst
-- Code: .rs, .py, .js, .ts, .go, .java, .cpp, .c
-- Data: .json, .yaml, .toml, .csv
-- Config: .env, .conf, .ini
-- Web: .html, .xml
+**Hierarchy**: Defaults → Environment → CLI args
 
 ## Error Handling
 
-- **Partial failures**: Continue processing, log errors in SQLite
-- **Resource failures**: Fail fast with clear error messages  
-- **File errors**: Skip unreadable files, continue with others
+**Simple Error Types**:
+```typescript
+export class AppError extends Error {
+  constructor(message: string, public code: string, public cause?: Error) { super(message); }
+}
+export class ConfigError extends AppError { constructor(msg: string, cause?: Error) { super(msg, 'CONFIG_ERROR', cause); } }
+export class StorageError extends AppError { constructor(msg: string, cause?: Error) { super(msg, 'STORAGE_ERROR', cause); } }
+export class EmbeddingError extends AppError { constructor(msg: string, cause?: Error) { super(msg, 'EMBEDDING_ERROR', cause); } }
+```
 
-## Performance
+**Recovery Strategy**: Continue on partial failures, log errors in SQLite
 
-- **Concurrency**: Configurable file processing (default: 4)
-- **Memory**: Stream file processing, batch database operations
-- **Updates**: Only reprocess changed files (hash comparison)
+## Testing Strategy
 
-## Implementation Status
+**Two-tier testing**:
+1. **Unit tests** - Fast, no external dependencies, mock providers
+2. **Integration test** - Single comprehensive test covering main workflow:
+   - Index `tests/test_data/` 
+   - Search for content
+   - Find similar files
+   - Get content with chunks
+   - Verify SQLite + Qdrant consistency
 
-### ✅ Fully Implemented
-- **CLI Commands**: `index`, `search`, `similar`, `get`, `serve`, `status`
-- **MCP Server**: JSON-RPC 2.0 protocol with stdio communication
-- **MCP Tools**: `index`, `search`, `similar_files`, `get_content`, `server_info`
-- **Storage**: SQLite metadata store + Qdrant vector store integration
-- **Embeddings**: Ollama and OpenAI provider support
-- **File Processing**: Multi-format support with chunking and error handling
+**Service Dependencies**: Auto-skip if Qdrant/Ollama unavailable
 
-### Key Features
-- **Graceful Fallback**: Commands work with both indexed and unindexed files
-- **Chunk Support**: Stored chunks for indexed files, line-based chunking for unindexed files
-- **Semantic Search**: Vector similarity search with metadata enrichment
-- **Error Recovery**: Partial failure handling with detailed error logging
+## Dependencies
+
+**Production** (minimal):
+- `commander` - CLI parsing
+- `better-sqlite3` - SQLite
+- `@modelcontextprotocol/sdk` - MCP protocol
+- `glob` - File patterns
+- `zod` - Type validation
+
+**Development**:
+- `vitest` - Testing
+- `tsup` - Building  
+- `eslint` + `typescript` - Code quality
+
+## Migration from Rust
+
+**Compatibility**:
+- Same CLI interface and MCP tools
+- Same SQLite schema and Qdrant collection format
+- Same configuration environment variables
+- Same file type support and chunking strategy
+
+**Key Differences**:
+- Pure JavaScript (no binaries)
+- Function-based (no classes)
+- Single integration test (vs multiple test files)
+- Simplified project structure (8 files vs 30+ modules)
