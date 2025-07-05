@@ -1,6 +1,0 @@
-date,product,quantity,price,customer
-2023-01-01,Widget A,10,25.99,ACME Corp
-2023-01-02,Widget B,5,45.50,TechCo
-2023-01-03,Widget A,15,25.99,StartupXYZ
-2023-01-04,Widget C,8,75.00,ACME Corp
-2023-01-05,Widget B,12,45.50,GlobalTech

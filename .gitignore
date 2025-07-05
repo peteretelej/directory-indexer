@@ -1,9 +1,3 @@
-# Rust
-/target/
-Cargo.lock
-**/*.rs.bk
-*.pdb
-
 # Node.js
 node_modules/
 npm-debug.log*

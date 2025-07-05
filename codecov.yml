@@ -1,6 +1,8 @@
 coverage:
   ignore:
-    - "test_data/**/*"
+    - "tests/test_data/**/*"
+    - "tests/fixtures/**/*"
+    - "rust-reference/**/*"
   status:
     project:
       default:

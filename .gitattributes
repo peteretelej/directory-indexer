@@ -1,2 +1,5 @@
 # Exclude test data from GitHub language detection
-test_data/** linguist-documentation
+tests/test_data/** linguist-documentation
+
+# Exclude rust reference code from GitHub language detection
+rust-reference/** linguist-vendored

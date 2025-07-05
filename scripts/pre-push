@@ -1,56 +1,37 @@
 #!/bin/bash
 
-# Pre-push hook for directory-indexer
+# Pre-push hook for directory-indexer (Node.js)
 # Run essential quality checks before pushing code
 
 set -e
 
 echo "Running pre-push checks..."
 
-# Check if we're in a Rust project
-if [ ! -f "Cargo.toml" ]; then
-    echo "ERROR: Cargo.toml not found. This script should be run from the project root."
+# Check if we're in a Node.js project
+if [ ! -f "package.json" ]; then
+    echo "ERROR: package.json not found. This script should be run from the project root."
     exit 1
 fi
 
-echo "Checking version synchronization..."
-# Extract version from Cargo.toml
-CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+echo "Installing dependencies..."
+npm ci
 
-# Extract version from package.json
-NPM_VERSION=$(grep '"version":' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+echo "Running type checking..."
+npm run typecheck
 
-if [ "$CARGO_VERSION" != "$NPM_VERSION" ]; then
-    echo "ERROR: Version mismatch detected!"
-    echo "  Cargo.toml version: $CARGO_VERSION"
-    echo "  package.json version: $NPM_VERSION"
-    echo "  Please ensure both files have the same version."
-    exit 1
-fi
+echo "Running linter..."
+npm run lint
 
-echo "Running clippy (linter)..."
-# Check main library code with strict linting
-cargo clippy --lib --all-features -- -D warnings -D clippy::uninlined_format_args
-# Check other targets with standard linting (tests can be less strict)
-cargo clippy --bins --all-features -- -D warnings
-
-echo "Checking code formatting..."
-cargo fmt --check
+echo "Running build..."
+npm run build
 
 echo "Running tests..."
 export DIRECTORY_INDEXER_DATA_DIR=/tmp/directory-indexer-test
 export DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer-test
 
-cargo test --lib
-cargo test tests
+npm test
 
 echo "Checking for security vulnerabilities..."
-if command -v cargo-audit >/dev/null 2>&1; then
-    cargo audit
-else
-    echo "Installing cargo-audit..."
-    cargo install cargo-audit
-    cargo audit
-fi
+npm audit --audit-level moderate
 
 echo "All pre-push checks passed!"

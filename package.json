@@ -2,18 +2,23 @@
   "name": "directory-indexer",
   "version": "0.0.10",
   "description": "AI-powered directory indexing with semantic search for MCP servers",
-  "main": "bin/directory-indexer.js",
+  "main": "dist/cli.js",
   "bin": {
-    "directory-indexer": "bin/directory-indexer.js"
+    "directory-indexer": "dist/cli.js"
   },
+  "type": "module",
   "scripts": {
-    "build": "cargo build --release",
-    "build-all": "node scripts/build-all.js",
-    "test": "npm run unit-test",
-    "unit-test": "cargo test --lib && cargo test --test storage_tests",
-    "integration-test": "cargo test",
-    "lint": "cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings",
-    "postinstall": "node scripts/postinstall.js"
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:mcp": "vitest run tests/mcp",
+    "lint": "eslint src tests --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "prepare": "npm run build"
   },
   "keywords": [
     "mcp",
@@ -34,25 +39,32 @@
     "url": "https://github.com/peteretelej/directory-indexer/issues"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
-  "os": [
-    "linux",
-    "darwin",
-    "win32"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ],
   "files": [
-    "bin/",
-    "scripts/",
-    "binaries/",
+    "dist/",
     "README.md",
     "LICENSE"
   ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "better-sqlite3": "^11.5.0",
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "mime-types": "^2.1.35",
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
-    "cross-env": "^7.0.3"
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "rimraf": "^6.0.1",
+    "tmp": "^0.2.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

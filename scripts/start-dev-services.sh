@@ -105,4 +105,4 @@ echo -e "${YELLOW}To stop services:${NC}"
 echo "  ./scripts/stop-dev-services.sh"
 echo
 echo -e "${YELLOW}To run tests with dev services:${NC}"
-echo "  QDRANT_ENDPOINT=$QDRANT_ENDPOINT OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT cargo test --test connectivity_tests"
+echo "  QDRANT_ENDPOINT=$QDRANT_ENDPOINT OLLAMA_ENDPOINT=$OLLAMA_ENDPOINT npm test"
