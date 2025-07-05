@@ -98,7 +98,7 @@ describe('Directory Indexer Integration Tests', () => {
       console.error(`Ollama (localhost:11434): ${ollamaHealthy ? '✅' : '❌'}`);
       
       if (!qdrantHealthy) {
-        console.error('  - Start Qdrant: docker run -p 6333:6333 qdrant/qdrant');
+        console.error('  - Start Qdrant: docker run -p 127.0.0.1:6333:6333 qdrant/qdrant');
       }
       if (!ollamaHealthy) {
         console.error('  - Start Ollama and install model: ollama pull nomic-embed-text');

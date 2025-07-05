@@ -1,5 +1,23 @@
 # Contributing to Directory Indexer
 
+## Quick Start (5 minutes)
+
+```bash
+# 1. Setup (one time)
+git clone https://github.com/peteretelej/directory-indexer.git
+cd directory-indexer && npm install
+docker run -d -p 127.0.0.1:6333:6333 qdrant/qdrant
+ollama pull nomic-embed-text
+
+# 2. Build & test
+npm run build && npm test
+
+# 3. Try it out
+node dist/cli.js index ./tests/test_data
+node dist/cli.js search "database"
+node dist/cli.js status
+```
+
 ## Development Environment Setup
 
 ### Prerequisites
@@ -30,6 +48,11 @@ ollama pull nomic-embed-text
 # 4. Build and test
 npm run build
 npm test
+
+# 5. Quick usage test
+node dist/cli.js status
+node dist/cli.js index ./tests/test_data
+node dist/cli.js search "authentication"
 ```
 
 ## Project Structure
@@ -46,9 +69,14 @@ src/
 └── utils.ts            # Path/file utilities
 
 tests/
-├── integration.test.ts # Main test (covers most paths)
-├── unit.test.ts        # Fast unit tests
-└── fixtures/           # Test data
+├── integration.test.ts # Integration tests (requires services)
+├── unit.test.ts        # Unit tests (no external dependencies)
+├── test_data/          # Structured test files
+│   ├── docs/           # Markdown documentation
+│   ├── programming/    # Code files (py, rs, js)
+│   ├── configs/        # Config files (json, yaml)
+│   └── data/           # Data files (csv)
+└── fixtures/           # Additional test fixtures
 ```
 
 ## Development Workflow
@@ -69,17 +97,20 @@ npm run clean && npm run build
 ### Testing
 
 ```bash
-# All tests
+# All tests (requires Qdrant + Ollama running)
 npm test
 
-# Unit tests only (fast)
-npm run test:unit
+# Unit tests only (no external dependencies)
+npm test -- tests/unit.test.ts
 
-# Integration tests (requires services)
-npm run test:integration
+# Integration tests only (requires services)
+npm test -- tests/integration.test.ts
 
 # Watch mode
-npm run test:watch
+npm test -- --watch
+
+# Specific test pattern
+npm test -- --grep "search"
 ```
 
 ### Code Quality
@@ -98,17 +129,26 @@ npm run lint -- --fix
 ### Running Commands
 
 ```bash
-# Index directories
-npm run build && node dist/cli.js index ./test_data
+# Build first (required)
+npm run build
+
+# Index test data
+node dist/cli.js index ./tests/test_data
 
 # Search content
-node dist/cli.js search "database timeout"
+node dist/cli.js search "authentication" --limit 5
+
+# Find similar files
+node dist/cli.js similar ./tests/test_data/docs/api_guide.md
+
+# Get file content
+node dist/cli.js get ./tests/test_data/docs/api_guide.md
+
+# Show status
+node dist/cli.js status --verbose
 
 # Start MCP server
 node dist/cli.js serve
-
-# Show status
-node dist/cli.js status
 ```
 
 ## Configuration
@@ -165,17 +205,29 @@ The main integration test covers the complete workflow:
 
 ### Service Dependencies
 
-Tests automatically skip if services are unavailable:
+Tests fail immediately with clear errors if services are unavailable:
 
 ```bash
 # Check service health
-curl http://localhost:6333/healthz  # Qdrant
-curl http://localhost:11434/api/tags  # Ollama
+curl http://localhost:6333/healthz        # Qdrant health
+curl http://localhost:6333/collections    # Qdrant API access
+curl http://localhost:11434/api/tags      # Ollama + models
 ```
 
-### Mock Testing
+**Error Output Example:**
+```
+❌ Integration tests require both Qdrant and Ollama services
+Qdrant (localhost:6333): ❌
+Ollama (localhost:11434): ✅
+  - Start Qdrant: docker run -p 127.0.0.1:6333:6333 qdrant/qdrant
+```
 
-Unit tests use mock embedding providers for deterministic results without external service dependencies.
+### Test Data
+
+All tests use `tests/test_data/` containing real files:
+- **No package.json access** - Tests isolated from project files
+- **Structured content** - Docs, code, configs, data files
+- **Deterministic** - Mock embedding provider for unit tests
 
 ## Code Style
 
@@ -222,6 +274,8 @@ rm -rf ~/.directory-indexer && mkdir -p ~/.directory-indexer
 
 # Service connection issues
 docker restart qdrant
+# Or restart with correct binding:
+# docker run -d --name qdrant -p 127.0.0.1:6333:6333 qdrant/qdrant
 ollama list  # Check if model is available
 
 # Build issues

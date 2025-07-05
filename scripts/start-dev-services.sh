@@ -30,7 +30,7 @@ docker rm qdrant-dev || true
 
 docker run -d \
     --name qdrant-dev \
-    -p $DEV_QDRANT_PORT:6333 \
+    -p 127.0.0.1:$DEV_QDRANT_PORT:6333 \
     -v qdrant_dev_storage:/qdrant/storage \
     qdrant/qdrant
 
@@ -55,7 +55,7 @@ docker rm ollama-dev || true
 
 docker run -d \
     --name ollama-dev \
-    -p $DEV_OLLAMA_PORT:11434 \
+    -p 127.0.0.1:$DEV_OLLAMA_PORT:11434 \
     -v ollama_dev_data:/root/.ollama \
     ollama/ollama
 
