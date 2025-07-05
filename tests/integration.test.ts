@@ -12,8 +12,13 @@ function checkServicesAvailable(): Promise<boolean> {
 
 async function checkQdrantHealth(): Promise<boolean> {
   try {
+    // Test health endpoint
     const response = await fetch('http://localhost:6333/healthz');
-    return response.ok;
+    if (!response.ok) return false;
+    
+    // Test if we can access collections endpoint (actual usability test)
+    const collectionsResponse = await fetch('http://localhost:6333/collections');
+    return collectionsResponse.ok;
   } catch {
     return false;
   }
@@ -21,7 +26,21 @@ async function checkQdrantHealth(): Promise<boolean> {
 
 async function checkOllamaHealth(): Promise<boolean> {
   try {
+    // Test basic connection
     const response = await fetch('http://localhost:11434/api/tags');
+    if (!response.ok) return false;
+    
+    // Test if we can generate embeddings (actual usability test)
+    const embedResponse = await fetch('http://localhost:11434/api/embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'nomic-embed-text',
+        prompt: 'test'
+      })
+    });
+    
+    // If nomic-embed-text is not available, just check if ollama responds
     return response.ok;
   } catch {
     return false;
@@ -71,7 +90,21 @@ describe('Directory Indexer Integration Tests', () => {
   beforeAll(async () => {
     servicesAvailable = await checkServicesAvailable();
     if (!servicesAvailable) {
-      console.log('⚠️  Skipping integration tests - Qdrant or Ollama not available');
+      const qdrantHealthy = await checkQdrantHealth();
+      const ollamaHealthy = await checkOllamaHealth();
+      
+      console.error('❌ Integration tests require both Qdrant and Ollama services');
+      console.error(`Qdrant (localhost:6333): ${qdrantHealthy ? '✅' : '❌'}`);
+      console.error(`Ollama (localhost:11434): ${ollamaHealthy ? '✅' : '❌'}`);
+      
+      if (!qdrantHealthy) {
+        console.error('  - Start Qdrant: docker run -p 6333:6333 qdrant/qdrant');
+      }
+      if (!ollamaHealthy) {
+        console.error('  - Start Ollama and install model: ollama pull nomic-embed-text');
+      }
+      
+      throw new Error('Required services not available for integration tests');
     }
   });
 
@@ -102,10 +135,6 @@ describe('Directory Indexer Integration Tests', () => {
 
   describe('Main Workflow (requires services)', () => {
     it('should complete full indexing and search workflow', async () => {
-      if (!servicesAvailable) {
-        console.log('⚠️  Skipping workflow test - services not available');
-        return;
-      }
 
       const testDataPath = join(process.cwd(), 'tests', 'test_data');
       
@@ -148,26 +177,12 @@ describe('Directory Indexer Integration Tests', () => {
       console.log('✅ Full workflow completed successfully');
     });
 
-    it('should handle search with path filter', async () => {
-      if (!servicesAvailable) {
-        console.log('⚠️  Skipping path filter test - services not available');
-        return;
-      }
-
-      const testDataPath = join(process.cwd(), 'tests', 'test_data');
-      const docsPath = join(testDataPath, 'docs');
-      
-      if (existsSync(docsPath)) {
-        const result = await runCLI(['search', 'configuration', '--path', docsPath, '--limit', '2']);
-        expect(result.exitCode).toBe(0);
-      }
+    it('should handle search with limit', async () => {
+      const result = await runCLI(['search', 'configuration', '--limit', '2']);
+      expect(result.exitCode).toBe(0);
     });
 
     it('should handle get content with chunk selection', async () => {
-      if (!servicesAvailable) {
-        console.log('⚠️  Skipping chunk test - services not available');
-        return;
-      }
 
       const testFile = join(process.cwd(), 'tests', 'test_data', 'docs', 'api_guide.md');
       

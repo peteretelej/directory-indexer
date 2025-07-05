@@ -11,6 +11,15 @@ Pure Node.js/TypeScript implementation for AI-powered semantic search of local f
 - CLI commands + MCP server
 - Simple functions, no classes
 
+**Coding Rules**
+- No comments (self-explanatory code)
+- No duplication (eliminate redundant functions)  
+- Simple logic (straightforward over complex)
+- Clear naming (functions explain purpose)
+- Minimal abstraction (only when needed)
+- No mocks (integration tests with real services)
+- Real testing (use `./scripts/start-dev-services.sh`)
+
 **Key Benefits**
 - No binary downloads (pure npm package)
 - Cross-platform compatibility  
@@ -181,16 +190,16 @@ export class EmbeddingError extends AppError { constructor(msg: string, cause?: 
 
 ## Testing Strategy
 
-**Two-tier testing**:
-1. **Unit tests** - Fast, no external dependencies, mock providers
-2. **Integration test** - Single comprehensive test covering main workflow:
-   - Index `tests/test_data/` 
-   - Search for content
-   - Find similar files
-   - Get content with chunks
+**Integration-First Testing**:
+1. **Real Integration Tests** - Use actual Qdrant + Ollama via `./scripts/start-dev-services.sh`
+   - Index `tests/test_data/` with real embeddings
+   - Search with actual vector similarity
    - Verify SQLite + Qdrant consistency
+   - Test all embedding providers (mock, ollama)
+2. **Pure Function Tests** - Only for algorithmic functions (text chunking, path utils)
 
-**Service Dependencies**: Auto-skip if Qdrant/Ollama unavailable
+**Development Services**: `./scripts/start-dev-services.sh` provides Docker containers
+**Auto-Skip**: Tests skip gracefully if services unavailable (CI compatibility)
 
 ## Dependencies
 

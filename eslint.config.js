@@ -8,21 +8,12 @@ export default [
     files: ['**/*.ts'],
     languageOptions: {
       parser: tsparser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-      },
       globals: {
         console: 'readonly',
         process: 'readonly',
-        Buffer: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
+        fetch: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        fetch: 'readonly',
       },
     },
     plugins: {
@@ -36,18 +27,6 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.js'],
-    languageOptions: {
-      globals: {
-        require: 'readonly',
-        module: 'readonly',
-        exports: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-      },
-    },
-  },
-  {
-    ignores: ['dist/', 'rust-reference/', 'node_modules/', 'tests/test_data/'],
+    ignores: ['dist/', 'node_modules/', 'tests/test_data/'],
   },
 ];

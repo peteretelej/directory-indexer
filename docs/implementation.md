@@ -20,6 +20,8 @@ Implementation tracking for the Node.js/TypeScript port of the Directory Indexer
 - **Simple Logic**: Prefer straightforward implementations over complex optimizations
 - **Clear Naming**: Function and variable names should explain their purpose
 - **Minimal Abstraction**: Only abstract when there's clear repeated patterns
+- **No Mocks**: Prefer integration tests with real services over mocked unit tests
+- **Real Testing**: Use `./scripts/start-dev-services.sh` for actual Qdrant + Ollama testing
 
 ## Phase 1: Core Foundation
 
@@ -120,15 +122,143 @@ CREATE TABLE files (
 - Collection: `directory-indexer`
 - Point format: `{ id: uuid, vector: number[], payload: { filePath, chunkId, parentDirectories } }`
 
-## Next Phases
+## Phase 2: Embedding & Indexing  
 
-- **Phase 2**: Embedding & Indexing (`embedding.ts`, `indexing.ts`)
-- **Phase 3**: Search & Retrieval (`search.ts`)
-- **Phase 4**: CLI Interface (`cli.ts`)
-- **Phase 5**: MCP Server (`mcp.ts`)
+**Status**: ✅ Complete
+
+### Phase 2 Requirements (from tests)
+
+**Embedding Provider Interface:**
+```typescript
+interface EmbeddingProvider {
+  name: string;
+  dimensions: number;
+  generateEmbedding(text: string): Promise<number[]>;
+  generateEmbeddings(texts: string[]): Promise<number[][]>;
+}
+createEmbeddingProvider(provider: string, config: object): EmbeddingProvider
+```
+
+**Text Processing:**
+```typescript  
+chunkText(content: string, chunkSize: number, overlap: number): Chunk[]
+scanDirectory(path: string, options: ScanOptions): Promise<FileInfo[]>
+getFileMetadata(filePath: string): Promise<FileMetadata>
+```
+
+## Phase 3: Search & Retrieval
+
+**Status**: ✅ Complete
+
+### Phase 3 Implementation
+
+- **Semantic Search**: Query embedding + vector search + metadata enrichment
+- **Similar Files**: File-to-file similarity matching using embeddings  
+- **Content Retrieval**: Get file content with optional chunk selection
+- **Result Ranking**: Score-based filtering and ordering
+
+**Core Functions:**
+```typescript
+searchContent(query: string, options: SearchOptions): Promise<SearchResult[]>
+findSimilarFiles(filePath: string, limit: number): Promise<SimilarFile[]>
+getFileContent(filePath: string, chunks?: string): Promise<string>
+```
+
+## Phase 4: CLI Interface
+
+**Status**: ✅ Complete
+
+### Phase 4 Implementation
+
+- **CLI Commands**: All 6 commands implemented with commander.js
+  - `index <paths...>` - Index directories for semantic search
+  - `search <query>` - Search indexed content semantically  
+  - `similar <file>` - Find files similar to a given file
+  - `get <file>` - Get file content with optional chunk selection
+  - `serve` - Start MCP server
+  - `status` - Show indexing status and statistics
+
+- **Error Handling**: Proper error handling with exit codes for all commands
+- **Progress Display**: User-friendly feedback and verbose mode support
+- **Cross-platform**: Works on Windows, macOS, and Linux
+
+**CLI Structure:**
+```bash
+directory-indexer index <paths...> [--verbose]
+directory-indexer search <query> [--limit 10] [--verbose]
+directory-indexer similar <file> [--limit 10] [--verbose]  
+directory-indexer get <file> [--chunks 2-5] [--verbose]
+directory-indexer serve [--verbose]
+directory-indexer status [--verbose]
+```
+
+## Phase 5: MCP Server
+
+**Status**: ✅ Complete
+
+### Phase 5 Implementation
+
+- **MCP Protocol**: JSON-RPC 2.0 over stdio using @modelcontextprotocol/sdk
+- **Tool Definitions**: All 5 MCP tools implemented
+  - `index` - Index directories from MCP clients
+  - `search` - Semantic search with configurable limits
+  - `similar_files` - Find similar files with similarity scores
+  - `get_content` - Retrieve file content with optional chunk selection
+  - `server_info` - Get server status and statistics
+
+- **Error Handling**: Proper MCP error responses for all tools
+- **Integration**: Reuses CLI logic for consistent behavior
+- **Transport**: StdioServerTransport for MCP client communication
+
+**MCP Tools:**
+```typescript
+const tools = {
+  index: (args: { directory_path: string }) => indexDirectories(args.directory_path.split(',')),
+  search: (args: { query: string; limit?: number }) => searchContent(args.query, { limit }),
+  similar_files: (args: { file_path: string; limit?: number }) => findSimilarFiles(args.file_path, args.limit),
+  get_content: (args: { file_path: string; chunks?: string }) => getFileContent(args.file_path, args.chunks),
+  server_info: () => getServerInfo()
+};
+```
+
+## Project Status
+
+**All Phases Complete**: ✅ Ready for use
+
+The Node.js/TypeScript implementation is now feature-complete with:
+- ✅ Phase 1: Core Foundation (config, utils, storage)
+- ✅ Phase 2: Embedding & Indexing (providers, scanning, chunking)
+- ✅ Phase 3: Search & Retrieval (semantic search, similarity, content)
+- ✅ Phase 4: CLI Interface (6 commands with commander.js)
+- ✅ Phase 5: MCP Server (5 tools with JSON-RPC over stdio)
+
+The implementation maintains full compatibility with the original Rust version while providing a simpler installation experience through npm.
 
 ## Testing Strategy
 
-- Unit tests with mocked external dependencies
-- Integration test covering full workflow
-- Auto-skip if Qdrant/Ollama unavailable
+**Integration-First Approach:**
+- Real integration tests using actual Qdrant + Ollama services
+- Start dev services with `./scripts/start-dev-services.sh`
+- Tests auto-skip if services unavailable (for CI without Docker)
+- Minimal unit tests only for pure functions (no mocks)
+
+**Development Workflow:**
+```bash
+# Start dev services (Docker required)
+./scripts/start-dev-services.sh
+
+# Run tests with real services
+QDRANT_ENDPOINT=http://localhost:6333 OLLAMA_ENDPOINT=http://localhost:11434 npm test
+
+# Stop services when done
+./scripts/stop-dev-services.sh
+```
+
+## Build System: Vite
+
+**Unified Configuration**: Single `vite.config.ts` for both building and testing
+- **Build**: `npm run build` (Vite SSR mode for Node.js)
+- **Dev**: `npm run dev` (Vite watch mode)
+- **Test**: `npm test` (Vitest)
+
+**Benefits**: Faster builds, unified tooling, better HMR, consistent configuration

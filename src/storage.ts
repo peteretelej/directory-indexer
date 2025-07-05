@@ -29,6 +29,7 @@ export interface QdrantPoint {
     chunkId: string;
     parentDirectories: string[];
   };
+  score?: number;
 }
 
 export class StorageError extends Error {
@@ -146,7 +147,7 @@ export class QdrantClient {
 }
 
 export class SQLiteStorage {
-  private db: Database.Database;
+  public db: Database.Database;
 
   constructor(private config: Config) {
     this.db = this.initializeDatabase();
@@ -309,22 +310,70 @@ export async function initDatabase(dbPath: string): Promise<Database.Database> {
   return new Database(dbPath);
 }
 
-export async function addFile(_fileRecord: FileRecord): Promise<void> {
-  throw new Error('addFile requires database instance');
+export interface IndexStatus {
+  directoriesIndexed: number;
+  filesIndexed: number;
+  chunksIndexed: number;
+  databaseSize: string;
+  lastIndexed: string | null;
+  errors: string[];
 }
 
-export async function getFileByPath(_path: string): Promise<FileRecord | null> {
-  throw new Error('getFileByPath requires database instance');
-}
-
-export async function createQdrantCollection(_name: string, _vectorDim: number): Promise<void> {
-  throw new Error('createQdrantCollection requires client instance');
-}
-
-export async function upsertPoints(_points: QdrantPoint[]): Promise<void> {
-  throw new Error('upsertPoints requires client instance');
-}
-
-export async function searchVectors(_vector: number[], _limit: number): Promise<QdrantPoint[]> {
-  throw new Error('searchVectors requires client instance');
+export async function getIndexStatus(): Promise<IndexStatus> {
+  const config = await import('./config.js').then(m => m.loadConfig());
+  const sqlite = new SQLiteStorage(config);
+  
+  try {
+    const directoriesStmt = sqlite.db.prepare('SELECT COUNT(*) as count FROM directories WHERE status = ?');
+    const directoriesCount = directoriesStmt.get('completed') as { count: number };
+    
+    const filesStmt = sqlite.db.prepare('SELECT COUNT(*) as count FROM files');
+    const filesCount = filesStmt.get() as { count: number };
+    
+    const chunksStmt = sqlite.db.prepare('SELECT SUM(json_array_length(chunks_json)) as count FROM files WHERE chunks_json IS NOT NULL');
+    const chunksCount = chunksStmt.get() as { count: number | null };
+    
+    const lastIndexedStmt = sqlite.db.prepare('SELECT MAX(indexed_at) as last_indexed FROM directories');
+    const lastIndexedResult = lastIndexedStmt.get() as { last_indexed: number | null };
+    
+    const errorsStmt = sqlite.db.prepare('SELECT errors_json FROM files WHERE errors_json IS NOT NULL');
+    const errorRows = errorsStmt.all() as { errors_json: string }[];
+    
+    const allErrors: string[] = [];
+    errorRows.forEach(row => {
+      try {
+        const errors = JSON.parse(row.errors_json);
+        allErrors.push(...errors);
+      } catch (e) {
+        allErrors.push('Failed to parse error JSON');
+      }
+    });
+    
+    const fs = await import('fs');
+    let databaseSize = '0 KB';
+    try {
+      const stats = fs.statSync(config.storage.sqlitePath);
+      const sizeInBytes = stats.size;
+      if (sizeInBytes > 1024 * 1024) {
+        databaseSize = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
+      } else if (sizeInBytes > 1024) {
+        databaseSize = `${(sizeInBytes / 1024).toFixed(2)} KB`;
+      } else {
+        databaseSize = `${sizeInBytes} bytes`;
+      }
+    } catch (e) {
+      databaseSize = 'Unknown';
+    }
+    
+    return {
+      directoriesIndexed: directoriesCount.count,
+      filesIndexed: filesCount.count,
+      chunksIndexed: chunksCount.count || 0,
+      databaseSize,
+      lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed).toISOString() : null,
+      errors: allErrors
+    };
+  } finally {
+    sqlite.close();
+  }
 }
