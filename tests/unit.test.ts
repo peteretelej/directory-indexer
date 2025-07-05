@@ -57,21 +57,21 @@ describe('Path Utilities', () => {
   });
 
   it('should convert relative paths to absolute', async () => {
-    const { toAbsolutePath } = await import('../src/utils.js').catch(() => ({ toAbsolutePath: () => { throw new Error('toAbsolutePath not implemented'); } }));
+    const { normalizePath } = await import('../src/utils.js').catch(() => ({ normalizePath: () => { throw new Error('normalizePath not implemented'); } }));
     
     const relativePath = './test/path';
-    const absolutePath = toAbsolutePath(relativePath);
+    const absolutePath = normalizePath(relativePath);
     
     expect(absolutePath.startsWith('/')).toBe(true); // Unix
     // OR expect(absolutePath.match(/^[A-Z]:/)).toBeTruthy(); // Windows
   });
 
   it('should calculate file hashes consistently', async () => {
-    const { calculateFileHash } = await import('../src/utils.js').catch(() => ({ calculateFileHash: () => { throw new Error('calculateFileHash not implemented'); } }));
+    const { calculateHash } = await import('../src/utils.js').catch(() => ({ calculateHash: () => { throw new Error('calculateHash not implemented'); } }));
     
     const testContent = 'Hello, world!';
-    const hash1 = await calculateFileHash(testContent);
-    const hash2 = await calculateFileHash(testContent);
+    const hash1 = calculateHash(testContent);
+    const hash2 = calculateHash(testContent);
     
     expect(hash1).toBe(hash2);
     expect(hash1.length).toBeGreaterThan(0);
