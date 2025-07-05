@@ -8,13 +8,10 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "vite build",
+    "dev": "vite build --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration",
-    "test:mcp": "vitest run tests/mcp",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
@@ -42,9 +39,7 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "dist/",
-    "README.md",
-    "LICENSE"
+    "dist/"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
@@ -63,8 +58,8 @@
     "eslint": "^9.15.0",
     "rimraf": "^6.0.1",
     "tmp": "^0.2.3",
-    "tsup": "^8.3.5",
     "typescript": "^5.7.2",
+    "vite": "^6.0.3",
     "vitest": "^2.1.8"
   }
 }
