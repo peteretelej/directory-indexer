@@ -3,9 +3,7 @@
 **Turn your directories into an AI-powered knowledge base.**
 
 [![npm](https://img.shields.io/npm/v/directory-indexer)](https://npmjs.com/package/directory-indexer)
-[![Crates.io](https://img.shields.io/crates/v/directory-indexer)](https://crates.io/crates/directory-indexer)
 [![codecov](https://codecov.io/gh/peteretelej/directory-indexer/graph/badge.svg?token=j6aBBpfqkN)](https://codecov.io/gh/peteretelej/directory-indexer)
-[![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/peteretelej/directory-indexer/workflows/CI/badge.svg)](https://github.com/peteretelej/directory-indexer/actions)
 
@@ -180,7 +178,6 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
 
 ## Documentation
 
-- **[API Reference](docs/designs/API.md)**: Complete CLI and MCP tool documentation
 - **[Contributing](docs/CONTRIBUTING.md)**: Development setup and guidelines
 - **[Design](docs/design.md)**: Architecture and technical decisions
 

@@ -13,9 +13,9 @@ ollama pull nomic-embed-text
 npm run build && npm test
 
 # 3. Try it out
-node dist/cli.js index ./tests/test_data
-node dist/cli.js search "database"
-node dist/cli.js status
+npx directory-indexer index ./tests/test_data
+npx directory-indexer search "database"
+npx directory-indexer status
 ```
 
 ## Development Environment Setup
@@ -50,9 +50,9 @@ npm run build
 npm test
 
 # 5. Quick usage test
-node dist/cli.js status
-node dist/cli.js index ./tests/test_data
-node dist/cli.js search "authentication"
+npx directory-indexer status
+npx directory-indexer index ./tests/test_data
+npx directory-indexer search "authentication"
 ```
 
 ## Project Structure
@@ -136,22 +136,22 @@ npm run lint -- --fix
 npm run build
 
 # Index test data
-node dist/cli.js index ./tests/test_data
+npx directory-indexer index ./tests/test_data
 
 # Search content
-node dist/cli.js search "authentication" --limit 5
+npx directory-indexer search "authentication" --limit 5
 
 # Find similar files
-node dist/cli.js similar ./tests/test_data/docs/api_guide.md
+npx directory-indexer similar ./tests/test_data/docs/api_guide.md
 
 # Get file content
-node dist/cli.js get ./tests/test_data/docs/api_guide.md
+npx directory-indexer get ./tests/test_data/docs/api_guide.md
 
 # Show status
-node dist/cli.js status --verbose
+npx directory-indexer status --verbose
 
 # Start MCP server
-node dist/cli.js serve
+npx directory-indexer serve
 ```
 
 ## Configuration
@@ -263,10 +263,10 @@ export class FileIndexer extends BaseIndexer {
 ```bash
 # Set debug level
 export DEBUG="directory-indexer:*"
-npm run build && node dist/cli.js index ./test_data
+npm run build && npx directory-indexer index ./test_data
 
 # Verbose output
-node dist/cli.js --verbose search "query"
+npx directory-indexer --verbose search "query"
 ```
 
 ### Common Issues
