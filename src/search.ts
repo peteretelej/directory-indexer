@@ -1,7 +1,6 @@
 import { promises as fs } from 'fs';
-import { Config } from './config.js';
 import { generateEmbedding } from './embedding.js';
-import { initializeStorage, QdrantPoint } from './storage.js';
+import { initializeStorage } from './storage.js';
 import { fileExists } from './utils.js';
 
 export interface SearchOptions {
@@ -42,12 +41,12 @@ export async function searchContent(query: string, options: SearchOptions = {}):
     const points = await qdrant.searchPoints(queryEmbedding, limit);
     
     return points
-      .filter(point => point.score >= threshold)
+      .filter(point => (point.score ?? 0) >= threshold)
       .map(point => ({
         filePath: point.payload.filePath,
         chunkId: point.payload.chunkId,
         content: '',
-        score: point.score,
+        score: point.score ?? 0,
         parentDirectories: point.payload.parentDirectories
       }));
   } catch (error) {
@@ -75,7 +74,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5): Pro
         .slice(0, limit)
         .map(point => ({
           filePath: point.payload.filePath,
-          score: point.score,
+          score: point.score ?? 0,
           parentDirectories: point.payload.parentDirectories
         }));
     }
@@ -88,7 +87,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5): Pro
       .slice(0, limit)
       .map(point => ({
         filePath: point.payload.filePath,
-        score: point.score,
+        score: point.score ?? 0,
         parentDirectories: point.payload.parentDirectories
       }));
   } catch (error) {

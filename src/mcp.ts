@@ -116,20 +116,26 @@ export async function startMcpServer(config: Config): Promise<void> {
     try {
       switch (name) {
         case 'index': {
+          if (!args || typeof args.directory_path !== 'string') {
+            throw new Error('directory_path is required');
+          }
           const paths = args.directory_path.split(',').map((p: string) => p.trim());
           const result = await indexDirectories(paths, config);
           return {
             content: [
               {
                 type: 'text',
-                text: `Indexed ${result.filesProcessed} files, ${result.chunksCreated} chunks, ${result.errors.length} errors`
+                text: `Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`
               }
             ]
           };
         }
 
         case 'search': {
-          const results = await searchContent(args.query, { limit: args.limit || 10 });
+          if (!args || typeof args.query !== 'string') {
+            throw new Error('query is required');
+          }
+          const results = await searchContent(args.query, { limit: (args.limit as number) || 10 });
           return {
             content: [
               {
@@ -141,7 +147,10 @@ export async function startMcpServer(config: Config): Promise<void> {
         }
 
         case 'similar_files': {
-          const results = await findSimilarFiles(args.file_path, args.limit || 10);
+          if (!args || typeof args.file_path !== 'string') {
+            throw new Error('file_path is required');
+          }
+          const results = await findSimilarFiles(args.file_path, (args.limit as number) || 10);
           return {
             content: [
               {
@@ -153,7 +162,10 @@ export async function startMcpServer(config: Config): Promise<void> {
         }
 
         case 'get_content': {
-          const content = await getFileContent(args.file_path, args.chunks);
+          if (!args || typeof args.file_path !== 'string') {
+            throw new Error('file_path is required');
+          }
+          const content = await getFileContent(args.file_path, args.chunks as string);
           return {
             content: [
               {

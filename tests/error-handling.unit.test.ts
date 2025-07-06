@@ -110,8 +110,8 @@ describe('Error Handling Unit Tests', () => {
 
     it('should handle non-OK responses in OpenAI provider', async () => {
       // Mock fetch to simulate API error response
-      const originalFetch = global.fetch;
-      global.fetch = vi.fn().mockResolvedValue({
+      const originalFetch = (globalThis as any).fetch;
+      (globalThis as any).fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
         statusText: 'Unauthorized'
@@ -128,17 +128,17 @@ describe('Error Handling Unit Tests', () => {
         expect(false).toBe(true); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(EmbeddingError);
-        expect(error.message).toContain('Failed to generate OpenAI embedding');
+        expect((error as Error).message).toContain('Failed to generate OpenAI embedding');
       } finally {
-        global.fetch = originalFetch;
+        (globalThis as any).fetch = originalFetch;
       }
     });
 
 
     it('should handle fetch failures in Ollama provider', async () => {
       // Mock fetch to simulate network failure
-      const originalFetch = global.fetch;
-      global.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
+      const originalFetch = (globalThis as any).fetch;
+      (globalThis as any).fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
       
       try {
         const provider = createEmbeddingProvider('ollama', {
@@ -151,9 +151,9 @@ describe('Error Handling Unit Tests', () => {
         expect(false).toBe(true); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(EmbeddingError);
-        expect(error.message).toContain('Failed to generate Ollama embedding');
+        expect((error as Error).message).toContain('Failed to generate Ollama embedding');
       } finally {
-        global.fetch = originalFetch;
+        (globalThis as any).fetch = originalFetch;
       }
     });
   });

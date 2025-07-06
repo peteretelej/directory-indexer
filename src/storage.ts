@@ -22,7 +22,7 @@ export interface FileRecord {
 }
 
 export interface QdrantPoint {
-  id: string;
+  id: string | number;
   vector: number[];
   payload: {
     filePath: string;
@@ -344,7 +344,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       try {
         const errors = JSON.parse(row.errors_json);
         allErrors.push(...errors);
-      } catch (e) {
+      } catch {
         allErrors.push('Failed to parse error JSON');
       }
     });
@@ -361,7 +361,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       } else {
         databaseSize = `${sizeInBytes} bytes`;
       }
-    } catch (e) {
+    } catch {
       databaseSize = 'Unknown';
     }
     

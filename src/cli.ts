@@ -25,7 +25,7 @@ export async function main() {
         const config = await loadConfig({ verbose: options.verbose });
         console.log(`Indexing ${paths.length} directories...`);
         const result = await indexDirectories(paths, config);
-        console.log(`Indexed ${result.filesProcessed} files, ${result.chunksCreated} chunks, ${result.errors.length} errors`);
+        console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`);
         if (result.errors.length > 0 && config.verbose) {
           console.log('Errors:', result.errors);
         }
@@ -43,7 +43,7 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (query: string, options) => {
       try {
-        const config = await loadConfig({ verbose: options.verbose });
+        await loadConfig({ verbose: options.verbose });
         const results = await searchContent(query, { limit: parseInt(options.limit) });
         
         if (results.length === 0) {
@@ -55,8 +55,8 @@ export async function main() {
         results.forEach((result, index) => {
           console.log(`${index + 1}. ${result.filePath}`);
           console.log(`   Score: ${result.score.toFixed(3)}`);
-          if (result.chunk) {
-            console.log(`   Chunk: ${result.chunk.substring(0, 150)}...`);
+          if (result.content) {
+            console.log(`   Content: ${result.content.substring(0, 150)}...`);
           }
           console.log();
         });
@@ -74,7 +74,7 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (filePath: string, options) => {
       try {
-        const config = await loadConfig({ verbose: options.verbose });
+        await loadConfig({ verbose: options.verbose });
         const results = await findSimilarFiles(filePath, parseInt(options.limit));
         
         if (results.length === 0) {
@@ -85,7 +85,7 @@ export async function main() {
         console.log(`Found ${results.length} similar files:\n`);
         results.forEach((result, index) => {
           console.log(`${index + 1}. ${result.filePath}`);
-          console.log(`   Similarity: ${result.similarity.toFixed(3)}`);
+          console.log(`   Similarity: ${result.score.toFixed(3)}`);
           console.log();
         });
       } catch (error) {
@@ -102,7 +102,7 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (filePath: string, options) => {
       try {
-        const config = await loadConfig({ verbose: options.verbose });
+        await loadConfig({ verbose: options.verbose });
         const content = await getFileContent(filePath, options.chunks);
         console.log(content);
       } catch (error) {
@@ -131,7 +131,7 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (options) => {
       try {
-        const config = await loadConfig({ verbose: options.verbose });
+        await loadConfig({ verbose: options.verbose });
         const status = await getIndexStatus();
         
         console.log('Indexing Status:');

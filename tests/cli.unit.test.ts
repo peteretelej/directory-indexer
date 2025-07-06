@@ -4,15 +4,14 @@ import { main } from '../src/cli.js';
 describe('CLI Unit Tests', () => {
   let originalArgv: string[];
   let originalExit: typeof process.exit;
-  let consoleLogSpy: any;
-  let consoleErrorSpy: any;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let exitCode: number | undefined;
 
   beforeEach(() => {
     originalArgv = process.argv;
     originalExit = process.exit;
     
-    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
     process.exit = vi.fn((code?: number) => {
@@ -35,7 +34,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to exit with error
       }
       
@@ -47,7 +46,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to exit with error
       }
       
@@ -59,7 +58,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to exit with error
       }
       
@@ -71,7 +70,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to exit with error
       }
       
@@ -86,7 +85,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to fail due to missing file, but should parse correctly
       }
       
@@ -101,7 +100,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to exit with error
       }
       
@@ -114,7 +113,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to fail due to missing file
       }
       
@@ -127,7 +126,7 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch (error) {
+      } catch {
         // Expected to fail due to missing file
       }
       

@@ -38,7 +38,7 @@ async function checkOllamaHealth(): Promise<boolean> {
     if (!response.ok) return false;
     
     // Test if we can generate embeddings (actual usability test)
-    const embedResponse = await fetch('http://localhost:11434/api/embeddings', {
+    await fetch('http://localhost:11434/api/embeddings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -203,6 +203,8 @@ describe('Directory Indexer Integration Tests', () => {
       }
 
       // Load configuration for direct function calls
+      // Set test-specific environment variables
+      process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-node';
       const config = await loadConfig({ verbose: false });
 
       // 1. Test direct indexing function
@@ -273,7 +275,7 @@ describe('Directory Indexer Integration Tests', () => {
 
     it('should test MCP server components directly', async () => {
       // Test that MCP server can be initialized
-      const config = await loadConfig({ verbose: false });
+      await loadConfig({ verbose: false });
       
       // Test that we can import the MCP server function
       expect(typeof startMcpServer).toBe('function');
@@ -356,7 +358,7 @@ describe('Directory Indexer Integration Tests', () => {
         const embedding = await provider.generateEmbedding('test');
         expect(Array.isArray(embedding)).toBe(true);
         expect(embedding.length).toBe(768);
-      } catch (error) {
+      } catch {
         console.log('Ollama embedding test failed - service may not be ready');
       }
     });
@@ -423,7 +425,7 @@ describe('Directory Indexer Integration Tests', () => {
         const searchResults = await qdrant.searchPoints(new Array(768).fill(0.1), 5);
         expect(Array.isArray(searchResults)).toBe(true);
         
-        await qdrant.deletePoints([{ key: 'filePath', match: { value: '/test/file.txt' } }]);
+        await qdrant.deletePoints(['test-id']);
       }
     });
   });

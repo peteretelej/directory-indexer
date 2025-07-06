@@ -11,6 +11,8 @@ import {
   isDirectory,
   isFile
 } from './utils.js';
+import { generateEmbedding } from './embedding.js';
+import { initializeStorage } from './storage.js';
 
 export interface ScanOptions {
   ignorePatterns: string[];
@@ -134,6 +136,9 @@ export async function indexDirectories(paths: string[], config: Config): Promise
     maxFileSize: config.indexing.maxFileSize
   };
   
+  // Initialize storage
+  const { sqlite, qdrant } = await initializeStorage(config);
+  
   for (const path of paths) {
     try {
       const files = await scanDirectory(path, scanOptions);
@@ -141,12 +146,38 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       for (const file of files) {
         try {
           const content = await fs.readFile(file.path, 'utf-8');
-          chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
+          const chunks = chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
+          
+          // Store file metadata in SQLite
+          await sqlite.upsertFile(file, chunks);
+          
+          // Generate embeddings and store in Qdrant
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const embedding = await generateEmbedding(chunk.content, config);
+            // Generate a unique integer ID by combining hash and chunk index
+            const hashNum = parseInt(file.hash.slice(0, 8), 16);
+            const pointId = (hashNum % 1000000) * 1000 + parseInt(chunk.id);
+            const point = {
+              id: pointId,
+              vector: embedding,
+              payload: {
+                filePath: file.path,
+                chunkId: chunk.id,
+                fileHash: file.hash,
+                content: chunk.content,
+                parentDirectories: file.parentDirs
+              }
+            };
+            await qdrant.upsertPoints([point]);
+          }
           
           indexed++;
         } catch (error) {
           skipped++;
-          errors.push(`Failed to process ${file.path}: ${(error as Error).message}`);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const causeMessage = error instanceof Error && error.cause ? `: ${(error.cause as Error).message}` : '';
+          errors.push(`Failed to process ${file.path}: ${errorMessage}${causeMessage}`);
         }
       }
     } catch (error) {

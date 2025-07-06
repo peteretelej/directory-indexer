@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { chunkText } from '../src/indexing.js';
-import { normalizePath, calculateHash, fileExists } from '../src/utils.js';
-import { createEmbeddingProvider } from '../src/embedding.js';
+import { calculateHash } from '../src/utils.js';
 import { SQLiteStorage } from '../src/storage.js';
 
 describe('Edge Cases Unit Tests', () => {
@@ -61,8 +60,8 @@ describe('Edge Cases Unit Tests', () => {
           await loadConfig();
           expect(false).toBe(true); // Should not reach here
         } catch (error) {
-          expect(error.name).toBe('ConfigError');
-          expect(error.message).toContain('Configuration validation failed');
+          expect((error as Error).name).toBe('ConfigError');
+          expect((error as Error).message).toContain('Configuration validation failed');
         }
       } finally {
         process.env = originalEnv;
@@ -81,8 +80,8 @@ describe('Edge Cases Unit Tests', () => {
           await loadConfig();
           expect(false).toBe(true); // Should not reach here due to validation
         } catch (error) {
-          expect(error.name).toBe('ConfigError');
-          expect(error.message).toContain('Configuration validation failed');
+          expect((error as Error).name).toBe('ConfigError');
+          expect((error as Error).message).toContain('Configuration validation failed');
         }
       } finally {
         process.env = originalEnv;

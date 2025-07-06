@@ -70,7 +70,7 @@ describe('Embedding Provider Unit Tests', () => {
         ok: true,
         json: () => Promise.resolve({ embedding: new Array(768).fill(0.1) })
       });
-      global.fetch = mockFetch;
+      (globalThis as any).fetch = mockFetch;
 
       const provider = createEmbeddingProvider('ollama', {
         model: 'nomic-embed-text',
@@ -94,7 +94,7 @@ describe('Embedding Provider Unit Tests', () => {
     });
 
     it('should handle API error responses', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      (globalThis as any).fetch = vi.fn().mockResolvedValue({
         ok: false,
         statusText: 'Model not found'
       });
@@ -110,7 +110,7 @@ describe('Embedding Provider Unit Tests', () => {
         expect(false).toBe(true); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(EmbeddingError);
-        expect(error.message).toContain('Failed to generate Ollama embedding');
+        expect((error as Error).message).toContain('Failed to generate Ollama embedding');
       }
     });
 
@@ -125,7 +125,7 @@ describe('Embedding Provider Unit Tests', () => {
           json: () => Promise.resolve({ embedding: new Array(768).fill(0.2) })
         });
       
-      global.fetch = fetchMock;
+      (globalThis as any).fetch = fetchMock;
 
       const provider = createEmbeddingProvider('ollama', {
         model: 'nomic-embed-text',
@@ -154,7 +154,7 @@ describe('Embedding Provider Unit Tests', () => {
           data: [{ embedding: new Array(1536).fill(0.1) }]
         })
       });
-      global.fetch = mockFetch;
+      (globalThis as any).fetch = mockFetch;
 
       try {
         const provider = createEmbeddingProvider('openai', {
@@ -192,7 +192,7 @@ describe('Embedding Provider Unit Tests', () => {
       const originalEnv = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
-      global.fetch = vi.fn().mockResolvedValue({
+      (globalThis as any).fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
         statusText: 'Unauthorized'
@@ -209,7 +209,7 @@ describe('Embedding Provider Unit Tests', () => {
         expect(false).toBe(true); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(EmbeddingError);
-        expect(error.message).toContain('Failed to generate OpenAI embedding');
+        expect((error as Error).message).toContain('Failed to generate OpenAI embedding');
       } finally {
         if (originalEnv) {
           process.env.OPENAI_API_KEY = originalEnv;
@@ -218,7 +218,7 @@ describe('Embedding Provider Unit Tests', () => {
     });
 
     it('should handle rate limiting errors', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      (globalThis as any).fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 429,
         statusText: 'Too Many Requests'
@@ -235,7 +235,7 @@ describe('Embedding Provider Unit Tests', () => {
         expect(false).toBe(true); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(EmbeddingError);
-        expect(error.message).toContain('Failed to generate OpenAI embedding');
+        expect((error as Error).message).toContain('Failed to generate OpenAI embedding');
       }
     });
 
