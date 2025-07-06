@@ -9,7 +9,7 @@ describe('Configuration', () => {
   it('should load default configuration', async () => {
     const config = await loadConfig();
     
-    expect(config.storage.qdrantEndpoint).toBe('http://localhost:6333');
+    expect(config.storage.qdrantEndpoint).toBe('http://127.0.0.1:6333');
     expect(config.embedding.provider).toBe('ollama');
     expect(config.embedding.model).toBe('nomic-embed-text');
     expect(config.indexing.chunkSize).toBe(512);

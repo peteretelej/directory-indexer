@@ -43,13 +43,13 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
   const config = {
     storage: {
       sqlitePath: join(dataDir, dbFileName),
-      qdrantEndpoint: process.env.QDRANT_ENDPOINT || 'http://localhost:6333',
+      qdrantEndpoint: process.env.QDRANT_ENDPOINT || 'http://127.0.0.1:6333',
       qdrantCollection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION || defaultCollection,
     },
     embedding: {
       provider: (process.env.EMBEDDING_PROVIDER as Config['embedding']['provider']) || 'ollama',
       model: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
-      endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434',
+      endpoint: process.env.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434',
     },
     indexing: {
       chunkSize: parseInt(process.env.CHUNK_SIZE || '512'),

@@ -32,7 +32,7 @@ export async function main() {
     .action(async (paths: string[], options) => {
       try {
         const config = await loadConfig({ verbose: options.verbose });
-        console.log(`Indexing ${paths.length} directories...`);
+        console.log(`Indexing ${paths.length} ${paths.length === 1 ? 'directory' : 'directories'}: ${paths.join(', ')}`);
         const result = await indexDirectories(paths, config);
         console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`);
         if (result.errors.length > 0 && config.verbose) {

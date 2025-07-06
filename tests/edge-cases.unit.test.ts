@@ -33,11 +33,11 @@ describe('Edge Cases Unit Tests', () => {
         const config = await loadConfig();
         
         // Should use defaults
-        expect(config.storage.qdrantEndpoint).toBe('http://localhost:6333');
+        expect(config.storage.qdrantEndpoint).toBe('http://127.0.0.1:6333');
         expect(config.storage.qdrantCollection).toBe('directory-indexer-test');
         expect(config.embedding.provider).toBe('ollama');
         expect(config.embedding.model).toBe('nomic-embed-text');
-        expect(config.embedding.endpoint).toBe('http://localhost:11434');
+        expect(config.embedding.endpoint).toBe('http://127.0.0.1:11434');
         expect(config.indexing.chunkSize).toBe(512);
         expect(config.indexing.chunkOverlap).toBe(50);
         expect(config.indexing.maxFileSize).toBe(10485760);

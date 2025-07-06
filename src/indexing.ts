@@ -174,6 +174,27 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   // Initialize storage
   const { sqlite, qdrant } = await initializeStorage(config);
   
+  // First pass: scan all directories to get total file count
+  let totalFiles = 0;
+  for (const path of paths) {
+    try {
+      if (config.verbose) {
+        console.log(`Scanning directory: ${path}`);
+      }
+      const files = await scanDirectory(path, scanOptions);
+      totalFiles += files.length;
+      if (config.verbose) {
+        console.log(`Found ${files.length} files to process in ${path}`);
+      }
+    } catch (error) {
+      // Continue with other directories even if one fails to scan
+    }
+  }
+  
+  if (!config.verbose && totalFiles > 0) {
+    console.log(`Processing ${totalFiles} files...`);
+  }
+  
   for (const path of paths) {
     try {
       // Mark directory as indexing
@@ -226,6 +247,9 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           }
           
           indexed++;
+          if (config.verbose) {
+            console.log(`  Indexed: ${file.path} (${chunks.length} chunks)`);
+          }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const causeMessage = error instanceof Error && error.cause ? `: ${(error.cause as Error).message}` : '';
