@@ -35,15 +35,16 @@ export class ConfigError extends Error {
 export function loadConfig(options: { verbose?: boolean } = {}): Config {
   const dataDir = process.env.DIRECTORY_INDEXER_DATA_DIR || join(homedir(), '.directory-indexer');
   
-  // Use separate database file for tests to avoid contaminating main data
+  // Use separate database file and collection for tests to avoid contaminating main data
   const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
   const dbFileName = isTest ? 'test-data.db' : 'data.db';
+  const defaultCollection = isTest ? 'directory-indexer-test' : 'directory-indexer';
   
   const config = {
     storage: {
       sqlitePath: join(dataDir, dbFileName),
       qdrantEndpoint: process.env.QDRANT_ENDPOINT || 'http://localhost:6333',
-      qdrantCollection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION || 'directory-indexer',
+      qdrantCollection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION || defaultCollection,
     },
     embedding: {
       provider: (process.env.EMBEDDING_PROVIDER as Config['embedding']['provider']) || 'ollama',

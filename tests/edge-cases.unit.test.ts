@@ -34,7 +34,7 @@ describe('Edge Cases Unit Tests', () => {
         
         // Should use defaults
         expect(config.storage.qdrantEndpoint).toBe('http://localhost:6333');
-        expect(config.storage.qdrantCollection).toBe('directory-indexer');
+        expect(config.storage.qdrantCollection).toBe('directory-indexer-test');
         expect(config.embedding.provider).toBe('ollama');
         expect(config.embedding.model).toBe('nomic-embed-text');
         expect(config.embedding.endpoint).toBe('http://localhost:11434');

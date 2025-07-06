@@ -59,6 +59,7 @@ function runCLI(args: string[], timeout = 30000): Promise<{ stdout: string; stde
     const child = spawn('node', ['bin/directory-indexer.js', ...args], {
       env: {
         ...process.env,
+        NODE_ENV: 'test',
         DIRECTORY_INDEXER_QDRANT_COLLECTION: 'directory-indexer-test-node'
       }
     });
@@ -91,7 +92,7 @@ function runCLI(args: string[], timeout = 30000): Promise<{ stdout: string; stde
   });
 }
 
-describe('Directory Indexer Integration Tests', () => {
+describe.sequential('Directory Indexer Integration Tests', () => {
   let servicesAvailable = false;
 
   beforeAll(async () => {
