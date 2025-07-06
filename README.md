@@ -111,7 +111,10 @@ export OPENAI_API_KEY="your-api-key-here"
 Test your setup:
 
 ```bash
-# Check Qdrant
+# Check Qdrant Health
+curl http://localhost:6333/healthz
+
+# View collections
 curl http://localhost:6333/collections
 
 # Check Ollama

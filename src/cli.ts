@@ -159,6 +159,35 @@ export async function main() {
             });
           }
         }
+        
+        console.log('\\nIndexed Directories:');
+        if (status.directories.length === 0) {
+          console.log('  No directories indexed');
+        } else {
+          status.directories.forEach(dir => {
+            console.log(`  ${dir.path}:`);
+            console.log(`    Status: ${dir.status}`);
+            console.log(`    Files: ${dir.filesCount}`);
+            console.log(`    Chunks: ${dir.chunksCount}`);
+            console.log(`    Last indexed: ${dir.lastIndexed || 'Never'}`);
+            if (dir.errors.length > 0) {
+              console.log(`    Errors: ${dir.errors.length}`);
+              if (options.verbose) {
+                dir.errors.slice(0, 3).forEach(error => {
+                  console.log(`      - ${error}`);
+                });
+              }
+            }
+          });
+        }
+        
+        if (!status.qdrantConsistency.isConsistent) {
+          console.log('\\n⚠️  Database Consistency Issues:');
+          status.qdrantConsistency.issues.forEach(issue => {
+            console.log(`  - ${issue}`);
+          });
+          console.log('\\nConsider running database reset if issues persist.');
+        }
       } catch (error) {
         console.error('Error getting status:', error);
         process.exit(1);

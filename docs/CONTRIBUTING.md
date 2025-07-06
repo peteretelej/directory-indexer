@@ -1,376 +1,259 @@
 # Contributing to Directory Indexer
 
-## Quick Start (5 minutes)
+## Quick Start
 
 ```bash
-# 1. Setup (one time)
+# 1. Clone and setup
 git clone https://github.com/peteretelej/directory-indexer.git
 cd directory-indexer && npm install
-docker run -d -p 127.0.0.1:6333:6333 qdrant/qdrant
-ollama pull nomic-embed-text
 
-# 2. Build & test
+# 2. Build and test
 npm run build && npm test
 
-# 3. Try it out
-npx directory-indexer index ./tests/test_data
-npx directory-indexer search "database"
-npx directory-indexer status
+# 3. Try local CLI
+npm run cli status
+npm run cli index ./tests/test_data
+npm run cli search "database"
 ```
 
-## Development Environment Setup
+## Development Scenarios
 
-### Prerequisites
+### Scenario 1: Quick Code Changes
 
-- **Node.js**: Version 18+ (latest LTS recommended)
-- **npm**: Version 9+ (comes with Node.js)
-- **Qdrant**: Local vector database instance
-- **Embedding Provider**: Ollama (recommended) or OpenAI API
-
-### Quick Setup
+For small changes and testing:
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/peteretelej/directory-indexer.git
-cd directory-indexer
-npm install
-
-# 2. Start services
-docker run -d --name qdrant \
-  -p 127.0.0.1:6333:6333 \
-  -v qdrant_storage:/qdrant/storage \
-  qdrant/qdrant
-
-# 3. Install Ollama and pull model
-# Visit https://ollama.ai for installation
-ollama pull nomic-embed-text
-
-# 4. Build and test
+# Make your changes, then:
 npm run build
+npm run cli <command>
+```
+
+### Scenario 2: Live Development
+
+For active development with automatic rebuilds:
+
+```bash
+# Terminal 1: Watch mode (rebuilds on file changes)
+npm run dev
+
+# Terminal 2: Test commands (rerun after changes)
+npm run cli status
+npm run cli index ./tests/test_data
+```
+
+### Scenario 3: Integration Testing
+
+For testing with real services (Qdrant + Ollama):
+
+```bash
+# Start services
+./scripts/start-dev-services.sh
+
+# Run integration tests
 npm test
 
-# 5. Quick usage test
-npx directory-indexer status
-npx directory-indexer index ./tests/test_data
-npx directory-indexer search "authentication"
+# Run specific commands with services
+export QDRANT_ENDPOINT=http://localhost:6333
+export OLLAMA_ENDPOINT=http://localhost:11434
+npm run cli index ./tests/test_data
+npm run cli search "authentication"
+
+# Stop services when done
+./scripts/stop-dev-services.sh
+```
+
+### Scenario 4: Clean Environment Testing
+
+For testing CLI as end-users would experience it:
+
+```bash
+# Setup clean Docker environment
+./scripts/docker-debug/setup-debug-container.sh
+
+# Test commands in container
+docker exec test-directory-indexer directory-indexer status
+docker exec test-directory-indexer directory-indexer index /test-data
+
+# Cleanup
+docker stop test-directory-indexer && docker rm test-directory-indexer
 ```
 
 ## Project Structure
 
 ```
-src/
-├── cli.ts              # Main CLI entry point
-├── config.ts           # Configuration loading
-├── storage.ts          # SQLite + Qdrant operations
-├── embedding.ts        # Ollama/OpenAI providers
-├── indexing.ts         # File scanning and processing
-├── search.ts           # Search and similarity
-├── mcp.ts              # MCP server implementation
-└── utils.ts            # Path/file utilities
+src/                    # TypeScript source code
+├── cli.ts             # Main CLI entry point
+├── config.ts          # Configuration management
+├── storage.ts         # SQLite + Qdrant operations
+├── embedding.ts       # Ollama/OpenAI providers
+├── indexing.ts        # File processing
+├── search.ts          # Search functionality
+└── mcp.ts             # MCP server
 
-tests/
-├── integration.test.ts # Integration tests (requires services)
-├── unit.test.ts        # Unit tests (no external dependencies)
-├── test_data/          # Structured test files
-│   ├── docs/           # Markdown documentation
-│   ├── programming/    # Code files (py, rs, js)
-│   ├── configs/        # Config files (json, yaml)
-│   └── data/           # Data files (csv)
-└── fixtures/           # Additional test fixtures
+bin/
+└── directory-indexer.js # CLI wrapper (calls dist/cli.js)
+
+dist/                  # Built JavaScript (npm run build)
+tests/                 # Test files
+scripts/               # Development helper scripts
 ```
 
-## Development Workflow
+## Testing
 
-### Building
+### Unit Tests (No Services Required)
 
 ```bash
-# Development build with watch
-npm run dev
-
-# Production build
-npm run build
-
-# Clean build
-npm run clean && npm run build
+npm run test:unit        # Fast tests, no external dependencies
+npm run test:unit -- --watch  # Watch mode
 ```
 
-### Testing
+### Integration Tests (Requires Services)
 
 ```bash
-# All tests (requires Qdrant + Ollama running)
-npm test
+# Start services first
+./scripts/start-dev-services.sh
 
-# Unit tests only (no external dependencies)
-npm run test:unit
-
-# Integration tests only (requires services)
+# Run integration tests
 npm run test:integration
 
-# Watch mode or specific patterns
-npm test -- --watch
-npm test -- --grep "search"
+# Or run all tests with coverage
+npm test
 ```
 
-### Code Quality
+### Test Structure
+
+- **Unit tests**: Mock embedding provider, no external services
+- **Integration tests**: Real Qdrant + Ollama services
+- **Test data**: `tests/test_data/` contains structured files for testing
+
+## Code Quality
 
 ```bash
-# Type checking
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Auto-fix linting issues
-npm run lint -- --fix
+npm run typecheck       # TypeScript validation
+npm run lint            # ESLint checks
+npm run lint -- --fix  # Auto-fix issues
 ```
 
-### Running Commands
+## Development Commands
+
+All CLI commands require building first:
 
 ```bash
-# Build first (required for local development)
-npm run build
-
-# Index test data
-npx directory-indexer index ./tests/test_data
-
-# Search content
-npx directory-indexer search "authentication" --limit 5
-
-# Find similar files
-npx directory-indexer similar ./tests/test_data/docs/api_guide.md
-
-# Get file content
-npx directory-indexer get ./tests/test_data/docs/api_guide.md
-
-# Show status
-npx directory-indexer status --verbose
-
-# Start MCP server
-npx directory-indexer serve
+npm run build           # Required before CLI usage
+npm run cli status      # Show indexing status
+npm run cli index <dir> # Index directory
+npm run cli search <query> # Search content
+npm run cli similar <file> # Find similar files
+npm run cli get <file>  # Get file content
+npm run cli serve       # Start MCP server
 ```
 
-### Testing MCP Integration
+Direct node execution:
+```bash
+node bin/directory-indexer.js <command>
+```
+
+## Environment Setup
+
+### Required Services
+
+- **Qdrant**: Vector database on `localhost:6333`
+- **Ollama**: Embedding provider on `localhost:11434` with `nomic-embed-text` model
+
+### Using Development Scripts
 
 ```bash
-# Test MCP server locally
-npx directory-indexer serve
-
-# In another terminal, test with MCP client
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | npx directory-indexer serve
+./scripts/start-dev-services.sh  # Start Qdrant + Ollama via Docker
+./scripts/stop-dev-services.sh   # Stop services
 ```
 
-## Configuration
+### Manual Service Setup
+
+**Qdrant:**
+```bash
+docker run -d --name qdrant -p 127.0.0.1:6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+```
+
+**Ollama:**
+```bash
+# Install from https://ollama.ai or use Docker:
+docker run -d --name ollama -p 127.0.0.1:11434:11434 -v ollama:/root/.ollama ollama/ollama
+docker exec ollama ollama pull nomic-embed-text
+```
 
 ### Environment Variables
 
 ```bash
-# Service endpoints (defaults shown)
 export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
-
-# Data directory (default: ~/.directory-indexer)
-export DIRECTORY_INDEXER_DATA_DIR="/opt/directory-indexer-dev"
-
-# Collection name (default: directory-indexer)
-export DIRECTORY_INDEXER_QDRANT_COLLECTION="my-test-collection"
-
-# Optional API keys
-export QDRANT_API_KEY="your-key"
-export OLLAMA_API_KEY="your-key"
-export OPENAI_API_KEY="your-key"
-```
-
-### MCP Development
-
-For MCP configuration with AI assistants, see the [README.md MCP Integration section](../README.md#mcp-integration).
-
-For local development with built code, use the built CLI directly:
-
-```json
-{
-  "mcpServers": {
-    "directory-indexer": {
-      "command": "node",
-      "args": ["/path/to/directory-indexer/dist/cli.js", "serve"],
-      "env": {
-        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev"
-      }
-    }
-  }
-}
-```
-
-## Testing Strategy
-
-### Integration Tests
-
-The main integration test covers the complete workflow:
-
-1. **Index test fixtures** - Verifies file scanning and embedding
-2. **Search functionality** - Tests semantic search
-3. **Similar files** - Tests similarity matching
-4. **Content retrieval** - Tests file content access
-5. **Storage validation** - Verifies SQLite + Qdrant consistency
-
-### Service Dependencies
-
-Tests fail immediately with clear errors if services are unavailable:
-
-```bash
-# Check service health
-curl http://localhost:6333/healthz        # Qdrant health
-curl http://localhost:6333/collections    # Qdrant API access
-curl http://localhost:11434/api/tags      # Ollama + models
-```
-
-**Error Output Example:**
-```
-❌ Integration tests require both Qdrant and Ollama services
-Qdrant (localhost:6333): ❌
-Ollama (localhost:11434): ✅
-  - Start Qdrant: docker run -p 127.0.0.1:6333:6333 qdrant/qdrant
-```
-
-### Test Data
-
-All tests use `tests/test_data/` containing real files:
-- **No package.json access** - Tests isolated from project files
-- **Structured content** - Docs, code, configs, data files
-- **Deterministic** - Mock embedding provider for unit tests
-
-## Code Style
-
-### TypeScript Guidelines
-
-- **No classes** - Use functions and plain objects
-- **Async/await** - Prefer over Promises/callbacks
-- **Explicit types** - Avoid `any`, use strict TypeScript
-- **Simple exports** - Named exports, avoid default exports
-- **Error handling** - Use proper Error types with context
-
-### Function Style
-
-```typescript
-// Good: Simple function with clear types
-export async function indexFiles(paths: string[]): Promise<IndexResult> {
-  // Implementation
-}
-
-// Avoid: Classes with complex inheritance
-export class FileIndexer extends BaseIndexer {
-  // Complex implementation
-}
-```
-
-## Debugging
-
-### Enable Debug Logging
-
-```bash
-# Set debug level
-export DEBUG="directory-indexer:*"
-npm run build && npx directory-indexer index ./test_data
-
-# Verbose output
-npx directory-indexer --verbose search "query"
-```
-
-### Common Issues
-
-```bash
-# SQLite permission issues
-rm -rf ~/.directory-indexer && mkdir -p ~/.directory-indexer
-
-# Service connection issues
-docker restart qdrant
-# Or restart with correct binding:
-# docker run -d --name qdrant -p 127.0.0.1:6333:6333 qdrant/qdrant
-ollama list  # Check if model is available
-
-# Build issues
-rm -rf node_modules dist && npm install && npm run build
+export DIRECTORY_INDEXER_DATA_DIR="/tmp/directory-indexer-dev"
 ```
 
 ## CI/CD
 
 ### Automated Testing
 
-- **Unit tests** - Run on all platforms (Ubuntu, Windows, macOS)
-- **Integration tests** - Conditional on main branch or `[integration]` flag
-- **Type checking** - Strict TypeScript validation
-- **Linting** - ESLint with TypeScript rules
+- **Unit tests**: Run on Ubuntu, Windows, macOS with Node 18+20
+- **Integration tests**: Run conditionally with real services
+- **Code quality**: TypeScript validation + ESLint
+
+### Triggering Integration Tests
+
+Integration tests run automatically on `main` branch, or manually with:
+- Commit message containing `[integration]`
+- PR title containing `[integration]`
 
 ### Release Process
 
-Releases are automated via GitHub Actions:
-
 ```bash
-# Create release
-git tag v1.0.0
-git push origin v1.0.0
-
-# Automated actions:
-# - Run all tests
-# - Build production bundle
-# - Publish to npm
-# - Create GitHub release
+git tag v1.0.0 && git push origin v1.0.0
+# Automatically: builds, tests, publishes to npm
 ```
 
-## Architecture Notes
+## Debugging
 
-**Storage:** SQLite (metadata) + Qdrant (vectors) with SQLite as source of truth  
-**Embedding:** Ollama (local-first) with OpenAI fallback  
-**Errors:** Typed errors with context and user-friendly messages
+### Common Issues
 
-## Contributing Guidelines
+```bash
+# Build not found
+npm run build
 
-### Pull Requests
+# Service connection errors
+./scripts/start-dev-services.sh
+curl http://localhost:6333/healthz
+curl http://localhost:11434/api/tags
+
+# Clean rebuild
+rm -rf node_modules dist && npm install && npm run build
+```
+
+### Debug Logging
+
+```bash
+npm run cli -- status --verbose
+npm run cli -- search "query" --verbose
+```
+
+## Code Style
+
+- **TypeScript**: Strict mode, explicit types
+- **Functions**: Prefer functions over classes
+- **Async**: Use async/await over promises
+- **Exports**: Named exports, avoid defaults
+- **Errors**: Typed errors with context
+
+## Pull Request Process
 
 1. **Fork and branch** from `main`
-2. **Test locally** - Run `npm test` before pushing
-3. **Clear commits** - Descriptive commit messages
-4. **Update tests** - Add tests for new functionality
-5. **Documentation** - Update relevant docs
+2. **Make changes** and ensure `npm run build` works
+3. **Add tests** for new functionality
+4. **Run quality checks**: `npm run typecheck && npm run lint`
+5. **Test locally**: `npm test` (with services if needed)
+6. **Clear commit messages** describing changes
+7. **Submit PR** with description of changes
 
-### Code Review
+## Getting Help
 
-- **Function-focused** - Prefer small, focused functions
-- **Type safety** - Leverage TypeScript fully
-- **Error paths** - Handle edge cases gracefully
-- **Performance** - Consider async patterns and memory usage
-
-### Community
-
-- **Issues** - Use GitHub Issues for bugs/features
-- **Discussions** - Use GitHub Discussions for questions
-- **Security** - Report security issues privately
-
-## Troubleshooting
-
-### Build Issues
-
-```bash
-# Clear everything and rebuild
-rm -rf node_modules dist
-npm install
-npm run build
-```
-
-### Test Failures
-
-```bash
-# Ensure services are running
-docker ps | grep qdrant
-ollama list
-
-# Reset test data
-rm -rf ~/.directory-indexer-test
-```
-
-### Performance Issues
-
-```bash
-# Enable performance monitoring
-export NODE_OPTIONS="--enable-source-maps"
-npm run build && node --prof dist/cli.js index ./large-directory
-```
+- **Issues**: Report bugs and feature requests
+- **Discussions**: Ask questions about development
+- **Documentation**: Check `docs/` folder for detailed guides

@@ -44,7 +44,7 @@ export class QdrantClient {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/health`);
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/healthz`);
       return response.ok;
     } catch {
       return false;
@@ -90,7 +90,8 @@ export class QdrantClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to upsert points: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to upsert points: ${response.status} ${response.statusText} - ${errorText}`);
       }
     } catch (error) {
       throw new StorageError(`Failed to upsert points to Qdrant`, error as Error);
@@ -127,7 +128,7 @@ export class QdrantClient {
     }
   }
 
-  async deletePoints(ids: string[]): Promise<void> {
+  async deletePoints(ids: (string | number)[]): Promise<void> {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
@@ -310,6 +311,15 @@ export async function initDatabase(dbPath: string): Promise<Database.Database> {
   return new Database(dbPath);
 }
 
+export interface DirectoryStatus {
+  path: string;
+  status: string;
+  filesCount: number;
+  chunksCount: number;
+  lastIndexed: string | null;
+  errors: string[];
+}
+
 export interface IndexStatus {
   directoriesIndexed: number;
   filesIndexed: number;
@@ -317,6 +327,62 @@ export interface IndexStatus {
   databaseSize: string;
   lastIndexed: string | null;
   errors: string[];
+  directories: DirectoryStatus[];
+  qdrantConsistency: {
+    isConsistent: boolean;
+    issues: string[];
+  };
+}
+
+async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Promise<{ isConsistent: boolean; issues: string[] }> {
+  const issues: string[] = [];
+  
+  try {
+    const qdrant = new QdrantClient(config);
+    const isHealthy = await qdrant.healthCheck();
+    
+    if (!isHealthy) {
+      issues.push('Qdrant service is not accessible');
+      return { isConsistent: false, issues };
+    }
+    
+    const filesWithChunksStmt = sqlite.db.prepare('SELECT COUNT(*) as count FROM files WHERE chunks_json IS NOT NULL');
+    const filesWithChunks = filesWithChunksStmt.get() as { count: number };
+    
+    const totalChunksStmt = sqlite.db.prepare('SELECT SUM(json_array_length(chunks_json)) as count FROM files WHERE chunks_json IS NOT NULL');
+    const totalChunks = totalChunksStmt.get() as { count: number | null };
+    
+    if (filesWithChunks.count > 0 && (totalChunks.count || 0) === 0) {
+      issues.push('Files exist but no chunks found - possible data corruption');
+    }
+    
+    const collectionName = config.storage.qdrantCollection;
+    try {
+      const response = await fetch(`${config.storage.qdrantEndpoint}/collections/${collectionName}`);
+      if (!response.ok) {
+        issues.push(`Qdrant collection '${collectionName}' does not exist`);
+        return { isConsistent: false, issues };
+      }
+      
+      const collectionInfo = await response.json();
+      const qdrantPointCount = collectionInfo.result?.points_count || 0;
+      const sqliteChunkCount = totalChunks.count || 0;
+      
+      if (Math.abs(qdrantPointCount - sqliteChunkCount) > 0) {
+        issues.push(`Vector count mismatch: SQLite has ${sqliteChunkCount} chunks, Qdrant has ${qdrantPointCount} points`);
+      }
+    } catch (error) {
+      issues.push(`Failed to check Qdrant collection: ${error}`);
+    }
+    
+  } catch (error) {
+    issues.push(`Consistency check failed: ${error}`);
+  }
+  
+  return {
+    isConsistent: issues.length === 0,
+    issues
+  };
 }
 
 export async function getIndexStatus(): Promise<IndexStatus> {
@@ -333,7 +399,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     const chunksStmt = sqlite.db.prepare('SELECT SUM(json_array_length(chunks_json)) as count FROM files WHERE chunks_json IS NOT NULL');
     const chunksCount = chunksStmt.get() as { count: number | null };
     
-    const lastIndexedStmt = sqlite.db.prepare('SELECT MAX(indexed_at) as last_indexed FROM directories');
+    const lastIndexedStmt = sqlite.db.prepare('SELECT MAX(indexed_at) as last_indexed FROM directories WHERE indexed_at > 0');
     const lastIndexedResult = lastIndexedStmt.get() as { last_indexed: number | null };
     
     const errorsStmt = sqlite.db.prepare('SELECT errors_json FROM files WHERE errors_json IS NOT NULL');
@@ -348,6 +414,49 @@ export async function getIndexStatus(): Promise<IndexStatus> {
         allErrors.push('Failed to parse error JSON');
       }
     });
+    
+    const directoriesDetailStmt = sqlite.db.prepare(`
+      SELECT 
+        d.path,
+        d.status,
+        d.indexed_at,
+        COUNT(f.id) as files_count,
+        COALESCE(SUM(json_array_length(f.chunks_json)), 0) as chunks_count
+      FROM directories d
+      LEFT JOIN files f ON f.parent_dirs LIKE '%' || d.path || '%'
+      GROUP BY d.id, d.path, d.status, d.indexed_at
+      ORDER BY d.indexed_at DESC
+    `);
+    const directoryDetails = directoriesDetailStmt.all() as any[];
+    
+    const directories: DirectoryStatus[] = directoryDetails.map(row => {
+      const errorsByDirStmt = sqlite.db.prepare(`
+        SELECT errors_json FROM files 
+        WHERE parent_dirs LIKE '%' || ? || '%' AND errors_json IS NOT NULL
+      `);
+      const dirErrors = errorsByDirStmt.all(row.path) as { errors_json: string }[];
+      
+      const dirErrorsList: string[] = [];
+      dirErrors.forEach(errorRow => {
+        try {
+          const errors = JSON.parse(errorRow.errors_json);
+          dirErrorsList.push(...errors);
+        } catch {
+          dirErrorsList.push('Failed to parse error JSON');
+        }
+      });
+      
+      return {
+        path: row.path,
+        status: row.status,
+        filesCount: row.files_count,
+        chunksCount: row.chunks_count,
+        lastIndexed: row.indexed_at && row.indexed_at > 0 ? new Date(row.indexed_at * 1000).toISOString() : null,
+        errors: dirErrorsList
+      };
+    });
+    
+    const qdrantConsistency = await checkQdrantConsistency(sqlite, config);
     
     const fs = await import('fs');
     let databaseSize = '0 KB';
@@ -370,8 +479,10 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       filesIndexed: filesCount.count,
       chunksIndexed: chunksCount.count || 0,
       databaseSize,
-      lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed).toISOString() : null,
-      errors: allErrors
+      lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed * 1000).toISOString() : null,
+      errors: allErrors,
+      directories,
+      qdrantConsistency
     };
   } finally {
     sqlite.close();

@@ -18,7 +18,8 @@
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "cli": "node bin/directory-indexer.js"
   },
   "keywords": [
     "mcp",
