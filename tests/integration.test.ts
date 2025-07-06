@@ -56,7 +56,7 @@ async function checkOllamaHealth(): Promise<boolean> {
 
 function runCLI(args: string[], timeout = 30000): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('node', ['dist/cli.js', ...args], {
+    const child = spawn('node', ['bin/directory-indexer.js', ...args], {
       env: {
         ...process.env,
         DIRECTORY_INDEXER_QDRANT_COLLECTION: 'directory-indexer-test-node'

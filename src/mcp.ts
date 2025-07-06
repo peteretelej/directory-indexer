@@ -5,10 +5,19 @@ import {
   ListToolsRequestSchema,
   Tool
 } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { Config } from './config.js';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent } from './search.js';
 import { getIndexStatus } from './storage.js';
+
+// Read version from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageJsonPath = join(__dirname, '../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+const VERSION = packageJson.version;
 
 const MCP_TOOLS: Tool[] = [
   {
@@ -95,7 +104,7 @@ export async function startMcpServer(config: Config): Promise<void> {
   const server = new Server(
     {
       name: 'directory-indexer',
-      version: '0.0.10'
+      version: VERSION
     },
     {
       capabilities: {
@@ -184,7 +193,7 @@ export async function startMcpServer(config: Config): Promise<void> {
                 type: 'text',
                 text: JSON.stringify({
                   name: 'directory-indexer',
-                  version: '0.0.10',
+                  version: VERSION,
                   status: status
                 }, null, 2)
               }

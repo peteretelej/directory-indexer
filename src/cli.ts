@@ -2,11 +2,19 @@
 
 import { Command } from 'commander';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent } from './search.js';
 import { loadConfig } from './config.js';
 import { getIndexStatus } from './storage.js';
 import { startMcpServer } from './mcp.js';
+
+// Read version from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageJsonPath = join(__dirname, '../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+const VERSION = packageJson.version;
 
 export async function main() {
   const program = new Command();
@@ -14,7 +22,7 @@ export async function main() {
   program
     .name('directory-indexer')
     .description('AI-powered directory indexing with semantic search')
-    .version('0.0.10');
+    .version(VERSION);
 
   program
     .command('index')
@@ -160,5 +168,4 @@ export async function main() {
   await program.parseAsync();
 }
 
-// For CLI scripts, we can call main directly since this file is only used as an executable
-main().catch(console.error);
+// Main function is already exported above

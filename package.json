@@ -1,10 +1,10 @@
 {
   "name": "directory-indexer",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "AI-powered directory indexing with semantic search for MCP servers",
   "main": "dist/cli.js",
   "bin": {
-    "directory-indexer": "dist/cli.js"
+    "directory-indexer": "bin/directory-indexer.js"
   },
   "type": "module",
   "scripts": {
@@ -42,7 +42,8 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "bin/"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
