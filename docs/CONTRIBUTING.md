@@ -135,7 +135,7 @@ npm run lint -- --fix
 ### Running Commands
 
 ```bash
-# Build first (required)
+# Build first (required for local development)
 npm run build
 
 # Index test data
@@ -155,6 +155,16 @@ npx directory-indexer status --verbose
 
 # Start MCP server
 npx directory-indexer serve
+```
+
+### Testing MCP Integration
+
+```bash
+# Test MCP server locally
+npx directory-indexer serve
+
+# In another terminal, test with MCP client
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | npx directory-indexer serve
 ```
 
 ## Configuration
@@ -180,7 +190,25 @@ export OPENAI_API_KEY="your-key"
 
 ### MCP Development
 
-Test with Claude Desktop configuration:
+Test with AI assistants (Claude Desktop, Cline, etc.) using npx:
+
+```json
+{
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "npx",
+      "args": ["directory-indexer", "serve"],
+      "env": {
+        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev",
+        "QDRANT_ENDPOINT": "http://localhost:6333",
+        "OLLAMA_ENDPOINT": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+For local development with built code:
 
 ```json
 {
@@ -189,6 +217,7 @@ Test with Claude Desktop configuration:
       "command": "node",
       "args": ["/path/to/directory-indexer/dist/cli.js", "serve"],
       "env": {
+        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev",
         "QDRANT_ENDPOINT": "http://localhost:6333",
         "OLLAMA_ENDPOINT": "http://localhost:11434"
       }

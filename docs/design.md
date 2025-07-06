@@ -174,6 +174,94 @@ DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer
 
 **Hierarchy**: Defaults → Environment → CLI args
 
+## Environment Variables
+
+### Core Configuration
+
+- `DIRECTORY_INDEXER_DATA_DIR` - Data directory (default: `~/.directory-indexer`)
+- `QDRANT_ENDPOINT` - Qdrant vector database endpoint (default: `http://localhost:6333`)
+- `OLLAMA_ENDPOINT` - Ollama embedding provider endpoint (default: `http://localhost:11434`)
+- `DIRECTORY_INDEXER_QDRANT_COLLECTION` - Qdrant collection name (default: `directory-indexer`)
+
+### Embedding Provider
+
+- `EMBEDDING_PROVIDER` - Provider type: `ollama`, `openai`, `mock` (default: `ollama`)
+- `EMBEDDING_MODEL` - Model name (default: `nomic-embed-text`)
+- `OPENAI_API_KEY` - OpenAI API key (required for OpenAI provider)
+
+### Processing Options
+
+- `CHUNK_SIZE` - Text chunk size in characters (default: `512`)
+- `CHUNK_OVERLAP` - Chunk overlap in characters (default: `50`)
+- `MAX_FILE_SIZE` - Maximum file size in bytes (default: `10485760` = 10MB)
+- `VERBOSE` - Enable verbose logging: `true`/`false` (default: `false`)
+
+### API Keys (Optional)
+
+- `QDRANT_API_KEY` - Qdrant API key for authenticated instances
+- `OLLAMA_API_KEY` - Ollama API key for hosted instances
+
+## CLI Usage
+
+For users who prefer command-line interface over MCP integration:
+
+### Installation
+
+```bash
+npm install -g directory-indexer
+```
+
+### Environment Setup
+
+```bash
+# Optional: Custom data directory
+export DIRECTORY_INDEXER_DATA_DIR="/opt/ai-knowledge-base"
+
+# Optional: Custom service endpoints
+export QDRANT_ENDPOINT="http://localhost:6333"
+export OLLAMA_ENDPOINT="http://localhost:11434"
+
+# Optional: OpenAI provider
+export EMBEDDING_PROVIDER="openai"
+export OPENAI_API_KEY="your-api-key"
+```
+
+### Basic Usage
+
+```bash
+# Index directories
+directory-indexer index /home/user/projects/docs /home/user/work/reports
+
+# Search semantically
+directory-indexer search "database timeout errors" --limit 10
+
+# Find similar files
+directory-indexer similar /path/to/file.md --limit 5
+
+# Get file content
+directory-indexer get /path/to/file.md
+
+# Show indexing status
+directory-indexer status
+
+# Start MCP server
+directory-indexer serve
+```
+
+### Advanced Usage
+
+```bash
+# Verbose output
+directory-indexer --verbose search "authentication examples"
+
+# Multiple directories
+directory-indexer index "/home/user/docs" "/opt/projects" "/var/log/app"
+
+# Custom limits
+directory-indexer search "error handling" --limit 20
+directory-indexer similar file.py --limit 10
+```
+
 ## Error Handling
 
 **Simple Error Types**:
@@ -218,7 +306,7 @@ export class EmbeddingError extends AppError { constructor(msg: string, cause?: 
 ## Migration from Rust
 
 **Compatibility**:
-- Same CLI interface and MCP tools
+- Same MCP tools and functionality
 - Same SQLite schema and Qdrant collection format
 - Same configuration environment variables
 - Same file type support and chunking strategy
@@ -228,3 +316,4 @@ export class EmbeddingError extends AppError { constructor(msg: string, cause?: 
 - Function-based (no classes)
 - Single integration test (vs multiple test files)
 - Simplified project structure (8 files vs 30+ modules)
+- npx installation (no global install required)

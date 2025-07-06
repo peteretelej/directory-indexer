@@ -71,103 +71,80 @@ curl http://localhost:11434/api/tags
 
 If either fails, directory-indexer will show a helpful error with setup guidance.
 
-## Installation
-
-```bash
-npm install -g directory-indexer
-```
-
 ## Usage
 
 ### MCP Integration
 
-Configure with Claude Desktop:
+Configure with AI assistants (Claude Desktop, Cline, etc.) using npx:
 
 ```json
 {
   "mcpServers": {
     "directory-indexer": {
-      "command": "directory-indexer",
-      "args": ["serve"]
+      "command": "npx",
+      "args": ["directory-indexer", "serve"]
     }
   }
 }
 ```
 
-Start the MCP server:
+Index your directories and start using with your AI assistant:
 
 ```bash
-directory-indexer serve
+# Index your directories first
+npx directory-indexer index /home/user/projects/docs /home/user/work/reports
+
+# Start MCP server (usually done automatically by your AI assistant)
+npx directory-indexer serve
 ```
 
-Your AI assistant (Claude, Cline, Copilot, etc.) can now search your indexed documents semantically. Ask: _"Find API authentication examples"_, _"Show me incidents similar to this"_, or _"Find troubleshooting guides on SQL deadlocks"_.
+### Using with AI Assistant
 
-### CLI Commands
+Once configured, your AI assistant can search your indexed documents semantically:
 
-```bash
-# Index your directories
-# Linux/macOS
-directory-indexer index /home/user/projects/api-docs /mnt/work/incident-reports
-# Windows
-directory-indexer index "C:\work\documentation" "D:\projects\my-app\docs"
+- _"Find API authentication examples"_
+- _"Show me incidents similar to this outage report"_
+- _"Find troubleshooting guides on SQL deadlocks"_
+- _"What files contain database configuration?"_
 
-# Search semantically
-directory-indexer search "database timeout errors"
+### Custom Configuration
 
-# Find similar files
-# Linux/macOS
-directory-indexer similar /mnt/work/incident-reports/redis-outage.md
-# Windows
-directory-indexer similar "C:\work\incidents\redis-outage.md"
-
-# Get file content
-directory-indexer get /home/user/projects/api-docs/auth-guide.md
-
-# Show status
-directory-indexer status
-```
-
-## Configuration
-
-Directory Indexer uses environment variables for configuration. Set these if your services run on different ports or require API keys:
-
-```bash
-# Service endpoints (defaults shown)
-export QDRANT_ENDPOINT="http://localhost:6333"
-export OLLAMA_ENDPOINT="http://localhost:11434"
-
-# Optional data directory (default: ~/.directory-indexer)
-# Linux/macOS
-export DIRECTORY_INDEXER_DATA_DIR="/opt/directory-indexer-data"
-# Windows
-set DIRECTORY_INDEXER_DATA_DIR=D:\data\directory-indexer
-
-# Optional Qdrant collection name (default: directory-indexer)
-# Note: Setting to "test" enables auto-cleanup for testing
-export DIRECTORY_INDEXER_QDRANT_COLLECTION="my-custom-collection"
-
-# Optional API keys
-export QDRANT_API_KEY="your-qdrant-key"
-export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
-```
-
-**For MCP clients** (like Claude Desktop), configure with environment variables:
+Configure with custom endpoints and data directory:
 
 ```json
 {
   "mcpServers": {
     "directory-indexer": {
-      "command": "directory-indexer",
-      "args": ["serve"],
+      "command": "npx",
+      "args": ["directory-indexer", "serve"],
       "env": {
+        "DIRECTORY_INDEXER_DATA_DIR": "/opt/ai-knowledge-base",
         "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434",
-        "DIRECTORY_INDEXER_DATA_DIR": "/opt/directory-indexer-data"
+        "OLLAMA_ENDPOINT": "http://localhost:11434"
       }
     }
   }
 }
 ```
+
+### CLI Usage
+
+For advanced users who prefer command-line usage, see [CLI Documentation](./docs/design.md#cli-usage).
+
+## Configuration
+
+Environment variables for MCP configuration:
+
+```bash
+# Data directory (default: ~/.directory-indexer)
+export DIRECTORY_INDEXER_DATA_DIR="/opt/ai-knowledge-base"
+
+# Service endpoints (defaults shown)
+export QDRANT_ENDPOINT="http://localhost:6333"
+export OLLAMA_ENDPOINT="http://localhost:11434"
+```
+
+For all configuration options, see [Environment Variables](./docs/design.md#environment-variables).
 
 ## Supported Files
 
@@ -178,6 +155,8 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
 
 ## Documentation
 
+- **[API Reference](docs/API.md)**: CLI commands and MCP tools
+- **[Flow Diagrams](docs/flows.md)**: System architecture and process flows
 - **[Contributing](docs/CONTRIBUTING.md)**: Development setup and guidelines
 - **[Design](docs/design.md)**: Architecture and technical decisions
 
@@ -186,16 +165,19 @@ export OLLAMA_API_KEY="your-ollama-key"  # if using hosted Ollama
 Once indexed, try these queries with your AI assistant:
 
 **Search by concept:**
+
 - _"Find API authentication examples"_
 - _"Show me error handling patterns"_
 - _"Find configuration for Redis"_
 
 **Find similar content:**
-- _"Show me incidents similar to this outage report"_ *(when you have an incident file open)*
-- _"Find documentation like this API guide"_ *(when viewing an API doc)*
+
+- _"Show me incidents similar to this outage report"_ _(when you have an incident file open)_
+- _"Find documentation like this API guide"_ _(when viewing an API doc)_
 - _"What files are similar to my deployment script?"_
 
 **Troubleshoot issues:**
+
 - _"Find troubleshooting guides on SQL deadlocks"_
 - _"Show me solutions for timeout errors"_
 - _"Find debugging tips for performance issues"_
