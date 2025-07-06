@@ -59,6 +59,9 @@ export default defineConfig({
         singleThread: false,
       },
     },
+    outputFile: {
+      junit: './test-report.junit.xml'
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json', 'lcov'],

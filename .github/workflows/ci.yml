@@ -198,7 +198,27 @@ jobs:
           fi
 
       - name: Run all tests with coverage and JUnit report
-        run: npm run test:coverage -- --reporter=junit --outputFile=test-report.junit.xml
+        run: |
+          set +e  # Don't exit on non-zero exit codes from commands
+          npm run test:coverage -- --reporter=junit --outputFile=test-report.junit.xml
+          test_exit_code=$?
+          set -e  # Re-enable exit on error
+          
+          # Check if tests actually failed (JUnit report will show failures)
+          if [ -f test-report.junit.xml ]; then
+            failures=$(grep -o 'failures="[0-9]*"' test-report.junit.xml | cut -d'"' -f2)
+            errors=$(grep -o 'errors="[0-9]*"' test-report.junit.xml | cut -d'"' -f2)
+            if [ "$failures" != "0" ] || [ "$errors" != "0" ]; then
+              echo "Tests failed: $failures failures, $errors errors"
+              exit 1
+            else
+              echo "All tests passed successfully"
+              exit 0
+            fi
+          else
+            echo "No test report found, using exit code: $test_exit_code"
+            exit $test_exit_code
+          fi
         timeout-minutes: 10
         env:
           QDRANT_ENDPOINT: http://localhost:6333
