@@ -9,12 +9,17 @@ export interface SearchOptions {
   directoryPath?: string;
 }
 
+export interface ChunkMatch {
+  chunkId: string;
+  score: number;
+}
+
 export interface SearchResult {
   filePath: string;
-  chunkId: string;
-  content: string;
   score: number;
+  matchingChunks: number;
   parentDirectories: string[];
+  chunks: ChunkMatch[];
 }
 
 export interface SimilarFile {
@@ -38,17 +43,54 @@ export async function searchContent(query: string, options: SearchOptions = {}):
     const { qdrant } = await initializeStorage(config);
     
     const queryEmbedding = await generateEmbedding(query, config);
-    const points = await qdrant.searchPoints(queryEmbedding, limit);
+    // Get more points initially since we'll group by file
+    const points = await qdrant.searchPoints(queryEmbedding, limit * 5);
     
-    return points
-      .filter(point => (point.score ?? 0) >= threshold)
-      .map(point => ({
-        filePath: point.payload.filePath,
+    // Group points by file path
+    const fileGroups = new Map<string, Array<{ score: number; chunkId: string; content: string; parentDirectories: string[] }>>();
+    
+    for (const point of points) {
+      const score = point.score ?? 0;
+      if (score < threshold) continue;
+      
+      const filePath = point.payload.filePath;
+      if (!fileGroups.has(filePath)) {
+        fileGroups.set(filePath, []);
+      }
+      
+      fileGroups.get(filePath)!.push({
+        score,
         chunkId: point.payload.chunkId,
-        content: '',
-        score: point.score ?? 0,
+        content: point.payload.content || '',
         parentDirectories: point.payload.parentDirectories
+      });
+    }
+    
+    // Calculate average score per file and sort
+    const results: SearchResult[] = [];
+    for (const [filePath, chunks] of fileGroups.entries()) {
+      const avgScore = chunks.reduce((sum, chunk) => sum + chunk.score, 0) / chunks.length;
+      
+      // Sort chunks by score (best first) and create chunk matches
+      const sortedChunks = chunks.sort((a, b) => b.score - a.score);
+      const chunkMatches: ChunkMatch[] = sortedChunks.map(chunk => ({
+        chunkId: chunk.chunkId,
+        score: chunk.score
       }));
+      
+      results.push({
+        filePath,
+        score: avgScore,
+        matchingChunks: chunks.length,
+        parentDirectories: sortedChunks[0].parentDirectories,
+        chunks: chunkMatches
+      });
+    }
+    
+    // Sort by average score and return top results
+    return results
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   } catch (error) {
     throw new SearchError(`Failed to search content`, error as Error);
   }
@@ -92,6 +134,31 @@ export async function findSimilarFiles(filePath: string, limit: number = 5): Pro
       }));
   } catch (error) {
     throw new SearchError(`Failed to find similar files`, error as Error);
+  }
+}
+
+export async function getChunkContent(filePath: string, chunkId: string): Promise<string> {
+  try {
+    if (!await fileExists(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+    
+    const config = (await import('./config.js')).loadConfig();
+    const { sqlite } = await initializeStorage(config);
+    
+    const fileRecord = await sqlite.getFile(filePath);
+    if (!fileRecord || fileRecord.chunks.length === 0) {
+      throw new Error(`File not indexed: ${filePath}`);
+    }
+    
+    const chunk = fileRecord.chunks.find(c => c.id === chunkId);
+    if (!chunk) {
+      throw new Error(`Chunk ${chunkId} not found in file: ${filePath}`);
+    }
+    
+    return chunk.content;
+  } catch (error) {
+    throw new SearchError(`Failed to get chunk content`, error as Error);
   }
 }
 

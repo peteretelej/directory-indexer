@@ -10,7 +10,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Config } from './config.js';
 import { indexDirectories } from './indexing.js';
-import { searchContent, findSimilarFiles, getFileContent } from './search.js';
+import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from './search.js';
 import { getIndexStatus } from './storage.js';
 
 // Read version from package.json
@@ -22,13 +22,31 @@ const VERSION = packageJson.version;
 const MCP_TOOLS: Tool[] = [
   {
     name: 'index',
-    description: 'Index directories for semantic search',
+    description: `Index directories for AI-powered semantic search. This tool processes files in specified directories, extracts text content, generates vector embeddings, and stores them for semantic search capabilities.
+
+When to use this tool:
+- Before performing any search operations on new directories
+- When you want to add new code repositories, documentation, or text files to the searchable knowledge base
+- To update the index when files have been modified (the tool automatically detects and reprocesses changed files)
+- When setting up semantic search for a project or workspace
+
+What this tool does:
+- Recursively scans directories for supported file types (code, markdown, text, config files)
+- Chunks large files into smaller segments for better search precision
+- Generates vector embeddings using the configured embedding model
+- Stores file metadata and embeddings in a local database
+- Skips unchanged files on re-indexing for efficiency
+- Supports overlapping directory paths (files are deduplicated automatically)
+
+Supported file types: .md, .txt, .py, .js, .ts, .go, .rs, .java, .json, .yaml, .toml, .env, .conf, and many others
+
+Performance note: Initial indexing may take time for large directories, but subsequent re-indexing is much faster as only changed files are reprocessed.`,
     inputSchema: {
       type: 'object',
       properties: {
         directory_path: {
           type: 'string',
-          description: 'Comma-separated list of directory paths to index'
+          description: 'Comma-separated list of absolute or relative directory paths to index. Examples: "/home/user/projects" or "./src,./docs,./tests"'
         }
       },
       required: ['directory_path']
@@ -88,6 +106,24 @@ const MCP_TOOLS: Tool[] = [
         }
       },
       required: ['file_path']
+    }
+  },
+  {
+    name: 'get_chunk',
+    description: 'Get content of a specific chunk by file path and chunk ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'Path to the file'
+        },
+        chunk_id: {
+          type: 'string',
+          description: 'ID of the chunk to retrieve'
+        }
+      },
+      required: ['file_path', 'chunk_id']
     }
   },
   {
@@ -175,6 +211,21 @@ export async function startMcpServer(config: Config): Promise<void> {
             throw new Error('file_path is required');
           }
           const content = await getFileContent(args.file_path, args.chunks as string);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: content
+              }
+            ]
+          };
+        }
+
+        case 'get_chunk': {
+          if (!args || typeof args.file_path !== 'string' || typeof args.chunk_id !== 'string') {
+            throw new Error('file_path and chunk_id are required');
+          }
+          const content = await getChunkContent(args.file_path, args.chunk_id);
           return {
             content: [
               {

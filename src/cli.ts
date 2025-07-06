@@ -49,6 +49,7 @@ export async function main() {
     .description('Search indexed content semantically')
     .argument('<query>', 'Search query')
     .option('-l, --limit <number>', 'Maximum number of results', '10')
+    .option('-c, --show-chunks', 'Show individual chunk scores and IDs')
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (query: string, options) => {
       try {
@@ -63,10 +64,15 @@ export async function main() {
         console.log(`Found ${results.length} results:\n`);
         results.forEach((result, index) => {
           console.log(`${index + 1}. ${result.filePath}`);
-          console.log(`   Score: ${result.score.toFixed(3)}`);
-          if (result.content) {
-            console.log(`   Content: ${result.content.substring(0, 150)}...`);
+          console.log(`   Score: ${result.score.toFixed(3)} (${result.matchingChunks} chunks)`);
+          
+          if (options.showChunks && result.chunks.length > 0) {
+            console.log(`   Chunks:`);
+            result.chunks.forEach(chunk => {
+              console.log(`     - Chunk ${chunk.chunkId}: ${chunk.score.toFixed(3)}`);
+            });
           }
+          
           console.log();
         });
       } catch (error) {
