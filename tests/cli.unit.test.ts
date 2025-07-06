@@ -34,8 +34,8 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch {
-        // Expected to exit with error
+      } catch (error) {
+        console.log('Expected error for search without query:', error instanceof Error ? error.message : String(error));
       }
       
       expect(exitCode).toBe(1);
@@ -46,8 +46,8 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch {
-        // Expected to exit with error
+      } catch (error) {
+        console.log('Expected error for similar without file:', error instanceof Error ? error.message : String(error));
       }
       
       expect(exitCode).toBe(1);
@@ -58,8 +58,8 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch {
-        // Expected to exit with error
+      } catch (error) {
+        console.log('Expected error for get without file:', error instanceof Error ? error.message : String(error));
       }
       
       expect(exitCode).toBe(1);
@@ -70,8 +70,8 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch {
-        // Expected to exit with error
+      } catch (error) {
+        console.log('Expected error for index without paths:', error instanceof Error ? error.message : String(error));
       }
       
       expect(exitCode).toBe(1);
@@ -100,8 +100,8 @@ describe('CLI Unit Tests', () => {
       
       try {
         await main();
-      } catch {
-        // Expected to exit with error
+      } catch (error) {
+        console.log('Expected error for invalid command:', error instanceof Error ? error.message : String(error));
       }
       
       expect(exitCode).toBe(1);

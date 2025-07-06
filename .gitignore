@@ -61,3 +61,5 @@ test-output/
 coverage/
 lcov.info
 *.profraw
+
+test-report.junit.xml
