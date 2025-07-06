@@ -18,6 +18,7 @@ graph TB
     MCP --> SearchTool[search tool]
     MCP --> SimilarTool[similar_files tool]
     MCP --> GetTool[get_content tool]
+    MCP --> ChunkTool[get_chunk tool]
     MCP --> InfoTool[server_info tool]
     
     IndexCmd --> Engine[Indexing Engine]
@@ -30,6 +31,7 @@ graph TB
     
     GetCmd --> Storage[Storage Layer]
     GetTool --> Storage
+    ChunkTool --> Storage
     StatusCmd --> Storage
     InfoTool --> Storage
     
@@ -85,10 +87,11 @@ flowchart TD
     EMBED -->|Failure| ERROR[Error: Embedding failed]
     VECTOR --> RESULTS{Results found?}
     RESULTS -->|No| EMPTY[Return empty results]
-    RESULTS -->|Yes| ENRICH[Fetch metadata from SQLite]
-    ENRICH --> RANK[Rank by similarity score]
+    RESULTS -->|Yes| GROUP[Group chunks by file path]
+    GROUP --> SCORE[Calculate average scores per file]
+    SCORE --> RANK[Rank files by average score]
     RANK --> LIMIT[Apply result limit]
-    LIMIT --> FORMAT[Format with content snippets]
+    LIMIT --> FORMAT[Format with chunk information]
     FORMAT --> RETURN[Return search results]
     RETURN --> END([Search complete])
     EMPTY --> END
@@ -131,6 +134,13 @@ sequenceDiagram
     Engine->>Engine: Read file + extract chunks
     Engine-->>MCP: File content
     MCP-->>AI: Content string
+    
+    Note over AI,Qdrant: Chunk Request
+    AI->>MCP: get_chunk(file_path, chunk_id)
+    MCP->>Engine: getChunkContent()
+    Engine->>SQLite: Find chunk by ID
+    Engine-->>MCP: Chunk content
+    MCP-->>AI: Chunk string
 ```
 
 ## Error Handling

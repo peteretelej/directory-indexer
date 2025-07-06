@@ -43,6 +43,7 @@ npx directory-indexer search <query> [options]
 **Options:**
 
 - `-l, --limit <number>` - Maximum results (default: 10)
+- `-c, --show-chunks` - Show individual chunk scores and IDs
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
@@ -50,6 +51,7 @@ npx directory-indexer search <query> [options]
 ```bash
 npx directory-indexer search "database timeout errors"
 npx directory-indexer search "authentication" --limit 5
+npx directory-indexer search "error handling" --show-chunks
 ```
 
 ### `similar`
@@ -180,7 +182,18 @@ Search indexed content semantically.
   {
     "filePath": "/work/incidents/redis-timeout.md",
     "score": 0.89,
-    "content": "Redis connection pool exhausted during peak traffic..."
+    "matchingChunks": 3,
+    "parentDirectories": ["/work", "/work/incidents"],
+    "chunks": [
+      {
+        "chunkId": "chunk_1",
+        "score": 0.92
+      },
+      {
+        "chunkId": "chunk_3", 
+        "score": 0.87
+      }
+    ]
   }
 ]
 ```
@@ -228,6 +241,27 @@ Get file content with optional chunk selection.
 # API Authentication Guide
 
 This document covers authentication patterns...
+```
+
+### `get_chunk`
+
+Get content of a specific chunk by file path and chunk ID.
+
+**Input Schema:**
+
+```json
+{
+  "file_path": "/home/user/docs/api-guide.md",
+  "chunk_id": "chunk_2"
+}
+```
+
+**Response:**
+
+```
+# API Authentication
+
+This section covers authentication methods...
 ```
 
 ### `server_info`

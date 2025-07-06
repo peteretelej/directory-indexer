@@ -100,6 +100,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 export async function searchContent(query: string, options: SearchOptions): Promise<SearchResult[]>
 export async function findSimilarFiles(filePath: string, limit: number): Promise<SimilarFile[]>
 export async function getFileContent(filePath: string, chunks?: string): Promise<string>
+export async function getChunkContent(filePath: string, chunkId: string): Promise<string>
 ```
 
 ### Phase 4: CLI Interface
@@ -124,7 +125,7 @@ directory-indexer status
 **Files**: `mcp.ts`
 
 - **MCP Protocol** - JSON-RPC 2.0 over stdio
-- **Tool Definitions** - index, search, similar_files, get_content, server_info
+- **Tool Definitions** - index, search, similar_files, get_content, get_chunk, server_info
 - **Error Handling** - Proper MCP error responses
 - **Integration** - Reuse CLI logic for tool implementations
 
@@ -135,6 +136,7 @@ const tools = {
   search: (args: { query: string; limit?: number }) => searchContent(args.query, { limit }),
   similar_files: (args: { file_path: string; limit?: number }) => findSimilarFiles(args.file_path, args.limit),
   get_content: (args: { file_path: string; chunks?: string }) => getFileContent(args.file_path, args.chunks),
+  get_chunk: (args: { file_path: string; chunk_id: string }) => getChunkContent(args.file_path, args.chunk_id),
   server_info: () => getServerInfo()
 };
 ```
@@ -143,7 +145,7 @@ const tools = {
 
 **Indexing**: `scanDirectory()` → `chunkText()` → `generateEmbedding()` → `storeInSQLite()` + `storeInQdrant()`
 
-**Search**: `generateEmbedding(query)` → `vectorSearch()` → `enrichWithMetadata()` → `rankResults()`
+**Search**: `generateEmbedding(query)` → `vectorSearch()` → `groupByFile()` → `calculateAverageScores()` → `rankResults()`
 
 **Storage**: SQLite as source of truth, Qdrant synced for vectors
 
