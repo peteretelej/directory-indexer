@@ -106,17 +106,9 @@ npm run test:unit
 # Integration tests only (requires services)
 npm run test:integration
 
-# Watch mode
+# Watch mode or specific patterns
 npm test -- --watch
-
-# Specific test pattern
 npm test -- --grep "search"
-
-# Code coverage (unit tests only)
-npm run test:unit -- --coverage
-
-# Code coverage (all tests - requires Qdrant + Ollama)
-npm run test:coverage
 ```
 
 ### Code Quality
@@ -190,25 +182,9 @@ export OPENAI_API_KEY="your-key"
 
 ### MCP Development
 
-Test with AI assistants (Claude Desktop, Cline, etc.) using npx:
+For MCP configuration with AI assistants, see the [README.md MCP Integration section](../README.md#mcp-integration).
 
-```json
-{
-  "mcpServers": {
-    "directory-indexer": {
-      "command": "npx",
-      "args": ["directory-indexer", "serve"],
-      "env": {
-        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev",
-        "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434"
-      }
-    }
-  }
-}
-```
-
-For local development with built code:
+For local development with built code, use the built CLI directly:
 
 ```json
 {
@@ -217,9 +193,7 @@ For local development with built code:
       "command": "node",
       "args": ["/path/to/directory-indexer/dist/cli.js", "serve"],
       "env": {
-        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev",
-        "QDRANT_ENDPOINT": "http://localhost:6333",
-        "OLLAMA_ENDPOINT": "http://localhost:11434"
+        "DIRECTORY_INDEXER_DATA_DIR": "/tmp/directory-indexer-dev"
       }
     }
   }
@@ -344,23 +318,9 @@ git push origin v1.0.0
 
 ## Architecture Notes
 
-### Storage Design
-
-- **SQLite** - Source of truth for file metadata
-- **Qdrant** - Vector storage for embeddings
-- **Consistency** - SQLite drives Qdrant state
-
-### Embedding Strategy
-
-- **Local-first** - Ollama for development/production
-- **Fallback** - OpenAI API for cloud deployments
-- **Mock provider** - Deterministic testing
-
-### Error Handling
-
-- **Typed errors** - Custom error classes with context
-- **Graceful degradation** - Continue on partial failures
-- **User feedback** - Clear error messages with solutions
+**Storage:** SQLite (metadata) + Qdrant (vectors) with SQLite as source of truth  
+**Embedding:** Ollama (local-first) with OpenAI fallback  
+**Errors:** Typed errors with context and user-friendly messages
 
 ## Contributing Guidelines
 
