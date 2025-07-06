@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { fileURLToPath } from 'url';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent } from './search.js';
 import { loadConfig } from './config.js';
@@ -159,6 +160,5 @@ export async function main() {
   await program.parseAsync();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(console.error);
-}
+// For CLI scripts, we can call main directly since this file is only used as an executable
+main().catch(console.error);
