@@ -111,6 +111,9 @@ npm test -- --watch
 
 # Specific test pattern
 npm test -- --grep "search"
+
+# Code coverage
+npm run test:coverage
 ```
 
 ### Code Quality

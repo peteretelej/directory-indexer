@@ -60,6 +60,27 @@ export default defineConfig({
         singleThread: false,
       },
     },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'json'],
+      include: [
+        'src/**/*.ts'
+      ],
+      exclude: [
+        'coverage/**',
+        'dist/**',
+        'tests/**/*.test.ts',
+        '**/*.d.ts',
+        'vite.config.ts',
+        'eslint.config.js'
+      ],
+      thresholds: {
+        statements: 50,
+        branches: 60,
+        functions: 70,
+        lines: 50
+      }
+    },
   },
   resolve: {
     alias: {

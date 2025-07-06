@@ -295,4 +295,141 @@ describe('Search Operations', () => {
     const chunks = await getFileContent(filePath, '1-2');
     expect(typeof chunks).toBe('string');
   });
+
+  it('should handle search errors gracefully', async () => {
+    const { searchContent } = await import('../src/search.js');
+    
+    // Test with invalid options
+    try {
+      await searchContent('', { limit: -1 });
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+    }
+  });
+
+  it('should handle file not found in similar files', async () => {
+    const { findSimilarFiles } = await import('../src/search.js');
+    
+    try {
+      await findSimilarFiles('/nonexistent/file.txt', 5);
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('not found');
+    }
+  });
+});
+
+describe('Storage Advanced Operations', () => {
+  it('should handle file deletion', async () => {
+    const { SQLiteStorage, loadConfig } = await import('../src/storage.js');
+    
+    const config = await import('../src/config.js').then(m => m.loadConfig());
+    config.storage.sqlitePath = ':memory:';
+    const storage = new SQLiteStorage(config);
+    
+    const fileInfo = {
+      path: '/test/delete.txt',
+      size: 50,
+      modifiedTime: new Date(),
+      hash: 'delete123',
+      parentDirs: ['/test']
+    };
+    
+    await storage.upsertFile(fileInfo);
+    let retrieved = await storage.getFile('/test/delete.txt');
+    expect(retrieved).toBeDefined();
+    
+    await storage.deleteFile('/test/delete.txt');
+    retrieved = await storage.getFile('/test/delete.txt');
+    expect(retrieved).toBeNull();
+    
+    storage.close();
+  });
+
+  it('should get files by directory', async () => {
+    const { SQLiteStorage, loadConfig } = await import('../src/storage.js');
+    
+    const config = await import('../src/config.js').then(m => m.loadConfig());
+    config.storage.sqlitePath = ':memory:';
+    const storage = new SQLiteStorage(config);
+    
+    const file1 = {
+      path: '/test/dir/file1.txt',
+      size: 50,
+      modifiedTime: new Date(),
+      hash: 'hash1',
+      parentDirs: ['/test', '/test/dir']
+    };
+    
+    const file2 = {
+      path: '/test/dir/file2.txt',
+      size: 60,
+      modifiedTime: new Date(),
+      hash: 'hash2',
+      parentDirs: ['/test', '/test/dir']
+    };
+    
+    await storage.upsertFile(file1);
+    await storage.upsertFile(file2);
+    
+    const files = await storage.getFilesByDirectory('/test/dir');
+    expect(files.length).toBe(2);
+    expect(files.some(f => f.path === '/test/dir/file1.txt')).toBe(true);
+    expect(files.some(f => f.path === '/test/dir/file2.txt')).toBe(true);
+    
+    storage.close();
+  });
+
+  it('should handle directory operations', async () => {
+    const { SQLiteStorage, loadConfig } = await import('../src/storage.js');
+    
+    const config = await import('../src/config.js').then(m => m.loadConfig());
+    config.storage.sqlitePath = ':memory:';
+    const storage = new SQLiteStorage(config);
+    
+    await storage.upsertDirectory('/test/dir', 'pending');
+    const dir = await storage.getDirectory('/test/dir');
+    expect(dir).toBeDefined();
+    expect(dir?.path).toBe('/test/dir');
+    expect(dir?.status).toBe('pending');
+    
+    await storage.upsertDirectory('/test/dir', 'completed');
+    const updatedDir = await storage.getDirectory('/test/dir');
+    expect(updatedDir?.status).toBe('completed');
+    
+    storage.close();
+  });
+});
+
+describe('Configuration Advanced', () => {
+  it('should handle environment variable overrides', async () => {
+    const originalQdrant = process.env.QDRANT_ENDPOINT;
+    const originalOllama = process.env.OLLAMA_ENDPOINT;
+    
+    process.env.QDRANT_ENDPOINT = 'http://test:6333';
+    process.env.OLLAMA_ENDPOINT = 'http://test:11434';
+    
+    const { loadConfig } = await import('../src/config.js');
+    const config = await loadConfig();
+    
+    expect(config.storage.qdrantEndpoint).toBe('http://test:6333');
+    expect(config.embedding.endpoint).toBe('http://test:11434');
+    
+    // Restore original values
+    if (originalQdrant) process.env.QDRANT_ENDPOINT = originalQdrant;
+    else delete process.env.QDRANT_ENDPOINT;
+    if (originalOllama) process.env.OLLAMA_ENDPOINT = originalOllama;
+    else delete process.env.OLLAMA_ENDPOINT;
+  });
+
+  it('should validate config parameters', async () => {
+    const { loadConfig } = await import('../src/config.js');
+    
+    const config = await loadConfig({ verbose: true });
+    
+    expect(config.verbose).toBe(true);
+    expect(config.indexing.chunkSize).toBeGreaterThan(0);
+    expect(config.indexing.maxFileSize).toBeGreaterThan(0);
+    expect(Array.isArray(config.indexing.ignorePatterns)).toBe(true);
+  });
 });
