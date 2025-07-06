@@ -13,12 +13,15 @@ npx directory-indexer index <paths...> [options]
 ```
 
 **Arguments:**
+
 - `<paths...>` - One or more directory paths to index
 
 **Options:**
+
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
+
 ```bash
 npx directory-indexer index /home/user/docs
 npx directory-indexer index ./projects/api-docs ./work/reports
@@ -34,13 +37,16 @@ npx directory-indexer search <query> [options]
 ```
 
 **Arguments:**
+
 - `<query>` - Search query text
 
 **Options:**
+
 - `-l, --limit <number>` - Maximum results (default: 10)
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
+
 ```bash
 npx directory-indexer search "database timeout errors"
 npx directory-indexer search "authentication" --limit 5
@@ -55,13 +61,16 @@ npx directory-indexer similar <file> [options]
 ```
 
 **Arguments:**
+
 - `<file>` - Path to reference file
 
 **Options:**
+
 - `-l, --limit <number>` - Maximum results (default: 10)
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
+
 ```bash
 npx directory-indexer similar ./docs/api-guide.md
 npx directory-indexer similar /home/user/incident.md --limit 5
@@ -76,13 +85,16 @@ npx directory-indexer get <file> [options]
 ```
 
 **Arguments:**
+
 - `<file>` - Path to file
 
 **Options:**
+
 - `-c, --chunks <range>` - Chunk range (e.g., "2-5")
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
+
 ```bash
 npx directory-indexer get ./docs/auth-guide.md
 npx directory-indexer get ./deployment.md --chunks 2-4
@@ -97,9 +109,11 @@ npx directory-indexer serve [options]
 ```
 
 **Options:**
+
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
+
 ```bash
 npx directory-indexer serve
 npx directory-indexer serve --verbose
@@ -114,9 +128,11 @@ npx directory-indexer status [options]
 ```
 
 **Options:**
+
 - `-v, --verbose` - Show detailed error information
 
 **Examples:**
+
 ```bash
 npx directory-indexer status
 npx directory-indexer status --verbose
@@ -131,6 +147,7 @@ Available when running as MCP server (`npx directory-indexer serve`).
 Index directories for semantic search.
 
 **Input Schema:**
+
 ```json
 {
   "directory_path": "/home/user/docs,/opt/projects"
@@ -138,6 +155,7 @@ Index directories for semantic search.
 ```
 
 **Response:**
+
 ```
 Indexed 145 files, skipped 12 files, 0 errors
 ```
@@ -147,6 +165,7 @@ Indexed 145 files, skipped 12 files, 0 errors
 Search indexed content semantically.
 
 **Input Schema:**
+
 ```json
 {
   "query": "database timeout errors",
@@ -155,6 +174,7 @@ Search indexed content semantically.
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -170,6 +190,7 @@ Search indexed content semantically.
 Find files similar to a given file.
 
 **Input Schema:**
+
 ```json
 {
   "file_path": "/work/incidents/database-outage.md",
@@ -178,6 +199,7 @@ Find files similar to a given file.
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -192,6 +214,7 @@ Find files similar to a given file.
 Get file content with optional chunk selection.
 
 **Input Schema:**
+
 ```json
 {
   "file_path": "/home/user/docs/api-guide.md",
@@ -200,6 +223,7 @@ Get file content with optional chunk selection.
 ```
 
 **Response:**
+
 ```
 # API Authentication Guide
 
@@ -211,11 +235,13 @@ This document covers authentication patterns...
 Get server information and status.
 
 **Input Schema:**
+
 ```json
 {}
 ```
 
 **Response:**
+
 ```json
 {
   "name": "directory-indexer",
@@ -236,15 +262,17 @@ Get server information and status.
 All commands use exit code 1 for errors. Error messages are written to stderr.
 
 **Common Error Types:**
+
 - Configuration errors (missing services)
 - File access errors (permissions, not found)
 - Network errors (Qdrant/Ollama unavailable)
 - Processing errors (unsupported file types)
 
 **Example Error Output:**
+
 ```
 Error indexing directories: Failed to connect to Qdrant at http://localhost:6333
-Check that Qdrant is running: docker run -p 6333:6333 qdrant/qdrant
+Check that Qdrant is running: docker run -p 127.0.0.1:6333:6333 qdrant/qdrant
 ```
 
 ## Configuration
