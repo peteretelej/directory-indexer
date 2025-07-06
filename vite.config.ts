@@ -27,7 +27,6 @@ export default defineConfig({
       external: [
         'better-sqlite3', 
         'commander', 
-        'glob', 
         'mime-types', 
         'zod', 
         '@modelcontextprotocol/sdk',
