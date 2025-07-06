@@ -207,10 +207,10 @@ describe('Directory Indexer Integration Tests', () => {
       process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-node';
       const config = await loadConfig({ verbose: false });
 
-      // 1. Test direct indexing function
+      // 1. Test direct indexing function (may skip files if already indexed)
       console.log('🔄 Testing indexDirectories() directly...');
       const indexResult = await indexDirectories([testDataPath], config);
-      expect(indexResult.indexed).toBeGreaterThan(0);
+      expect(indexResult.indexed + indexResult.skipped).toBeGreaterThan(0); // Should process some files
       expect(indexResult.skipped).toBeGreaterThanOrEqual(0);
       expect(Array.isArray(indexResult.errors)).toBe(true);
 

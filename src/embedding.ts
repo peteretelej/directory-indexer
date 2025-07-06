@@ -134,7 +134,7 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
       }
       
       const data = await response.json();
-      return data.data.map((item: any) => item.embedding);
+      return data.data.map((item: { embedding: number[] }) => item.embedding);
     } catch (error) {
       throw new EmbeddingError(`Failed to generate OpenAI embeddings`, error as Error);
     }

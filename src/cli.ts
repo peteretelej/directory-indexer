@@ -160,7 +160,8 @@ export async function main() {
           }
         }
         
-        console.log('\\nIndexed Directories:');
+        console.log('');
+        console.log('Indexed Directories:');
         if (status.directories.length === 0) {
           console.log('  No directories indexed');
         } else {
@@ -182,11 +183,13 @@ export async function main() {
         }
         
         if (!status.qdrantConsistency.isConsistent) {
-          console.log('\\n⚠️  Database Consistency Issues:');
+          console.log('');
+          console.log('Database Consistency Issues:');
           status.qdrantConsistency.issues.forEach(issue => {
             console.log(`  - ${issue}`);
           });
-          console.log('\\nConsider running database reset if issues persist.');
+          console.log('');
+          console.log('Consider running database reset if issues persist.');
         }
       } catch (error) {
         console.error('Error getting status:', error);

@@ -117,7 +117,7 @@ export class QdrantClient {
       }
 
       const data = await response.json();
-      return data.result.map((item: any) => ({
+      return data.result.map((item: { id: string | number; vector: number[]; payload: Record<string, unknown>; score: number }) => ({
         id: item.id,
         vector: item.vector,
         payload: item.payload,
@@ -143,6 +143,34 @@ export class QdrantClient {
       }
     } catch (error) {
       throw new StorageError(`Failed to delete points from Qdrant`, error as Error);
+    }
+  }
+
+  async deletePointsByFileHash(fileHash: string): Promise<void> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filter: {
+            must: [
+              {
+                key: 'fileHash',
+                match: { value: fileHash }
+              }
+            ]
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete points by file hash: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+    } catch (error) {
+      throw new StorageError(`Failed to delete points by file hash from Qdrant`, error as Error);
     }
   }
 }
@@ -193,7 +221,7 @@ export class SQLiteStorage {
   async getDirectory(path: string): Promise<DirectoryRecord | null> {
     try {
       const stmt = this.db.prepare('SELECT * FROM directories WHERE path = ?');
-      const row = stmt.get(path) as any;
+      const row = stmt.get(path) as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number } | undefined;
       
       if (!row) return null;
       
@@ -201,7 +229,7 @@ export class SQLiteStorage {
         id: row.id,
         path: row.path,
         status: row.status,
-        indexedAt: new Date(row.indexed_at)
+        indexedAt: new Date(row.indexed_at * 1000)
       };
     } catch (error) {
       throw new StorageError(`Failed to get directory record`, error as Error);
@@ -224,7 +252,7 @@ export class SQLiteStorage {
   async getFile(path: string): Promise<FileRecord | null> {
     try {
       const stmt = this.db.prepare('SELECT * FROM files WHERE path = ?');
-      const row = stmt.get(path) as any;
+      const row = stmt.get(path) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null } | undefined;
       
       if (!row) return null;
       
@@ -232,7 +260,7 @@ export class SQLiteStorage {
         id: row.id,
         path: row.path,
         size: row.size,
-        modifiedTime: new Date(row.modified_time),
+        modifiedTime: new Date(row.modified_time * 1000),
         hash: row.hash,
         parentDirs: JSON.parse(row.parent_dirs),
         chunks: row.chunks_json ? JSON.parse(row.chunks_json) : [],
@@ -276,13 +304,13 @@ export class SQLiteStorage {
   async getFilesByDirectory(directoryPath: string): Promise<FileRecord[]> {
     try {
       const stmt = this.db.prepare('SELECT * FROM files WHERE path LIKE ?');
-      const rows = stmt.all(`${directoryPath}%`) as any[];
+      const rows = stmt.all(`${directoryPath}%`) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
       
       return rows.map(row => ({
         id: row.id,
         path: row.path,
         size: row.size,
-        modifiedTime: new Date(row.modified_time),
+        modifiedTime: new Date(row.modified_time * 1000),
         hash: row.hash,
         parentDirs: JSON.parse(row.parent_dirs),
         chunks: row.chunks_json ? JSON.parse(row.chunks_json) : [],
@@ -427,7 +455,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       GROUP BY d.id, d.path, d.status, d.indexed_at
       ORDER BY d.indexed_at DESC
     `);
-    const directoryDetails = directoriesDetailStmt.all() as any[];
+    const directoryDetails = directoriesDetailStmt.all() as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number; files_count: number; chunks_count: number }[];
     
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
       const errorsByDirStmt = sqlite.db.prepare(`

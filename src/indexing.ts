@@ -12,7 +12,7 @@ import {
   isFile
 } from './utils.js';
 import { generateEmbedding } from './embedding.js';
-import { initializeStorage } from './storage.js';
+import { initializeStorage, FileRecord } from './storage.js';
 
 export interface ScanOptions {
   ignorePatterns: string[];
@@ -126,6 +126,41 @@ export async function getFileMetadata(filePath: string): Promise<FileInfo> {
   }
 }
 
+async function shouldReprocessFile(filePath: string, existingRecord: FileRecord, config: Config): Promise<boolean> {
+  try {
+    const fs = await import('fs/promises');
+    
+    // Try modtime check first (fast path)
+    const currentStats = await fs.stat(filePath);
+    const existingModTime = new Date(existingRecord.modifiedTime);
+    
+    // If modtime is clearly older, likely unchanged
+    if (currentStats.mtime <= existingModTime) {
+      return false; // Skip processing
+    }
+    
+    // If modtime suggests change, verify with hash
+    const currentFileInfo = await getFileInfo(filePath);
+    return currentFileInfo.hash !== existingRecord.hash;
+    
+  } catch (modtimeError) {
+    // Graceful fallback: skip modtime, use hash only
+    if (config.verbose) {
+      console.log(`Warning: Could not check modification time for ${filePath}:`, modtimeError);
+    }
+    try {
+      const currentFileInfo = await getFileInfo(filePath);
+      return currentFileInfo.hash !== existingRecord.hash;
+    } catch (hashError) {
+      // If we can't hash either, assume changed to be safe
+      if (config.verbose) {
+        console.log(`Warning: Could not compute hash for ${filePath}:`, hashError);
+      }
+      return true;
+    }
+  }
+}
+
 export async function indexDirectories(paths: string[], config: Config): Promise<IndexResult> {
   let indexed = 0;
   let skipped = 0;
@@ -141,10 +176,27 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   
   for (const path of paths) {
     try {
+      // Mark directory as indexing
+      await sqlite.upsertDirectory(path, 'indexing');
+      
       const files = await scanDirectory(path, scanOptions);
       
       for (const file of files) {
         try {
+          // Check if file already exists and needs reprocessing
+          const existingFile = await sqlite.getFile(file.path);
+          
+          if (existingFile) {
+            const needsReprocessing = await shouldReprocessFile(file.path, existingFile, config);
+            if (!needsReprocessing) {
+              skipped++;
+              continue; // Skip unchanged file
+            }
+            
+            // File changed - clean up old vectors first
+            await qdrant.deletePointsByFileHash(existingFile.hash);
+          }
+          
           const content = await fs.readFile(file.path, 'utf-8');
           const chunks = chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
           
@@ -174,13 +226,19 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           
           indexed++;
         } catch (error) {
-          skipped++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           const causeMessage = error instanceof Error && error.cause ? `: ${(error.cause as Error).message}` : '';
           errors.push(`Failed to process ${file.path}: ${errorMessage}${causeMessage}`);
         }
       }
+      
+      // Mark directory as completed if no errors for this directory
+      const directoryErrors = errors.filter(err => err.includes(path));
+      const directoryStatus = directoryErrors.length > 0 ? 'failed' : 'completed';
+      await sqlite.upsertDirectory(path, directoryStatus);
+      
     } catch (error) {
+      await sqlite.upsertDirectory(path, 'failed');
       errors.push(`Failed to scan directory ${path}: ${(error as Error).message}`);
     }
   }
