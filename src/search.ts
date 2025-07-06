@@ -47,7 +47,7 @@ export async function searchContent(query: string, options: SearchOptions = {}):
     const points = await qdrant.searchPoints(queryEmbedding, limit * 5);
     
     // Group points by file path
-    const fileGroups = new Map<string, Array<{ score: number; chunkId: string; content: string; parentDirectories: string[] }>>();
+    const fileGroups = new Map<string, Array<{ score: number; chunkId: string; parentDirectories: string[] }>>();
     
     for (const point of points) {
       const score = point.score ?? 0;
@@ -61,7 +61,6 @@ export async function searchContent(query: string, options: SearchOptions = {}):
       fileGroups.get(filePath)!.push({
         score,
         chunkId: point.payload.chunkId,
-        content: point.payload.content || '',
         parentDirectories: point.payload.parentDirectories
       });
     }

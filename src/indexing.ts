@@ -186,7 +186,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       if (config.verbose) {
         console.log(`Found ${files.length} files to process in ${path}`);
       }
-    } catch (error) {
+    } catch {
       // Continue with other directories even if one fails to scan
     }
   }
