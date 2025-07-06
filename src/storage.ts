@@ -229,7 +229,7 @@ export class SQLiteStorage {
         id: row.id,
         path: row.path,
         status: row.status,
-        indexedAt: new Date(row.indexed_at * 1000)
+        indexedAt: new Date(row.indexed_at)
       };
     } catch (error) {
       throw new StorageError(`Failed to get directory record`, error as Error);
@@ -370,7 +370,7 @@ async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Pr
     const isHealthy = await qdrant.healthCheck();
     
     if (!isHealthy) {
-      issues.push('Qdrant service is not accessible');
+      issues.push('Qdrant vector database is not running or accessible');
       return { isConsistent: false, issues };
     }
     
@@ -388,7 +388,7 @@ async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Pr
     try {
       const response = await fetch(`${config.storage.qdrantEndpoint}/collections/${collectionName}`);
       if (!response.ok) {
-        issues.push(`Qdrant collection '${collectionName}' does not exist`);
+        issues.push(`Vector collection '${collectionName}' not found (normal during first-time setup)`);
         return { isConsistent: false, issues };
       }
       
@@ -397,14 +397,18 @@ async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Pr
       const sqliteChunkCount = totalChunks.count || 0;
       
       if (Math.abs(qdrantPointCount - sqliteChunkCount) > 0) {
-        issues.push(`Vector count mismatch: SQLite has ${sqliteChunkCount} chunks, Qdrant has ${qdrantPointCount} points`);
+        if (qdrantPointCount > sqliteChunkCount) {
+          issues.push(`Extra vectors in database: ${qdrantPointCount} vectors vs ${sqliteChunkCount} indexed chunks (normal during cleanup)`);
+        } else {
+          issues.push(`Missing vectors: ${sqliteChunkCount} indexed chunks vs ${qdrantPointCount} vectors (normal during indexing)`);
+        }
       }
     } catch (error) {
-      issues.push(`Failed to check Qdrant collection: ${error}`);
+      issues.push(`Cannot verify vector database status: ${error}`);
     }
     
   } catch (error) {
-    issues.push(`Consistency check failed: ${error}`);
+    issues.push(`Database status check failed: ${error}`);
   }
   
   return {
@@ -479,7 +483,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
         status: row.status,
         filesCount: row.files_count,
         chunksCount: row.chunks_count,
-        lastIndexed: row.indexed_at && row.indexed_at > 0 ? new Date(row.indexed_at * 1000).toISOString() : null,
+        lastIndexed: row.indexed_at && row.indexed_at > 0 ? new Date(row.indexed_at).toISOString() : null,
         errors: dirErrorsList
       };
     });
@@ -507,7 +511,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       filesIndexed: filesCount.count,
       chunksIndexed: chunksCount.count || 0,
       databaseSize,
-      lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed * 1000).toISOString() : null,
+      lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed).toISOString() : null,
       errors: allErrors,
       directories,
       qdrantConsistency

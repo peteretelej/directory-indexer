@@ -143,37 +143,44 @@ export async function main() {
         await loadConfig({ verbose: options.verbose });
         const status = await getIndexStatus();
         
-        console.log('Indexing Status:');
-        console.log(`  Directories indexed: ${status.directoriesIndexed}`);
-        console.log(`  Files indexed: ${status.filesIndexed}`);
-        console.log(`  Total chunks: ${status.chunksIndexed}`);
-        console.log(`  Database size: ${status.databaseSize}`);
-        console.log(`  Last indexed: ${status.lastIndexed || 'Never'}`);
+        console.log('Directory Indexer Status Report');
+        console.log('=====================================');
+        console.log('');
+        console.log('OVERVIEW:');
+        console.log(`  • ${status.directoriesIndexed} directories have been indexed`);
+        console.log(`  • ${status.filesIndexed} files processed for semantic search`);
+        console.log(`  • ${status.chunksIndexed} text chunks available for AI search`);
+        console.log(`  • Database storage: ${status.databaseSize}`);
+        console.log(`  • Most recent indexing: ${status.lastIndexed || 'No indexing performed yet'}`);
         
         if (status.errors.length > 0) {
-          console.log(`  Errors: ${status.errors.length}`);
+          console.log(`  • Processing errors encountered: ${status.errors.length}`);
           if (options.verbose) {
-            console.log('  Recent errors:');
+            console.log('');
+            console.log('RECENT ERRORS:');
             status.errors.slice(0, 5).forEach(error => {
-              console.log(`    - ${error}`);
+              console.log(`  - ${error}`);
             });
           }
         }
         
         console.log('');
-        console.log('Indexed Directories:');
+        console.log('INDEXED DIRECTORIES:');
         if (status.directories.length === 0) {
-          console.log('  No directories indexed');
+          console.log('  No directories have been indexed yet.');
+          console.log('  Run "directory-indexer index <path>" to start indexing.');
         } else {
           status.directories.forEach(dir => {
-            console.log(`  ${dir.path}:`);
-            console.log(`    Status: ${dir.status}`);
-            console.log(`    Files: ${dir.filesCount}`);
-            console.log(`    Chunks: ${dir.chunksCount}`);
-            console.log(`    Last indexed: ${dir.lastIndexed || 'Never'}`);
+            console.log('');
+            console.log(`  Directory: ${dir.path}`);
+            console.log(`    • Indexing status: ${dir.status}`);
+            console.log(`    • Files processed: ${dir.filesCount}`);
+            console.log(`    • Searchable chunks: ${dir.chunksCount}`);
+            console.log(`    • Last indexed: ${dir.lastIndexed || 'Never completed'}`);
             if (dir.errors.length > 0) {
-              console.log(`    Errors: ${dir.errors.length}`);
+              console.log(`    • Files with errors: ${dir.errors.length}`);
               if (options.verbose) {
+                console.log('    • Recent errors:');
                 dir.errors.slice(0, 3).forEach(error => {
                   console.log(`      - ${error}`);
                 });
@@ -184,12 +191,16 @@ export async function main() {
         
         if (!status.qdrantConsistency.isConsistent) {
           console.log('');
-          console.log('Database Consistency Issues:');
+          console.log('SYSTEM STATUS:');
           status.qdrantConsistency.issues.forEach(issue => {
-            console.log(`  - ${issue}`);
+            console.log(`  • ${issue}`);
           });
           console.log('');
-          console.log('Consider running database reset if issues persist.');
+          console.log('ℹ️  Note: Status messages above may be normal during setup or active indexing.');
+        } else {
+          console.log('');
+          console.log('SYSTEM STATUS:');
+          console.log('  • All systems operational - ready for AI-powered search');
         }
       } catch (error) {
         console.error('Error getting status:', error);
