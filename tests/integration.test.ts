@@ -4,7 +4,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { loadConfig } from '../src/config.js';
 import { indexDirectories, scanDirectory, getFileMetadata, chunkText } from '../src/indexing.js';
-import { searchContent, findSimilarFiles, getFileContent } from '../src/search.js';
+import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from '../src/search.js';
 import { getIndexStatus, SQLiteStorage, QdrantClient } from '../src/storage.js';
 import { startMcpServer } from '../src/mcp.js';
 import { createEmbeddingProvider } from '../src/embedding.js';
@@ -247,6 +247,17 @@ describe.sequential('Directory Indexer Integration Tests', () => {
         // Test with chunk selection
         const chunkedContent = await getFileContent(testFile, '1-2');
         expect(typeof chunkedContent).toBe('string');
+      }
+
+      // 6. Test getChunkContent function
+      if (searchResults.length > 0 && searchResults[0].chunks.length > 0) {
+        console.log('🔄 Testing getChunkContent() directly...');
+        const firstResult = searchResults[0];
+        const firstChunk = firstResult.chunks[0];
+        
+        const chunkContent = await getChunkContent(firstResult.filePath, firstChunk.chunkId);
+        expect(typeof chunkContent).toBe('string');
+        expect(chunkContent.length).toBeGreaterThan(0);
       }
 
       console.log('✅ Direct function workflow completed successfully');
