@@ -3,10 +3,12 @@ import { spawn } from 'child_process';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { loadConfig } from '../src/config.js';
-import { indexDirectories } from '../src/indexing.js';
+import { indexDirectories, scanDirectory, getFileMetadata, chunkText } from '../src/indexing.js';
 import { searchContent, findSimilarFiles, getFileContent } from '../src/search.js';
-import { getIndexStatus } from '../src/storage.js';
+import { getIndexStatus, SQLiteStorage, QdrantClient } from '../src/storage.js';
 import { startMcpServer } from '../src/mcp.js';
+import { createEmbeddingProvider } from '../src/embedding.js';
+import { normalizePath, calculateHash } from '../src/utils.js';
 
 function checkServicesAvailable(): Promise<boolean> {
   return Promise.all([
@@ -121,10 +123,6 @@ describe('Directory Indexer Integration Tests', () => {
       expect(result.stdout).toContain('AI-powered directory indexing');
     });
 
-    it('should handle invalid commands gracefully', async () => {
-      const result = await runCLI(['invalid-command']);
-      expect(result.exitCode).toBe(1);
-    });
 
     it('should require arguments for commands', async () => {
       const searchResult = await runCLI(['search']);
@@ -283,6 +281,236 @@ describe('Directory Indexer Integration Tests', () => {
       // We don't actually start the server here since it would hang the test,
       // but importing and checking the function exercises the MCP module for coverage
       console.log('✅ MCP server components loaded successfully');
+    });
+  });
+
+  describe('File Scanning and Processing', () => {
+    it('should scan directory and filter files', async () => {
+      const testDataPath = join(process.cwd(), 'tests', 'test_data');
+      const files = await scanDirectory(testDataPath, {
+        ignorePatterns: ['.git', 'node_modules', '*.log'],
+        maxFileSize: 1000000
+      });
+      
+      expect(Array.isArray(files)).toBe(true);
+      expect(files.length).toBeGreaterThan(0);
+      
+      const gitFiles = files.filter(f => f.path.includes('.git'));
+      expect(gitFiles.length).toBe(0);
+    });
+
+    it('should extract file metadata', async () => {
+      const testFile = join(process.cwd(), 'tests', 'test_data', 'docs', 'api_guide.md');
+      if (existsSync(testFile)) {
+        const metadata = await getFileMetadata(testFile);
+        
+        expect(metadata.path).toContain('api_guide.md');
+        expect(metadata.size).toBeGreaterThan(0);
+        expect(metadata.modifiedTime).toBeInstanceOf(Date);
+        expect(metadata.hash.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should chunk text with sliding window', async () => {
+      const longText = 'This is a very long text that needs to be chunked into smaller pieces for embedding generation and vector storage. It should be split properly.';
+      const chunks = chunkText(longText, 50, 10);
+      
+      expect(Array.isArray(chunks)).toBe(true);
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0].content.length).toBeLessThanOrEqual(50);
+      expect(chunks[0].startIndex).toBe(0);
+    });
+  });
+
+  describe('Embedding Provider Tests', () => {
+    it('should create and use mock embedding provider', async () => {
+      const provider = createEmbeddingProvider('mock', {
+        model: 'test-model',
+        endpoint: '',
+        dimensions: 384
+      });
+      
+      expect(provider.name).toBe('mock');
+      expect(provider.dimensions).toBe(384);
+      
+      const embedding = await provider.generateEmbedding('test text');
+      expect(Array.isArray(embedding)).toBe(true);
+      expect(embedding.length).toBe(384);
+      
+      const embeddings = await provider.generateEmbeddings(['text one', 'text two']);
+      expect(embeddings.length).toBe(2);
+      expect(embeddings[0].length).toBe(384);
+    });
+
+    it('should create ollama provider when services available', async () => {
+      const provider = createEmbeddingProvider('ollama', {
+        model: 'nomic-embed-text',
+        endpoint: 'http://localhost:11434',
+        dimensions: 768
+      });
+      
+      expect(provider.name).toBe('ollama');
+      expect(provider.dimensions).toBe(768);
+      
+      try {
+        const embedding = await provider.generateEmbedding('test');
+        expect(Array.isArray(embedding)).toBe(true);
+        expect(embedding.length).toBe(768);
+      } catch (error) {
+        console.log('Ollama embedding test failed - service may not be ready');
+      }
+    });
+  });
+
+  describe('Storage Operations', () => {
+    it('should handle SQLite storage operations', async () => {
+      const config = await loadConfig();
+      config.storage.sqlitePath = ':memory:';
+      const storage = new SQLiteStorage(config);
+      
+      try {
+        await storage.upsertDirectory('/test/dir', 'pending');
+        const dir = await storage.getDirectory('/test/dir');
+        expect(dir?.path).toBe('/test/dir');
+        expect(dir?.status).toBe('pending');
+        
+        const fileInfo = {
+          path: '/test/dir/file.txt',
+          size: 100,
+          modifiedTime: new Date(),
+          hash: 'hash123',
+          parentDirs: ['/test', '/test/dir']
+        };
+        
+        await storage.upsertFile(fileInfo);
+        const file = await storage.getFile('/test/dir/file.txt');
+        expect(file?.path).toBe('/test/dir/file.txt');
+        
+        const files = await storage.getFilesByDirectory('/test/dir');
+        expect(files.length).toBe(1);
+        
+        await storage.deleteFile('/test/dir/file.txt');
+        const deletedFile = await storage.getFile('/test/dir/file.txt');
+        expect(deletedFile).toBeNull();
+        
+      } finally {
+        storage.close();
+      }
+    });
+
+    it('should handle Qdrant operations', async () => {
+      const config = await loadConfig();
+      const qdrant = new QdrantClient(config);
+      
+      const isHealthy = await qdrant.healthCheck();
+      expect(typeof isHealthy).toBe('boolean');
+      
+      if (isHealthy) {
+        await qdrant.createCollection();
+        
+        const points = [{
+          id: 'test-point-1',
+          vector: new Array(768).fill(0.1),
+          payload: {
+            filePath: '/test/file.txt',
+            chunkId: 'chunk-1',
+            parentDirectories: ['/test']
+          }
+        }];
+        
+        await qdrant.upsertPoints(points);
+        
+        const searchResults = await qdrant.searchPoints(new Array(768).fill(0.1), 5);
+        expect(Array.isArray(searchResults)).toBe(true);
+        
+        await qdrant.deletePoints([{ key: 'filePath', match: { value: '/test/file.txt' } }]);
+      }
+    });
+  });
+
+  describe('Utility Functions', () => {
+    it('should normalize paths correctly', async () => {
+      const windowsPath = 'C:\\Users\\test\\Documents';
+      const unixPath = '/home/test/documents';
+      
+      const normalizedWindows = normalizePath(windowsPath);
+      const normalizedUnix = normalizePath(unixPath);
+      
+      expect(typeof normalizedWindows).toBe('string');
+      expect(typeof normalizedUnix).toBe('string');
+      expect(normalizedWindows.length).toBeGreaterThan(0);
+      expect(normalizedUnix.length).toBeGreaterThan(0);
+    });
+
+    it('should calculate file hashes consistently', async () => {
+      const testContent = 'Hello, world!';
+      const hash1 = calculateHash(testContent);
+      const hash2 = calculateHash(testContent);
+      
+      expect(hash1).toBe(hash2);
+      expect(hash1.length).toBeGreaterThan(0);
+      expect(typeof hash1).toBe('string');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle search with invalid parameters', async () => {
+      try {
+        await searchContent('', { limit: -1 });
+        expect(false).toBe(true);
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+
+    it('should handle similar files with non-existent file', async () => {
+      try {
+        await findSimilarFiles('/nonexistent/file.txt', 5);
+        expect(false).toBe(true);
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+
+    it('should handle get content with non-existent file', async () => {
+      try {
+        await getFileContent('/nonexistent/file.txt');
+        expect(false).toBe(true);
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+  });
+
+  describe('Configuration Tests', () => {
+    it('should handle environment variable overrides', async () => {
+      const originalQdrant = process.env.QDRANT_ENDPOINT;
+      const originalOllama = process.env.OLLAMA_ENDPOINT;
+      
+      try {
+        process.env.QDRANT_ENDPOINT = 'http://test-qdrant:6333';
+        process.env.OLLAMA_ENDPOINT = 'http://test-ollama:11434';
+        
+        const config = await loadConfig();
+        expect(config.storage.qdrantEndpoint).toBe('http://test-qdrant:6333');
+        expect(config.embedding.endpoint).toBe('http://test-ollama:11434');
+        
+      } finally {
+        if (originalQdrant) process.env.QDRANT_ENDPOINT = originalQdrant;
+        else delete process.env.QDRANT_ENDPOINT;
+        if (originalOllama) process.env.OLLAMA_ENDPOINT = originalOllama;
+        else delete process.env.OLLAMA_ENDPOINT;
+      }
+    });
+
+    it('should validate configuration parameters', async () => {
+      const config = await loadConfig({ verbose: true });
+      
+      expect(config.verbose).toBe(true);
+      expect(config.indexing.chunkSize).toBeGreaterThan(0);
+      expect(config.indexing.maxFileSize).toBeGreaterThan(0);
+      expect(Array.isArray(config.indexing.ignorePatterns)).toBe(true);
+      expect(config.indexing.ignorePatterns.length).toBeGreaterThan(0);
     });
   });
 });

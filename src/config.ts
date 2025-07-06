@@ -32,7 +32,7 @@ export class ConfigError extends Error {
   }
 }
 
-export function loadConfig(): Config {
+export function loadConfig(options: { verbose?: boolean } = {}): Config {
   const dataDir = process.env.DIRECTORY_INDEXER_DATA_DIR || join(homedir(), '.directory-indexer');
   
   const config = {
@@ -53,7 +53,7 @@ export function loadConfig(): Config {
       ignorePatterns: ['.git', 'node_modules', 'target', '.DS_Store'],
     },
     dataDir,
-    verbose: process.env.VERBOSE === 'true',
+    verbose: options.verbose ?? (process.env.VERBOSE === 'true'),
   };
 
   try {
