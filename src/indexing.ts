@@ -177,7 +177,8 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   for (const path of paths) {
     try {
       // Mark directory as indexing
-      await sqlite.upsertDirectory(path, 'indexing');
+      const normalizedPath = normalizePath(path);
+      await sqlite.upsertDirectory(normalizedPath, 'indexing');
       
       const files = await scanDirectory(path, scanOptions);
       
@@ -235,10 +236,11 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       // Mark directory as completed if no errors for this directory
       const directoryErrors = errors.filter(err => err.includes(path));
       const directoryStatus = directoryErrors.length > 0 ? 'failed' : 'completed';
-      await sqlite.upsertDirectory(path, directoryStatus);
+      await sqlite.upsertDirectory(normalizedPath, directoryStatus);
       
     } catch (error) {
-      await sqlite.upsertDirectory(path, 'failed');
+      const normalizedPath = normalizePath(path);
+      await sqlite.upsertDirectory(normalizedPath, 'failed');
       errors.push(`Failed to scan directory ${path}: ${(error as Error).message}`);
     }
   }

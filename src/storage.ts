@@ -455,7 +455,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
         COUNT(f.id) as files_count,
         COALESCE(SUM(json_array_length(f.chunks_json)), 0) as chunks_count
       FROM directories d
-      LEFT JOIN files f ON f.parent_dirs LIKE '%' || d.path || '%'
+      LEFT JOIN files f ON f.parent_dirs LIKE '%"' || d.path || '"%'
       GROUP BY d.id, d.path, d.status, d.indexed_at
       ORDER BY d.indexed_at DESC
     `);
@@ -464,7 +464,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
       const errorsByDirStmt = sqlite.db.prepare(`
         SELECT errors_json FROM files 
-        WHERE parent_dirs LIKE '%' || ? || '%' AND errors_json IS NOT NULL
+        WHERE parent_dirs LIKE '%"' || ? || '"%' AND errors_json IS NOT NULL
       `);
       const dirErrors = errorsByDirStmt.all(row.path) as { errors_json: string }[];
       
