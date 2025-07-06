@@ -411,7 +411,7 @@ describe('Directory Indexer Integration Tests', () => {
         await qdrant.createCollection();
         
         const points = [{
-          id: 'test-point-1',
+          id: 12345,
           vector: new Array(768).fill(0.1),
           payload: {
             filePath: '/test/file.txt',
@@ -425,7 +425,7 @@ describe('Directory Indexer Integration Tests', () => {
         const searchResults = await qdrant.searchPoints(new Array(768).fill(0.1), 5);
         expect(Array.isArray(searchResults)).toBe(true);
         
-        await qdrant.deletePoints(['test-id']);
+        await qdrant.deletePoints([12345]);
       }
     });
   });

@@ -120,6 +120,8 @@ PUT /collections/{collection_name}/points
 }
 ```
 
+**Note**: The `id` field must be an unsigned integer or UUID. Strings like `"point-1"` will cause a 400 error.
+
 **Query Parameters:**
 
 - `wait` (boolean): Wait for operation to complete
@@ -249,13 +251,19 @@ POST /collections/{collection_name}/points/scroll
 
 ```json
 {
-  "id": "string_or_number",
+  "id": "unsigned_integer_or_uuid",
   "vector": [float_array],
   "payload": {
     "key": "value"
   }
 }
 ```
+
+**Important**: Point IDs must be either:
+- **Unsigned integers**: `1`, `2`, `12345` 
+- **UUIDs**: `"550e8400-e29b-41d4-a716-446655440000"`
+
+Arbitrary strings like `"my-custom-id"` are **not valid** and will result in a 400 Bad Request error.
 
 ### Filter Examples
 
