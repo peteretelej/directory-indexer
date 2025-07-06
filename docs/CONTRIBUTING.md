@@ -101,10 +101,10 @@ npm run clean && npm run build
 npm test
 
 # Unit tests only (no external dependencies)
-npm test -- tests/unit.test.ts
+npm run test:unit
 
 # Integration tests only (requires services)
-npm test -- tests/integration.test.ts
+npm run test:integration
 
 # Watch mode
 npm test -- --watch
@@ -112,7 +112,10 @@ npm test -- --watch
 # Specific test pattern
 npm test -- --grep "search"
 
-# Code coverage
+# Code coverage (unit tests only)
+npm run test:unit -- --coverage
+
+# Code coverage (all tests - requires Qdrant + Ollama)
 npm run test:coverage
 ```
 

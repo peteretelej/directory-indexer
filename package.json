@@ -11,6 +11,8 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
+    "test:unit": "vitest run tests/unit.test.ts tests/cli.unit.test.ts tests/edge-cases.unit.test.ts tests/error-handling.unit.test.ts tests/providers.unit.test.ts",
+    "test:integration": "vitest run tests/integration.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests --ext .ts",
