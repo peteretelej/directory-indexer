@@ -22,31 +22,31 @@ const VERSION = packageJson.version;
 const MCP_TOOLS: Tool[] = [
   {
     name: 'index',
-    description: `Index directories for AI-powered semantic search. This tool processes files in specified directories, extracts text content, generates vector embeddings, and stores them for semantic search capabilities.
+    description: `Index directories to make their files searchable. Processes files to create vector embeddings for semantic search.
 
 When to use this tool:
-- Before performing any search operations on new directories
-- When you want to add new code repositories, documentation, or text files to the searchable knowledge base
-- To update the index when files have been modified (the tool automatically detects and reprocesses changed files)
-- When setting up semantic search for a project or workspace
+- User specifically requests indexing a directory as a knowledge base
+- Adding new documentation, code repositories, or file collections to search
+- Updating index when many files have changed
 
-What this tool does:
-- Recursively scans directories for supported file types (code, markdown, text, config files)
-- Chunks large files into smaller segments for better search precision
-- Generates vector embeddings using the configured embedding model
-- Stores file metadata and embeddings in a local database
-- Skips unchanged files on re-indexing for efficiency
-- Supports overlapping directory paths (files are deduplicated automatically)
+How it works:
+- Recursively scans directories for supported file types
+- Extracts text content and splits into chunks
+- Generates vector embeddings for semantic similarity
+- Stores in database for fast retrieval
 
-Supported file types: .md, .txt, .py, .js, .ts, .go, .rs, .java, .json, .yaml, .toml, .env, .conf, and many others
+Examples:
+- Index documentation: "/home/user/docs/project-wiki"
+- Index codebase: "/home/user/projects/api-server"
+- Index multiple directories: "/home/user/docs,/home/user/configs"
 
-Performance note: Initial indexing may take time for large directories, but subsequent re-indexing is much faster as only changed files are reprocessed.`,
+Indexing can take several minutes for large directories. Most users will already have directories indexed and can directly use search tool. Use server_info to check current indexing status first.`,
     inputSchema: {
       type: 'object',
       properties: {
         directory_path: {
           type: 'string',
-          description: 'Comma-separated list of absolute or relative directory paths to index. Examples: "/home/user/projects" or "./src,./docs,./tests"'
+          description: 'Comma-separated list of absolute directory paths to index. Must be absolute paths since MCP server runs independently. Examples: "/home/user/projects" (Unix) or "C:\\Users\\user\\projects" (Windows)'
         }
       },
       required: ['directory_path']
@@ -54,19 +54,28 @@ Performance note: Initial indexing may take time for large directories, but subs
   },
   {
     name: 'search',
-    description: `Perform semantic search across indexed files using natural language queries. This tool uses vector similarity to find the most relevant content, going beyond simple keyword matching to understand intent and context.
+    description: `Search indexed files using natural language queries. Finds files containing content semantically similar to the query.
 
 When to use this tool:
-- Finding code examples, functions, or patterns ("error handling in Python", "JWT authentication implementation")
-- Locating documentation or explanations ("how to configure Redis", "API rate limiting guide")
-- Discovering similar functionality across files ("database connection patterns", "logging utilities")
-- Research and exploration of codebases ("machine learning models", "test utilities")
-- Finding files related to specific features or topics
+- Find documentation, guides, or explanations about specific topics
+- Locate code files implementing certain functionality or patterns
+- Discover configuration files, scripts, or settings related to a topic
+- Search for files covering specific concepts or technologies
 
-How semantic search works:
-- Searches by meaning and context, not just exact keywords
-- Finds conceptually related content even with different terminology
-- Returns files ranked by relevance with similarity scores
+How it works:
+- Converts query to vector embedding using semantic similarity
+- Searches all indexed file chunks for relevant content
+- Groups results by file and calculates average relevance scores
+- Returns files ranked by relevance score
+
+Examples:
+- "database configuration" - finds config files, documentation about DB setup
+- "error handling patterns" - finds code files with exception handling
+- "authentication implementation" - finds auth-related code and docs
+- "API documentation" - finds API guides, endpoint definitions
+- "deployment scripts" - finds CI/CD configs, deployment automation
+
+Returns files with similarity scores and chunk information. Use get_content to retrieve full file content or get_chunk to retrieve specific chunk content by chunk ID.
 - Groups results by file to avoid duplicates from multiple matching sections
 
 Response format:
@@ -97,30 +106,26 @@ Example queries:
   },
   {
     name: 'similar_files',
-    description: `Find files that are semantically similar to a given reference file. This tool analyzes the content and context of a file to discover other files with related functionality, similar patterns, or comparable content.
+    description: `Find files with content similar to a reference file. Uses semantic similarity to find related documents, code files, or any text content.
 
 When to use this tool:
-- Discovering related implementations across a codebase ("find files similar to this authentication module")
-- Locating alternative approaches or patterns ("find other components like this React component")
-- Finding documentation or examples related to a specific file
-- Identifying code duplication or similar functionality that could be refactored
-- Exploring unfamiliar codebases by finding files similar to known examples
-- Locating test files, configuration files, or documentation related to a source file
+- Find documentation similar to a specific guide or README
+- Locate related code files, configuration files, or scripts
+- Discover alternative implementations or approaches
+- Find files covering similar topics or concepts
 
-How similarity detection works:
+How it works:
 - Analyzes the semantic content of the reference file
 - Compares against all indexed files using vector similarity
-- Considers code patterns, function signatures, imports, and documentation
-- Returns files ranked by content similarity, not just filename or location similarity
-- Works across different file types and programming languages
+- Returns files ranked by content similarity score
 
-Use cases:
-- Code analysis: "Find files similar to this database model to understand the schema patterns"
-- Learning: "Show me other API controllers similar to this one"
-- Maintenance: "Find files with similar error handling patterns"
-- Architecture: "Locate other services that follow this microservice pattern"
+Examples:
+- Given "deployment-guide.md" - finds other deployment docs, CI/CD guides, infrastructure setup
+- Given "troubleshooting.md" - finds other troubleshooting guides, FAQ files, error documentation
+- Given "config.yaml" - finds other configuration files, settings, environment setups
+- Given "auth.py" - finds other authentication modules, security code, middleware
 
-Note: The reference file must be indexed for this tool to work. If the file is not found in the index, an error will be returned.`,
+Returns file paths with similarity scores. Use get_content to read full files or get_chunk for specific sections.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -139,34 +144,26 @@ Note: The reference file must be indexed for this tool to work. If the file is n
   },
   {
     name: 'get_content',
-    description: `Retrieve the full content of a file or specific chunks within a file. This tool reads files directly from the filesystem and can optionally return only specific portions of indexed files.
+    description: `Retrieve the full content of a file or specific chunks. Reads files directly from the filesystem.
 
 When to use this tool:
-- After performing a search, to retrieve the actual content of relevant files
-- Reading complete files that were identified through semantic search
-- Extracting specific sections of large files using chunk ranges
-- Accessing source code, documentation, or configuration files for analysis
-- Following up on search results with detailed content examination
+- Get complete file content after finding files through search
+- Read documentation, code files, or configuration files for analysis
+- Extract specific sections of large files using chunk ranges
+- Access any text-based file content
 
-How chunk selection works:
-- If no chunks parameter is provided, returns the entire file content
-- Chunk ranges allow selective reading of large files (e.g., "2-5" returns chunks 2, 3, 4, and 5)
-- Single chunks can be specified (e.g., "3" returns only chunk 3)
-- Chunks are the same segments created during indexing for semantic search
-- Useful for large files where you only need specific sections identified by search
+How it works:
+- Reads files directly from filesystem (not from search index)
+- Returns entire file by default
+- Can return specific chunk ranges for indexed files
+- Preserves original formatting and content
 
-File access:
-- Reads files directly from the filesystem (not from the search index)
-- Works with any readable file, whether indexed or not
-- Supports all text-based file formats
-- Preserves original formatting and content exactly as stored
+Examples:
+- Get full file: file_path="/home/user/docs/api.md"
+- Get specific chunks: file_path="/home/user/code/main.py", chunks="2-5"
+- Get single chunk: file_path="/home/user/config.json", chunks="1"
 
-Workflow integration:
-1. Use 'search' to find relevant files and identify interesting chunk IDs
-2. Use 'get_content' to retrieve full file content or specific chunks
-3. Analyze the content to understand context and implementation details
-
-Performance note: For large files, using chunk ranges can be more efficient than reading entire files.`,
+Returns file content as text. Use this after search or similar_files to read actual content.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -184,34 +181,26 @@ Performance note: For large files, using chunk ranges can be more efficient than
   },
   {
     name: 'get_chunk',
-    description: `Retrieve the content of a specific chunk from an indexed file. This tool provides precise access to individual text segments that were identified during semantic search, allowing efficient retrieval of only the most relevant content.
+    description: `Retrieve content of a specific chunk from an indexed file. Gets exact text segments identified during search.
 
 When to use this tool:
-- After performing a 'search' operation, to fetch the actual content of specific chunks that matched your query
-- When you want to examine only the most relevant sections of a file rather than reading the entire file
-- For targeted content analysis where you need specific text segments identified by their chunk IDs
-- To build contextual responses using only the most semantically relevant portions of files
-- When working with large files and you only need particular sections
+- Get specific relevant sections after performing a search
+- Access only the most pertinent parts of large files
+- Retrieve content from high-scoring chunks identified in search results
+- Avoid reading entire files when only specific sections are needed
 
-How chunks work:
-- Files are divided into overlapping text segments during indexing for better search granularity
-- Each chunk represents a coherent section of text (typically 512 characters with overlap)
-- Chunk IDs are sequential strings ("0", "1", "2", etc.) within each file
-- Search results include chunk IDs for the most relevant sections
-- This tool retrieves the exact content that was semantically matched
+How it works:
+- Files are split into overlapping text chunks during indexing
+- Each chunk has a sequential ID ("0", "1", "2", etc.)
+- Search results include chunk IDs for relevant sections
+- Returns the exact content that was semantically matched
 
-Typical workflow:
-1. Use 'search' to find files and get chunk IDs with high relevance scores
-2. Use 'get_chunk' to retrieve the specific content of the most relevant chunks
-3. Analyze or process only the most pertinent text segments
+Examples:
+- After search returns chunk "3" from "api-docs.md" with high score
+- Get chunk content: file_path="/docs/api-docs.md", chunk_id="3"
+- Returns the specific text segment that matched your query
 
-Efficiency benefits:
-- Avoids transferring unnecessary content from large files
-- Provides precise access to semantically relevant text
-- Reduces token usage by fetching only needed sections
-- Enables focused analysis on the most important content
-
-Note: Both the file and the specific chunk must exist in the search index for this tool to work.`,
+Returns chunk content as text. Use this with chunk IDs from search results to get precise content sections.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -229,39 +218,26 @@ Note: Both the file and the specific chunk must exist in the search index for th
   },
   {
     name: 'server_info',
-    description: `Get comprehensive information about the directory indexer server status, configuration, and indexed content. This tool provides a complete overview of the current state of the semantic search system.
+    description: `Get information about server status and indexed content. Shows what directories and files are available for search.
 
 When to use this tool:
-- To check if the indexer is properly set up and operational
-- Before starting work to understand what content is already indexed
-- To verify indexing operations completed successfully
-- When debugging search issues or unexpected results
-- To get an overview of available content for semantic search
-- To check system health and identify any configuration problems
+- Check what content is already indexed before performing searches
+- Verify system is working properly
+- See indexing statistics and status
+- Understand scope of available searchable content
 
-Information provided:
-- Server version and operational status
-- Total count of indexed directories, files, and searchable chunks
-- Database size and storage information
-- Most recent indexing timestamp
-- List of all indexed directories with individual statistics
-- File counts and chunk counts per directory
-- Indexing status for each directory (completed, failed, in progress)
-- Error reports and processing issues
-- System consistency checks between database components
+How it works:
+- Reports total indexed directories, files, and chunks
+- Shows database size and last indexing time
+- Lists all indexed directories with file counts
+- Reports any errors or issues
 
-Status indicators:
-- Operational status of vector database (Qdrant) connection
-- Embedding service availability
-- Data consistency between SQLite metadata and vector storage
-- Recent errors or warnings that may affect search quality
+Examples:
+- Check before searching: "What content is indexed?"
+- Verify after indexing: "Did the indexing complete successfully?"
+- Monitor system: "How many files are searchable?"
 
-Use this tool to:
-- Verify setup before performing search operations
-- Understand the scope of available content
-- Troubleshoot search or indexing issues
-- Plan additional indexing operations
-- Monitor system health and performance`,
+Returns server version, indexing statistics, directory list, and any errors. Use this to understand what content is available for search and similar_files tools.`,
     inputSchema: {
       type: 'object',
       properties: {},
