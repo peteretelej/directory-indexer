@@ -38,7 +38,7 @@ docker exec ollama ollama pull nomic-embed-text
 **3. Index your directories**
 
 ```bash
-npx directory-indexer index ~/Documents ~/Projects
+npx directory-indexer@latest index ~/Documents ~/Projects
 ```
 
 **4. Configure AI assistant** _(Claude Desktop, Cursor, Cline, Roo Code, Zed etc.)_
@@ -50,7 +50,7 @@ Add to your MCP configuration:
   "mcpServers": {
     "directory-indexer": {
       "command": "npx",
-      "args": ["directory-indexer", "serve"]
+      "args": ["directory-indexer@latest", "serve"]
     }
   }
 }
@@ -134,7 +134,7 @@ Configure with AI assistants (Claude Desktop, Cline, etc.) using npx:
   "mcpServers": {
     "directory-indexer": {
       "command": "npx",
-      "args": ["directory-indexer", "serve"]
+      "args": ["directory-indexer@latest", "serve"]
     }
   }
 }
@@ -144,7 +144,7 @@ Index your directories:
 
 ```bash
 # Index your directories first
-npx directory-indexer index /home/user/projects/docs /home/user/work/reports
+npx directory-indexer@latest index /home/user/projects/docs /home/user/work/reports
 ```
 
 **How it works:**
@@ -186,7 +186,7 @@ Configure with custom endpoints and data directory:
   "mcpServers": {
     "directory-indexer": {
       "command": "npx",
-      "args": ["directory-indexer", "serve"],
+      "args": ["directory-indexer@latest", "serve"],
       "env": {
         "DIRECTORY_INDEXER_DATA_DIR": "/opt/ai-knowledge-base",
         "QDRANT_ENDPOINT": "http://localhost:6333",

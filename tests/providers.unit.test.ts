@@ -68,7 +68,7 @@ describe('Embedding Provider Unit Tests', () => {
     it('should format request correctly', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ embedding: new Array(768).fill(0.1) })
+        json: () => Promise.resolve({ embeddings: [new Array(768).fill(0.1)] })
       });
       (globalThis as any).fetch = mockFetch;
 
@@ -81,13 +81,13 @@ describe('Embedding Provider Unit Tests', () => {
       await provider.generateEmbedding('test text');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/embeddings',
+        'http://localhost:11434/api/embed',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: 'nomic-embed-text',
-            prompt: 'test text'
+            input: 'test text'
           })
         }
       );
@@ -114,16 +114,16 @@ describe('Embedding Provider Unit Tests', () => {
       }
     });
 
-    it('should handle batch embeddings sequentially', async () => {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ embedding: new Array(768).fill(0.1) })
+    it('should handle batch embeddings with single API call', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ 
+          embeddings: [
+            new Array(768).fill(0.1),
+            new Array(768).fill(0.2)
+          ]
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ embedding: new Array(768).fill(0.2) })
-        });
+      });
       
       (globalThis as any).fetch = fetchMock;
 
@@ -135,7 +135,18 @@ describe('Embedding Provider Unit Tests', () => {
 
       const embeddings = await provider.generateEmbeddings(['one', 'two']);
       
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:11434/api/embed',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nomic-embed-text',
+            input: ['one', 'two']
+          })
+        }
+      );
       expect(embeddings.length).toBe(2);
       // The embeddings should be different based on our mock
       expect(embeddings[0][0]).toBe(0.1);

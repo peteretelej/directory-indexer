@@ -59,12 +59,12 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
   
   async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await fetch(`${this.config.endpoint}/api/embeddings`, {
+      const response = await fetch(`${this.config.endpoint}/api/embed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.config.model,
-          prompt: text
+          input: text
         })
       });
       
@@ -73,14 +73,32 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
       }
       
       const data = await response.json();
-      return data.embedding;
+      return data.embeddings[0];
     } catch (error) {
       throw new EmbeddingError(`Failed to generate Ollama embedding`, error as Error);
     }
   }
   
   async generateEmbeddings(texts: string[]): Promise<number[][]> {
-    return Promise.all(texts.map(text => this.generateEmbedding(text)));
+    try {
+      const response = await fetch(`${this.config.endpoint}/api/embed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.config.model,
+          input: texts
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return data.embeddings;
+    } catch (error) {
+      throw new EmbeddingError(`Failed to generate Ollama embeddings`, error as Error);
+    }
   }
 }
 

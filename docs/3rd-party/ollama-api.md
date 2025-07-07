@@ -173,16 +173,82 @@ POST /api/push
 POST /api/embed
 ```
 
+Generate embeddings from a model.
+
 **Required:**
 
 - `model`: Model name
-- `input`: String or array of strings
+- `input`: String or array of strings to generate embeddings for
 
 **Optional:**
 
-- `truncate`: Boolean (default: true)
-- `options`: Model parameters
-- `keep_alive`: Duration
+- `truncate`: Boolean - truncates the end of each input to fit within context length. Returns error if false and context length is exceeded (default: true)
+- `options`: Additional model parameters listed in the documentation for the Modelfile such as temperature
+- `keep_alive`: Duration - controls how long the model will stay loaded into memory following the request (default: "5m")
+
+**Examples:**
+
+Single input:
+```bash
+curl http://localhost:11434/api/embed -d '{
+  "model": "all-minilm",
+  "input": "Why is the sky blue?"
+}'
+```
+
+Response:
+```json
+{
+  "model": "all-minilm",
+  "embeddings": [[
+    0.010071029, -0.0017594862, 0.05007221, 0.04692972, 0.054916814,
+    0.008599704, 0.105441414, -0.025878139, 0.12958129, 0.031952348
+  ]],
+  "total_duration": 14143917,
+  "load_duration": 1019500,
+  "prompt_eval_count": 8
+}
+```
+
+Multiple inputs:
+```bash
+curl http://localhost:11434/api/embed -d '{
+  "model": "all-minilm",
+  "input": ["Why is the sky blue?", "Why is the grass green?"]
+}'
+```
+
+Response:
+```json
+{
+  "model": "all-minilm",
+  "embeddings": [[
+    0.010071029, -0.0017594862, 0.05007221, 0.04692972, 0.054916814,
+    0.008599704, 0.105441414, -0.025878139, 0.12958129, 0.031952348
+  ],[
+    -0.0098027075, 0.06042469, 0.025257962, -0.006364387, 0.07272725,
+    0.017194884, 0.09032035, -0.051705178, 0.09951512, 0.09072481
+  ]]
+}
+```
+
+### Legacy Endpoint (Deprecated)
+
+**Note:** The `/api/embeddings` endpoint has been deprecated in favor of `/api/embed`.
+
+```http
+POST /api/embeddings
+```
+
+**Required:**
+
+- `model`: Model name  
+- `prompt`: Text to generate embeddings for
+
+**Optional:**
+
+- `options`: Additional model parameters
+- `keep_alive`: Duration (default: "5m")
 
 ## List Running Models
 
