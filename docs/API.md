@@ -170,9 +170,9 @@ Search indexed content semantically.
 
 ```json
 {
-  "query": "how to handle database connection timeouts and retry logic",
+  "query": "authentication issues and login failures",
   "limit": 10,
-  "workspace": "work"
+  "workspace": "customer_cases"
 }
 ```
 
@@ -181,7 +181,7 @@ Search indexed content semantically.
 ```json
 [
   {
-    "filePath": "/work/incidents/redis-timeout.md",
+    "filePath": "C:\\Users\\john\\Documents\\Support\\Cases\\redis-timeout.md",
     "score": 0.89,
     "fileSizeBytes": 2048,
     "matchingChunks": 3,
@@ -207,9 +207,9 @@ Find files similar to a given file.
 
 ```json
 {
-  "file_path": "/work/incidents/database-outage.md",
+  "file_path": "C:\\Users\\john\\Documents\\Support\\Cases\\auth-failure.md",
   "limit": 10,
-  "workspace": "work"
+  "workspace": "customer_cases"
 }
 ```
 
@@ -218,7 +218,7 @@ Find files similar to a given file.
 ```json
 [
   {
-    "filePath": "/work/incidents/redis-timeout.md",
+    "filePath": "C:\\Users\\john\\Documents\\Incidents\\redis-timeout.md",
     "score": 0.91,
     "fileSizeBytes": 1536
   }
@@ -292,15 +292,15 @@ Get server information and status.
     "errors": [],
     "workspaces": [
       {
-        "name": "docs",
-        "paths": ["/home/user/docs", "/home/user/wiki"],
+        "name": "customer_cases",
+        "paths": ["C:\\Users\\john\\Documents\\Support\\Cases", "C:\\Users\\john\\Documents\\Incidents"],
         "isValid": true,
         "filesCount": 156,
         "chunksCount": 892
       },
       {
-        "name": "projects",
-        "paths": ["/home/user/code/api", "/home/user/code/web"],
+        "name": "engineering_docs",
+        "paths": ["C:\\Users\\john\\Code\\API", "C:\\Users\\john\\Code\\Web"],
         "isValid": true,
         "filesCount": 1091,
         "chunksCount": 2999

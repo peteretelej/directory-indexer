@@ -58,6 +58,8 @@ Add to your MCP configuration:
 
 Your AI assistant will automatically start the MCP server and can now search your indexed files.
 
+**Advanced:** For organizing content into focused search areas, see [Workspace Support](#workspace-support).
+
 ## Setup
 
 Directory Indexer runs locally on your machine or server. It uses an embedding provider (such as Ollama) to create vector embeddings of your files and stores them in a Qdrant vector database for fast semantic search. Both services can run remotely if needed.
@@ -208,9 +210,9 @@ Organize content into workspaces for focused searches:
       "command": "npx",
       "args": ["directory-indexer@latest", "serve"],
       "env": {
-        "WORKSPACE_DOCS": "/home/user/docs,/home/user/wiki",
-        "WORKSPACE_PROJECTS": "/home/user/code/api,/home/user/code/web",
-        "WORKSPACE_PERSONAL": "/home/user/notes,/home/user/journal"
+        "WORKSPACE_CUSTOMER_CASES": "C:\\Users\\john\\Documents\\Support\\Cases,C:\\Users\\john\\Documents\\Incidents",
+        "WORKSPACE_ENGINEERING_DOCS": "C:\\Users\\john\\Code\\API,C:\\Users\\john\\Code\\Web",
+        "WORKSPACE_COMPANY_POLICIES": "C:\\Users\\john\\Documents\\Policies,C:\\Users\\john\\Documents\\Procedures"
       }
     }
   }
@@ -220,7 +222,7 @@ Organize content into workspaces for focused searches:
 **How workspaces work:**
 - Define workspace environments with `WORKSPACE_NAME` format
 - Use comma-separated paths or JSON arrays: `["path1", "path2"]`
-- Search within specific workspaces: _"Find API docs in projects workspace"_
+- Search within specific workspaces: _"Find issues about authentication in customer cases workspace"_
 - Your AI assistant can filter results to relevant workspace content
 - Use `server_info` to see available workspaces and their statistics
 
