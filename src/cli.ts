@@ -9,6 +9,7 @@ import { searchContent, findSimilarFiles, getFileContent } from './search.js';
 import { loadConfig } from './config.js';
 import { getIndexStatus } from './storage.js';
 import { startMcpServer } from './mcp.js';
+import { validateIndexPrerequisites, validateSearchPrerequisites, getServiceStatus } from './prerequisites.js';
 
 // Read version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,7 @@ export async function main() {
     .action(async (paths: string[], options) => {
       try {
         const config = await loadConfig({ verbose: options.verbose });
+        await validateIndexPrerequisites(config);
         console.log(`Indexing ${paths.length} ${paths.length === 1 ? 'directory' : 'directories'}: ${paths.join(', ')}`);
         const result = await indexDirectories(paths, config);
         console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.failed} failed`);
@@ -57,7 +59,8 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (query: string, options) => {
       try {
-        await loadConfig({ verbose: options.verbose });
+        const config = await loadConfig({ verbose: options.verbose });
+        await validateSearchPrerequisites(config);
         const results = await searchContent(query, { limit: parseInt(options.limit) });
         
         if (results.length === 0) {
@@ -93,7 +96,8 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (filePath: string, options) => {
       try {
-        await loadConfig({ verbose: options.verbose });
+        const config = await loadConfig({ verbose: options.verbose });
+        await validateSearchPrerequisites(config);
         const results = await findSimilarFiles(filePath, parseInt(options.limit));
         
         if (results.length === 0) {
@@ -150,11 +154,18 @@ export async function main() {
     .option('-v, --verbose', 'Enable verbose logging')
     .action(async (options) => {
       try {
-        await loadConfig({ verbose: options.verbose });
-        const status = await getIndexStatus();
+        const config = await loadConfig({ verbose: options.verbose });
+        const [status, serviceStatus] = await Promise.all([
+          getIndexStatus(),
+          getServiceStatus(config)
+        ]);
         
         console.log('Directory Indexer Status Report');
         console.log('=====================================');
+        console.log('');
+        console.log('SERVICE STATUS:');
+        console.log(`  • Qdrant database: ${serviceStatus.qdrant ? 'Connected' : 'Disconnected'}`);
+        console.log(`  • Embedding service (${serviceStatus.embeddingProvider}): ${serviceStatus.embedding ? 'Connected' : 'Disconnected'}`);
         console.log('');
         console.log('OVERVIEW:');
         console.log(`  • ${status.directoriesIndexed} directories have been indexed`);
@@ -206,7 +217,7 @@ export async function main() {
             console.log(`  • ${issue}`);
           });
           console.log('');
-          console.log('ℹ️  Note: Status messages above may be normal during setup or active indexing.');
+          console.log('Note: Status messages above may be normal during setup or active indexing.');
         } else {
           console.log('');
           console.log('SYSTEM STATUS:');
