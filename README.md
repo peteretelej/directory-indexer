@@ -62,6 +62,8 @@ If you experience issues on windows adding this MCP. You can install the package
 npm install -g directory-indexer@latest
 ```
 
+
+
 Then use the following MCP configuration
 ```
 {
