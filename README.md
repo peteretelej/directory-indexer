@@ -34,7 +34,18 @@ docker run -d --name ollama -p 127.0.0.1:11434:11434 -v ollama:/root/.ollama oll
 # Pull the embedding model
 docker exec ollama ollama pull nomic-embed-text
 ```
-**Note:** Make sure the embedding model is pulled before you start indexing. 
+
+**Note:** Make sure the embedding model is pulled before you start indexing.
+
+You can confirm that Ollama and Qdrant are running by checking:
+
+```bash
+# qdrant endpoint
+curl http://localhost:6333/
+
+# confirm what ollama models are available
+curl http://localhost:11434/api/tags
+```
 
 **3. Index your directories**
 
@@ -58,11 +69,13 @@ Add to your MCP configuration:
 ```
 
 If you experience issues on windows adding this MCP. You can install the package globally using
+
 ```
 npm install -g directory-indexer@latest
 ```
 
 Then use the following MCP configuration
+
 ```
 {
   "mcpServers": {
@@ -238,6 +251,7 @@ Organize content into workspaces for focused searches:
 ```
 
 **How workspaces work:**
+
 - Define workspace environments with `WORKSPACE_NAME` format
 - Use comma-separated paths or JSON arrays: `["path1", "path2"]`
 - Search within specific workspaces: _"Find issues about authentication in customer cases workspace"_
