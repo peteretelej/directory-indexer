@@ -108,7 +108,7 @@ Example queries:
         },
         workspace: {
           type: 'string',
-          description: 'Optional workspace name to filter search results. Only files within the workspace directories will be searched. Use server_info to see available workspaces.'
+          description: 'Optional workspace name to filter search results. Only files within the workspace directories will be searched. IMPORTANT: Use server_info tool first to discover available workspace names - using invalid workspace names will result in empty results.'
         }
       },
       required: ['query']
@@ -150,7 +150,7 @@ Returns file paths with similarity scores. Use get_content to read full files or
         },
         workspace: {
           type: 'string',
-          description: 'Optional workspace name to filter results. Only files within the workspace directories will be considered. Use server_info to see available workspaces.'
+          description: 'Optional workspace name to filter results. Only files within the workspace directories will be considered. IMPORTANT: Use server_info tool first to discover available workspace names - using invalid workspace names will result in empty results.'
         }
       },
       required: ['file_path']
@@ -235,6 +235,7 @@ Returns chunk content as text. Use this with chunk IDs from search results to ge
     description: `Get information about server status and indexed content. Shows what directories and files are available for search.
 
 When to use this tool:
+- REQUIRED: Check available workspace names before using workspace parameter in search or similar_files tools
 - Check what content is already indexed before performing searches
 - Verify system is working properly
 - See indexing statistics and status
@@ -244,14 +245,16 @@ How it works:
 - Reports total indexed directories, files, and chunks
 - Shows database size and last indexing time
 - Lists all indexed directories with file counts
+- Lists all configured workspaces with their paths and file counts
 - Reports any errors or issues
 
 Examples:
+- Check workspaces before searching: "What workspaces are available?"
 - Check before searching: "What content is indexed?"
 - Verify after indexing: "Did the indexing complete successfully?"
 - Monitor system: "How many files are searchable?"
 
-Returns server version, indexing statistics, directory list, and any errors. Use this to understand what content is available for search and similar_files tools.`,
+Returns server version, indexing statistics, directory list, workspace information, and any errors. IMPORTANT: Always use this tool first to discover available workspace names when you need to search within specific workspaces.`,
     inputSchema: {
       type: 'object',
       properties: {},

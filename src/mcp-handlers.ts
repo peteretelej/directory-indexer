@@ -86,25 +86,39 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   };
 }
 
+async function validateWorkspace(workspace?: string): Promise<{ workspace?: string; message?: string }> {
+  if (!workspace) return { workspace };
+  
+  const config = (await import('./config.js')).loadConfig();
+  const { getAvailableWorkspaces } = await import('./config.js');
+  const availableWorkspaces = getAvailableWorkspaces(config);
+  
+  if (availableWorkspaces.includes(workspace)) {
+    return { workspace };
+  }
+  
+  // Invalid workspace - search all content with informative message
+  const message = availableWorkspaces.length > 0
+    ? `Note: Workspace '${workspace}' not found. Searching all content instead. Available workspaces: ${availableWorkspaces.join(', ')}. Use server_info tool to see workspace details.`
+    : `Note: Workspace '${workspace}' not found and no workspaces are configured. Searching all indexed content.`;
+  
+  return { workspace: undefined, message };
+}
+
 export async function handleSearchTool(args: unknown): Promise<CallToolResult> {
   if (!isSearchToolArgs(args)) {
     throw new Error('query is required');
   }
   
-  const options = { 
-    limit: args.limit || 10,
-    workspace: args.workspace
-  };
+  const { workspace, message } = await validateWorkspace(args.workspace);
+  const results = await searchContent(args.query, { limit: args.limit || 10, workspace });
   
-  const results = await searchContent(args.query, options);
+  const response = message 
+    ? `${message}\n\n${JSON.stringify(results, null, 2)}`
+    : JSON.stringify(results, null, 2);
   
   return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(results, null, 2)
-      }
-    ]
+    content: [{ type: 'text', text: response }]
   };
 }
 
@@ -113,19 +127,15 @@ export async function handleSimilarFilesTool(args: unknown): Promise<CallToolRes
     throw new Error('file_path is required');
   }
   
-  const results = await findSimilarFiles(
-    args.file_path, 
-    args.limit || 10,
-    args.workspace
-  );
+  const { workspace, message } = await validateWorkspace(args.workspace);
+  const results = await findSimilarFiles(args.file_path, args.limit || 10, workspace);
+  
+  const response = message 
+    ? `${message}\n\n${JSON.stringify(results, null, 2)}`
+    : JSON.stringify(results, null, 2);
   
   return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(results, null, 2)
-      }
-    ]
+    content: [{ type: 'text', text: response }]
   };
 }
 
