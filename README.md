@@ -34,11 +34,12 @@ docker run -d --name ollama -p 127.0.0.1:11434:11434 -v ollama:/root/.ollama oll
 # Pull the embedding model
 docker exec ollama ollama pull nomic-embed-text
 ```
+**Note:** Make sure the embedding model is pulled before you start indexing. 
 
 **3. Index your directories**
 
 ```bash
-npx directory-indexer@latest index ~/Documents ~/Projects
+npx directory-indexer@latest index ./WorkNotes ./Projects
 ```
 
 **4. Configure AI assistant** _(Claude Desktop, Cursor, Cline, Roo Code, Zed etc.)_
@@ -51,6 +52,23 @@ Add to your MCP configuration:
     "directory-indexer": {
       "command": "npx",
       "args": ["directory-indexer@latest", "serve"]
+    }
+  }
+}
+```
+
+If you experience issues on windows adding this MCP. You can install the package globally using
+```
+npm install -g directory-indexer@latest
+```
+
+Then use the following MCP configuration
+```
+{
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "directory-indexer",
+      "args": [ "serve" ]
     }
   }
 }
