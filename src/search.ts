@@ -17,15 +17,15 @@ export interface ChunkMatch {
 export interface SearchResult {
   filePath: string;
   score: number;
+  fileSizeBytes: number;
   matchingChunks: number;
-  parentDirectories: string[];
   chunks: ChunkMatch[];
 }
 
 export interface SimilarFile {
   filePath: string;
   score: number;
-  parentDirectories: string[];
+  fileSizeBytes: number;
 }
 
 export class SearchError extends Error {
@@ -40,14 +40,14 @@ export async function searchContent(query: string, options: SearchOptions = {}):
   
   try {
     const config = (await import('./config.js')).loadConfig();
-    const { qdrant } = await initializeStorage(config);
+    const { sqlite, qdrant } = await initializeStorage(config);
     
     const queryEmbedding = await generateEmbedding(query, config);
     // Get more points initially since we'll group by file
     const points = await qdrant.searchPoints(queryEmbedding, limit * 5);
     
     // Group points by file path
-    const fileGroups = new Map<string, Array<{ score: number; chunkId: string; parentDirectories: string[] }>>();
+    const fileGroups = new Map<string, Array<{ score: number; chunkId: string }>>();
     
     for (const point of points) {
       const score = point.score ?? 0;
@@ -60,8 +60,7 @@ export async function searchContent(query: string, options: SearchOptions = {}):
       
       fileGroups.get(filePath)!.push({
         score,
-        chunkId: point.payload.chunkId,
-        parentDirectories: point.payload.parentDirectories
+        chunkId: point.payload.chunkId
       });
     }
     
@@ -77,11 +76,15 @@ export async function searchContent(query: string, options: SearchOptions = {}):
         score: chunk.score
       }));
       
+      // Get file size from SQLite database
+      const fileRecord = await sqlite.getFile(filePath);
+      const fileSizeBytes = fileRecord?.size ?? 0;
+      
       results.push({
         filePath,
         score: avgScore,
+        fileSizeBytes,
         matchingChunks: chunks.length,
-        parentDirectories: sortedChunks[0].parentDirectories,
         chunks: chunkMatches
       });
     }
@@ -110,27 +113,45 @@ export async function findSimilarFiles(filePath: string, limit: number = 5): Pro
       const embedding = await generateEmbedding(content, config);
       const points = await qdrant.searchPoints(embedding, limit + 1);
       
-      return points
+      const filteredPoints = points
         .filter(point => point.payload.filePath !== filePath)
-        .slice(0, limit)
-        .map(point => ({
+        .slice(0, limit);
+      
+      const results: SimilarFile[] = [];
+      for (const point of filteredPoints) {
+        const pointFileRecord = await sqlite.getFile(point.payload.filePath);
+        const fileSizeBytes = pointFileRecord?.size ?? 0;
+        
+        results.push({
           filePath: point.payload.filePath,
           score: point.score ?? 0,
-          parentDirectories: point.payload.parentDirectories
-        }));
+          fileSizeBytes
+        });
+      }
+      
+      return results;
     }
     
     const firstChunkEmbedding = await generateEmbedding(fileRecord.chunks[0].content, config);
     const points = await qdrant.searchPoints(firstChunkEmbedding, limit + 1);
     
-    return points
+    const filteredPoints = points
       .filter(point => point.payload.filePath !== filePath)
-      .slice(0, limit)
-      .map(point => ({
+      .slice(0, limit);
+    
+    const results: SimilarFile[] = [];
+    for (const point of filteredPoints) {
+      const pointFileRecord = await sqlite.getFile(point.payload.filePath);
+      const fileSizeBytes = pointFileRecord?.size ?? 0;
+      
+      results.push({
         filePath: point.payload.filePath,
         score: point.score ?? 0,
-        parentDirectories: point.payload.parentDirectories
-      }));
+        fileSizeBytes
+      });
+    }
+    
+    return results;
   } catch (error) {
     throw new SearchError(`Failed to find similar files`, error as Error);
   }

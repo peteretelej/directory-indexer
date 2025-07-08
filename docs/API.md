@@ -182,15 +182,15 @@ Search indexed content semantically.
   {
     "filePath": "/work/incidents/redis-timeout.md",
     "score": 0.89,
+    "fileSizeBytes": 2048,
     "matchingChunks": 3,
-    "parentDirectories": ["/work", "/work/incidents"],
     "chunks": [
       {
         "chunkId": "chunk_1",
         "score": 0.92
       },
       {
-        "chunkId": "chunk_3", 
+        "chunkId": "chunk_3",
         "score": 0.87
       }
     ]
@@ -217,7 +217,8 @@ Find files similar to a given file.
 [
   {
     "filePath": "/work/incidents/redis-timeout.md",
-    "score": 0.91
+    "score": 0.91,
+    "fileSizeBytes": 1536
   }
 ]
 ```
