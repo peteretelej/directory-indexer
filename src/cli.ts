@@ -34,9 +34,13 @@ export async function main() {
         const config = await loadConfig({ verbose: options.verbose });
         console.log(`Indexing ${paths.length} ${paths.length === 1 ? 'directory' : 'directories'}: ${paths.join(', ')}`);
         const result = await indexDirectories(paths, config);
-        console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`);
-        if (result.errors.length > 0 && config.verbose) {
-          console.log('Errors:', result.errors);
+        console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.failed} failed`);
+        if (result.errors.length > 0) {
+          console.log(`Errors: [`);
+          result.errors.forEach(error => {
+            console.log(`  '${error}'`);
+          });
+          console.log(`]`);
         }
       } catch (error) {
         console.error('Error indexing directories:', error);

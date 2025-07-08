@@ -22,6 +22,7 @@ export interface ScanOptions {
 export interface IndexResult {
   indexed: number;
   skipped: number;
+  failed: number;
   errors: string[];
 }
 
@@ -164,6 +165,7 @@ async function shouldReprocessFile(filePath: string, existingRecord: FileRecord,
 export async function indexDirectories(paths: string[], config: Config): Promise<IndexResult> {
   let indexed = 0;
   let skipped = 0;
+  let failed = 0;
   const errors: string[] = [];
   
   const scanOptions: ScanOptions = {
@@ -253,7 +255,12 @@ export async function indexDirectories(paths: string[], config: Config): Promise
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const causeMessage = error instanceof Error && error.cause ? `: ${(error.cause as Error).message}` : '';
-          errors.push(`Failed to process ${file.path}: ${errorMessage}${causeMessage}`);
+          const fullError = `Failed to process ${file.path}: ${errorMessage}${causeMessage}`;
+          errors.push(fullError);
+          failed++;
+          
+          // Print error immediately during processing (not just in verbose mode)
+          console.error(`❌ ${fullError}`);
         }
       }
       
@@ -269,5 +276,5 @@ export async function indexDirectories(paths: string[], config: Config): Promise
     }
   }
   
-  return { indexed, skipped, errors };
+  return { indexed, skipped, failed, errors };
 }

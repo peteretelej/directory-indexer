@@ -37,6 +37,7 @@ describe('MCP Handlers Unit Tests', () => {
       vi.mocked(indexDirectories).mockResolvedValue({
         indexed: 5,
         skipped: 2,
+        failed: 1,
         errors: ['error1']
       });
 
@@ -49,7 +50,10 @@ describe('MCP Handlers Unit Tests', () => {
       expect(result).toEqual({
         content: [{
           type: 'text',
-          text: 'Indexed 5 files, skipped 2 files, 1 errors'
+          text: `Indexed 5 files, skipped 2 files, 1 failed
+Errors: [
+  'error1'
+]`
         }]
       });
     });

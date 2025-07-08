@@ -66,11 +66,21 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   const paths = args.directory_path.split(',').map((p: string) => p.trim());
   const result = await indexDirectories(paths, config);
   
+  let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.failed} failed`;
+  
+  if (result.errors.length > 0) {
+    responseText += `\nErrors: [\n`;
+    result.errors.forEach(error => {
+      responseText += `  '${error}'\n`;
+    });
+    responseText += `]`;
+  }
+  
   return {
     content: [
       {
         type: 'text',
-        text: `Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`
+        text: responseText
       }
     ]
   };
