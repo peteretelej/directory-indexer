@@ -49,9 +49,9 @@ npx directory-indexer search <query> [options]
 **Examples:**
 
 ```bash
-npx directory-indexer search "database timeout errors"
-npx directory-indexer search "authentication" --limit 5
-npx directory-indexer search "error handling" --show-chunks
+npx directory-indexer search "database timeout errors and connection retry strategies"
+npx directory-indexer search "JWT authentication implementation patterns" --limit 5
+npx directory-indexer search "comprehensive error handling and logging practices" --show-chunks
 ```
 
 ### `similar`
@@ -170,8 +170,9 @@ Search indexed content semantically.
 
 ```json
 {
-  "query": "database timeout errors",
-  "limit": 10
+  "query": "how to handle database connection timeouts and retry logic",
+  "limit": 10,
+  "workspace": "work"
 }
 ```
 
@@ -207,7 +208,8 @@ Find files similar to a given file.
 ```json
 {
   "file_path": "/work/incidents/database-outage.md",
-  "limit": 10
+  "limit": 10,
+  "workspace": "work"
 }
 ```
 
@@ -287,7 +289,23 @@ Get server information and status.
     "chunksIndexed": 3891,
     "databaseSize": "15.2 MB",
     "lastIndexed": "2025-01-15T10:30:00Z",
-    "errors": []
+    "errors": [],
+    "workspaces": [
+      {
+        "name": "docs",
+        "paths": ["/home/user/docs", "/home/user/wiki"],
+        "isValid": true,
+        "filesCount": 156,
+        "chunksCount": 892
+      },
+      {
+        "name": "projects",
+        "paths": ["/home/user/code/api", "/home/user/code/web"],
+        "isValid": true,
+        "filesCount": 1091,
+        "chunksCount": 2999
+      }
+    ]
   }
 }
 ```

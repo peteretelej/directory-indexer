@@ -196,6 +196,12 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       }
     });
 
+    it('should handle status command', async () => {
+      const result = await runCLI(['status']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toLowerCase()).toContain('status');
+    });
+
     it('should complete full workflow via direct function calls', async () => {
       const testDataPath = join(process.cwd(), 'tests', 'test_data');
       
@@ -261,6 +267,63 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       }
 
       console.log('✅ Direct function workflow completed successfully');
+    });
+
+    it('should support workspace filtering in search', async () => {
+      const testDataPath = join(process.cwd(), 'tests', 'test_data');
+      
+      // Set up workspaces using environment variables
+      const originalEnv = process.env;
+      process.env.WORKSPACE_DOCS = join(testDataPath, 'docs');
+      process.env.WORKSPACE_CODE = join(testDataPath, 'programming');
+      
+      try {
+        // Test config loading with workspaces
+        const config = loadConfig();
+        expect(Object.keys(config.workspaces)).toContain('docs');
+        expect(Object.keys(config.workspaces)).toContain('code');
+        
+        // Test JSON array format for workspaces
+        process.env.WORKSPACE_JSON_TEST = JSON.stringify([join(testDataPath, 'configs')]);
+        const configWithJson = loadConfig();
+        expect(configWithJson.workspaces.json_test).toBeDefined();
+        delete process.env.WORKSPACE_JSON_TEST;
+        
+        // Test workspace filtering in search
+        const docsResults = await searchContent('configuration and setup guides', { workspace: 'docs' });
+        const codeResults = await searchContent('configuration and setup guides', { workspace: 'code' });
+        
+        // Verify workspace filtering works
+        if (docsResults.length > 0) {
+          expect(docsResults.every(r => r.filePath.includes('docs'))).toBe(true);
+        }
+        if (codeResults.length > 0) {
+          expect(codeResults.every(r => r.filePath.includes('programming'))).toBe(true);
+        }
+        
+        // Test workspace filtering in findSimilarFiles
+        const testFile = join(testDataPath, 'docs', 'api_guide.md');
+        if (existsSync(testFile)) {
+          const similarInDocs = await findSimilarFiles(testFile, 5, 'docs');
+          if (similarInDocs.length > 0) {
+            expect(similarInDocs.every(r => r.filePath.includes('docs'))).toBe(true);
+          }
+        }
+        
+        // Test workspace statistics in status
+        const status = await getIndexStatus();
+        expect(status.workspaces).toBeDefined();
+        expect(status.workspaces.length).toBeGreaterThan(0);
+        
+        const docsWorkspace = status.workspaces.find(w => w.name === 'docs');
+        expect(docsWorkspace).toBeDefined();
+        expect(typeof docsWorkspace?.filesCount).toBe('number');
+        expect(typeof docsWorkspace?.chunksCount).toBe('number');
+        
+      } finally {
+        // Restore environment
+        process.env = originalEnv;
+      }
     });
   });
 

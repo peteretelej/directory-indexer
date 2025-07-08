@@ -7,6 +7,7 @@ export interface SearchOptions {
   limit?: number;
   threshold?: number;
   directoryPath?: string;
+  workspace?: string;
 }
 
 export interface ChunkMatch {
@@ -36,17 +37,23 @@ export class SearchError extends Error {
 }
 
 export async function searchContent(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
-  const { limit = 10, threshold = 0.0 } = options;
+  const { limit = 10, threshold = 0.0, workspace } = options;
   
   try {
     const config = (await import('./config.js')).loadConfig();
+    const { getWorkspacePaths, isFileInWorkspace } = await import('./config.js');
     const { sqlite, qdrant } = await initializeStorage(config);
     
     const queryEmbedding = await generateEmbedding(query, config);
-    // Get more points initially since we'll group by file
-    const points = await qdrant.searchPoints(queryEmbedding, limit * 5);
     
-    // Group points by file path
+    // Get workspace paths if workspace is specified
+    const workspacePaths = workspace ? getWorkspacePaths(config, workspace) : [];
+    
+    // Get more points initially since we'll group by file and potentially filter by workspace
+    const searchLimit = workspace ? limit * 10 : limit * 5;
+    const points = await qdrant.searchPoints(queryEmbedding, searchLimit);
+    
+    // Group points by file path, filtering by workspace if specified
     const fileGroups = new Map<string, Array<{ score: number; chunkId: string }>>();
     
     for (const point of points) {
@@ -54,6 +61,14 @@ export async function searchContent(query: string, options: SearchOptions = {}):
       if (score < threshold) continue;
       
       const filePath = point.payload.filePath;
+      
+      // Filter by workspace if specified
+      if (workspace && workspacePaths.length > 0) {
+        if (!isFileInWorkspace(filePath, workspacePaths)) {
+          continue;
+        }
+      }
+      
       if (!fileGroups.has(filePath)) {
         fileGroups.set(filePath, []);
       }
@@ -98,23 +113,39 @@ export async function searchContent(query: string, options: SearchOptions = {}):
   }
 }
 
-export async function findSimilarFiles(filePath: string, limit: number = 5): Promise<SimilarFile[]> {
+export async function findSimilarFiles(filePath: string, limit: number = 5, workspace?: string): Promise<SimilarFile[]> {
   try {
     if (!await fileExists(filePath)) {
       throw new Error(`File not found: ${filePath}`);
     }
     
     const config = (await import('./config.js')).loadConfig();
+    const { getWorkspacePaths, isFileInWorkspace } = await import('./config.js');
     const { sqlite, qdrant } = await initializeStorage(config);
+    
+    // Get workspace paths if workspace is specified
+    const workspacePaths = workspace ? getWorkspacePaths(config, workspace) : [];
     
     const fileRecord = await sqlite.getFile(filePath);
     if (!fileRecord || fileRecord.chunks.length === 0) {
       const content = await fs.readFile(filePath, 'utf-8');
       const embedding = await generateEmbedding(content, config);
-      const points = await qdrant.searchPoints(embedding, limit + 1);
+      const searchLimit = workspace ? (limit + 1) * 5 : limit + 1;
+      const points = await qdrant.searchPoints(embedding, searchLimit);
       
       const filteredPoints = points
-        .filter(point => point.payload.filePath !== filePath)
+        .filter(point => {
+          const pointFilePath = point.payload.filePath;
+          // Exclude the reference file itself
+          if (pointFilePath === filePath) return false;
+          
+          // Filter by workspace if specified
+          if (workspace && workspacePaths.length > 0) {
+            return isFileInWorkspace(pointFilePath, workspacePaths);
+          }
+          
+          return true;
+        })
         .slice(0, limit);
       
       const results: SimilarFile[] = [];
@@ -133,10 +164,22 @@ export async function findSimilarFiles(filePath: string, limit: number = 5): Pro
     }
     
     const firstChunkEmbedding = await generateEmbedding(fileRecord.chunks[0].content, config);
-    const points = await qdrant.searchPoints(firstChunkEmbedding, limit + 1);
+    const searchLimit = workspace ? (limit + 1) * 5 : limit + 1;
+    const points = await qdrant.searchPoints(firstChunkEmbedding, searchLimit);
     
     const filteredPoints = points
-      .filter(point => point.payload.filePath !== filePath)
+      .filter(point => {
+        const pointFilePath = point.payload.filePath;
+        // Exclude the reference file itself
+        if (pointFilePath === filePath) return false;
+        
+        // Filter by workspace if specified
+        if (workspace && workspacePaths.length > 0) {
+          return isFileInWorkspace(pointFilePath, workspacePaths);
+        }
+        
+        return true;
+      })
       .slice(0, limit);
     
     const results: SimilarFile[] = [];

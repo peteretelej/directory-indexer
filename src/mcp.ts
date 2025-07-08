@@ -69,11 +69,11 @@ How it works:
 - Returns files ranked by relevance score
 
 Examples:
-- "database configuration" - finds config files, documentation about DB setup
-- "error handling patterns" - finds code files with exception handling
-- "authentication implementation" - finds auth-related code and docs
-- "API documentation" - finds API guides, endpoint definitions
-- "deployment scripts" - finds CI/CD configs, deployment automation
+- "database configuration and connection pooling setup" - finds config files, documentation about DB setup
+- "comprehensive error handling patterns and exception management" - finds code files with exception handling
+- "JWT authentication implementation and session management" - finds auth-related code and docs
+- "REST API documentation and endpoint specifications" - finds API guides, endpoint definitions
+- "Docker deployment scripts and CI/CD pipeline configuration" - finds deployment automation
 
 Returns files with similarity scores and chunk information. Use get_content to retrieve full file content or get_chunk to retrieve specific chunk content by chunk ID.
 - Groups results by file to avoid duplicates from multiple matching sections
@@ -85,9 +85,9 @@ Response format:
 - Average similarity score calculated across all matching chunks per file
 
 Example queries:
-- "error handling patterns" (finds try/catch, error classes, logging)
-- "database migration scripts" (finds SQL, schema changes, migration files)
-- "authentication middleware" (finds auth logic, JWT handling, middleware functions)`,
+- "error handling patterns and exception management strategies" (finds try/catch, error classes, logging)
+- "database migration scripts and schema versioning approaches" (finds SQL, schema changes, migration files)
+- "authentication middleware and JWT token validation logic" (finds auth logic, JWT handling, middleware functions)`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -99,6 +99,10 @@ Example queries:
           type: 'number',
           description: 'Maximum number of files to return (default: 10). Each file may contain multiple matching chunks.',
           default: 10
+        },
+        workspace: {
+          type: 'string',
+          description: 'Optional workspace name to filter search results. Only files within the workspace directories will be searched. Use server_info to see available workspaces.'
         }
       },
       required: ['query']
@@ -137,6 +141,10 @@ Returns file paths with similarity scores. Use get_content to read full files or
           type: 'number',
           description: 'Maximum number of similar files to return (default: 10). Results are sorted by similarity score.',
           default: 10
+        },
+        workspace: {
+          type: 'string',
+          description: 'Optional workspace name to filter results. Only files within the workspace directories will be considered. Use server_info to see available workspaces.'
         }
       },
       required: ['file_path']
@@ -290,7 +298,11 @@ export async function startMcpServer(config: Config): Promise<void> {
           if (!args || typeof args.query !== 'string') {
             throw new Error('query is required');
           }
-          const results = await searchContent(args.query, { limit: (args.limit as number) || 10 });
+          const options = { 
+            limit: (args.limit as number) || 10,
+            workspace: args.workspace as string | undefined
+          };
+          const results = await searchContent(args.query, options);
           return {
             content: [
               {
@@ -305,7 +317,11 @@ export async function startMcpServer(config: Config): Promise<void> {
           if (!args || typeof args.file_path !== 'string') {
             throw new Error('file_path is required');
           }
-          const results = await findSimilarFiles(args.file_path, (args.limit as number) || 10);
+          const results = await findSimilarFiles(
+            args.file_path, 
+            (args.limit as number) || 10,
+            args.workspace as string | undefined
+          );
           return {
             content: [
               {

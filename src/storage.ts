@@ -348,6 +348,14 @@ export interface DirectoryStatus {
   errors: string[];
 }
 
+export interface WorkspaceStatus {
+  name: string;
+  paths: string[];
+  isValid: boolean;
+  filesCount: number;
+  chunksCount: number;
+}
+
 export interface IndexStatus {
   directoriesIndexed: number;
   filesIndexed: number;
@@ -356,10 +364,52 @@ export interface IndexStatus {
   lastIndexed: string | null;
   errors: string[];
   directories: DirectoryStatus[];
+  workspaces: WorkspaceStatus[];
   qdrantConsistency: {
     isConsistent: boolean;
     issues: string[];
   };
+}
+
+async function calculateWorkspaceStatistics(sqlite: SQLiteStorage, config: Config): Promise<WorkspaceStatus[]> {
+  const { getAvailableWorkspaces, getWorkspacePaths, isFileInWorkspace } = await import('./config.js');
+  const workspaces: WorkspaceStatus[] = [];
+  
+  for (const workspaceName of getAvailableWorkspaces(config)) {
+    const workspacePaths = getWorkspacePaths(config, workspaceName);
+    const workspaceConfig = config.workspaces[workspaceName];
+    
+    // Get all files and count those in this workspace
+    const filesStmt = sqlite.db.prepare('SELECT path, chunks_json FROM files');
+    const allFiles = filesStmt.all() as { path: string; chunks_json: string | null }[];
+    
+    let filesCount = 0;
+    let chunksCount = 0;
+    
+    for (const file of allFiles) {
+      if (isFileInWorkspace(file.path, workspacePaths)) {
+        filesCount++;
+        if (file.chunks_json) {
+          try {
+            const chunks = JSON.parse(file.chunks_json);
+            chunksCount += chunks.length;
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+    }
+    
+    workspaces.push({
+      name: workspaceName,
+      paths: workspacePaths,
+      isValid: workspaceConfig.isValid,
+      filesCount,
+      chunksCount
+    });
+  }
+  
+  return workspaces;
 }
 
 async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Promise<{ isConsistent: boolean; issues: string[] }> {
@@ -489,6 +539,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     });
     
     const qdrantConsistency = await checkQdrantConsistency(sqlite, config);
+    const workspaces = await calculateWorkspaceStatistics(sqlite, config);
     
     const fs = await import('fs');
     let databaseSize = '0 KB';
@@ -514,6 +565,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       lastIndexed: lastIndexedResult.last_indexed ? new Date(lastIndexedResult.last_indexed).toISOString() : null,
       errors: allErrors,
       directories,
+      workspaces,
       qdrantConsistency
     };
   } finally {

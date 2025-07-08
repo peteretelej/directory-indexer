@@ -197,6 +197,33 @@ Configure with custom endpoints and data directory:
 }
 ```
 
+### Workspace Support
+
+Organize content into workspaces for focused searches:
+
+```json
+{
+  "mcpServers": {
+    "directory-indexer": {
+      "command": "npx",
+      "args": ["directory-indexer@latest", "serve"],
+      "env": {
+        "WORKSPACE_DOCS": "/home/user/docs,/home/user/wiki",
+        "WORKSPACE_PROJECTS": "/home/user/code/api,/home/user/code/web",
+        "WORKSPACE_PERSONAL": "/home/user/notes,/home/user/journal"
+      }
+    }
+  }
+}
+```
+
+**How workspaces work:**
+- Define workspace environments with `WORKSPACE_NAME` format
+- Use comma-separated paths or JSON arrays: `["path1", "path2"]`
+- Search within specific workspaces: _"Find API docs in projects workspace"_
+- Your AI assistant can filter results to relevant workspace content
+- Use `server_info` to see available workspaces and their statistics
+
 ### CLI Usage
 
 For advanced users who prefer command-line usage, see [CLI Documentation](./docs/design.md#cli-usage).

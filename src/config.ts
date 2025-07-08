@@ -1,6 +1,15 @@
 import { homedir } from 'os';
 import { join } from 'path';
+import { existsSync, statSync } from 'fs';
 import { z } from 'zod';
+import { normalizePath } from './utils';
+
+const WorkspaceSchema = z.object({
+  paths: z.array(z.string()),
+  isValid: z.boolean(),
+  filesCount: z.number().optional(),
+  chunksCount: z.number().optional(),
+});
 
 const ConfigSchema = z.object({
   storage: z.object({
@@ -21,15 +30,76 @@ const ConfigSchema = z.object({
   }),
   dataDir: z.string(),
   verbose: z.boolean(),
+  workspaces: z.record(WorkspaceSchema),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+export type WorkspaceConfig = z.infer<typeof WorkspaceSchema>;
 
 export class ConfigError extends Error {
   constructor(message: string, public override cause?: Error) {
     super(message);
     this.name = 'ConfigError';
   }
+}
+
+function parseWorkspaces(env: Record<string, string | undefined>): Record<string, WorkspaceConfig> {
+  const workspaces: Record<string, WorkspaceConfig> = {};
+  
+  for (const [key, value] of Object.entries(env)) {
+    if (key.startsWith('WORKSPACE_') && value) {
+      const name = key.replace('WORKSPACE_', '').toLowerCase();
+      
+      // Parse paths from comma-separated string or JSON array
+      let paths: string[];
+      try {
+        // Try parsing as JSON array first
+        paths = JSON.parse(value);
+        if (!Array.isArray(paths)) {
+          throw new Error('Not an array');
+        }
+      } catch {
+        // Fall back to comma-separated string
+        paths = value.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      }
+      
+      // Normalize paths for consistent comparison
+      const normalizedPaths = paths.map(normalizePath);
+      
+      // Validate that paths exist and are directories
+      const isValid = normalizedPaths.every(path => {
+        try {
+          return existsSync(path) && statSync(path).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+      
+      workspaces[name] = {
+        paths: normalizedPaths,
+        isValid,
+      };
+    }
+  }
+  
+  return workspaces;
+}
+
+export function getWorkspacePaths(config: Config, workspace: string): string[] {
+  const workspaceConfig = config.workspaces[workspace];
+  return workspaceConfig?.paths || [];
+}
+
+export function isFileInWorkspace(filePath: string, workspacePaths: string[]): boolean {
+  const normalizedFilePath = normalizePath(filePath);
+  return workspacePaths.some(workspacePath => 
+    normalizedFilePath.startsWith(workspacePath + '/') || 
+    normalizedFilePath === workspacePath
+  );
+}
+
+export function getAvailableWorkspaces(config: Config): string[] {
+  return Object.keys(config.workspaces);
 }
 
 export function loadConfig(options: { verbose?: boolean } = {}): Config {
@@ -39,6 +109,9 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
   const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
   const dbFileName = isTest ? 'test-data.db' : 'data.db';
   const defaultCollection = isTest ? 'directory-indexer-test' : 'directory-indexer';
+  
+  // Parse workspace configurations from environment variables
+  const workspaces = parseWorkspaces(process.env);
   
   const config = {
     storage: {
@@ -59,6 +132,7 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
     },
     dataDir,
     verbose: options.verbose ?? (process.env.VERBOSE === 'true'),
+    workspaces,
   };
 
   try {
