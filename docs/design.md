@@ -23,6 +23,7 @@ Design documents should be kept up-to-date with implementation changes.
 **Coding Rules**
 
 - No comments (self-explanatory code)
+- Prefer strict types, no any
 - No duplication (eliminate redundant functions)
 - Simple logic (straightforward over complex)
 - Clear naming (functions explain purpose)

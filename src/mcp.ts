@@ -9,9 +9,15 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Config } from './config.js';
-import { indexDirectories } from './indexing.js';
-import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from './search.js';
-import { getIndexStatus } from './storage.js';
+import { 
+  handleIndexTool, 
+  handleSearchTool, 
+  handleSimilarFilesTool, 
+  handleGetContentTool, 
+  handleGetChunkTool, 
+  handleServerInfoTool,
+  formatErrorResponse
+} from './mcp-handlers.js';
 
 // Read version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -278,120 +284,29 @@ export async function startMcpServer(config: Config): Promise<void> {
 
     try {
       switch (name) {
-        case 'index': {
-          if (!args || typeof args.directory_path !== 'string') {
-            throw new Error('directory_path is required');
-          }
-          const paths = args.directory_path.split(',').map((p: string) => p.trim());
-          const result = await indexDirectories(paths, config);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.errors.length} errors`
-              }
-            ]
-          };
-        }
-
-        case 'search': {
-          if (!args || typeof args.query !== 'string') {
-            throw new Error('query is required');
-          }
-          const options = { 
-            limit: (args.limit as number) || 10,
-            workspace: args.workspace as string | undefined
-          };
-          const results = await searchContent(args.query, options);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(results, null, 2)
-              }
-            ]
-          };
-        }
-
-        case 'similar_files': {
-          if (!args || typeof args.file_path !== 'string') {
-            throw new Error('file_path is required');
-          }
-          const results = await findSimilarFiles(
-            args.file_path, 
-            (args.limit as number) || 10,
-            args.workspace as string | undefined
-          );
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(results, null, 2)
-              }
-            ]
-          };
-        }
-
-        case 'get_content': {
-          if (!args || typeof args.file_path !== 'string') {
-            throw new Error('file_path is required');
-          }
-          const content = await getFileContent(args.file_path, args.chunks as string);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: content
-              }
-            ]
-          };
-        }
-
-        case 'get_chunk': {
-          if (!args || typeof args.file_path !== 'string' || typeof args.chunk_id !== 'string') {
-            throw new Error('file_path and chunk_id are required');
-          }
-          const content = await getChunkContent(args.file_path, args.chunk_id);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: content
-              }
-            ]
-          };
-        }
-
-        case 'server_info': {
-          const status = await getIndexStatus();
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  name: 'directory-indexer',
-                  version: VERSION,
-                  status: status
-                }, null, 2)
-              }
-            ]
-          };
-        }
-
+        case 'index':
+          return await handleIndexTool(args, config);
+        
+        case 'search':
+          return await handleSearchTool(args);
+        
+        case 'similar_files':
+          return await handleSimilarFilesTool(args);
+        
+        case 'get_content':
+          return await handleGetContentTool(args);
+        
+        case 'get_chunk':
+          return await handleGetChunkTool(args);
+        
+        case 'server_info':
+          return await handleServerInfoTool(VERSION);
+        
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${errorMessage}`
-          }
-        ],
-        isError: true
-      };
+      return formatErrorResponse(error);
     }
   });
 
