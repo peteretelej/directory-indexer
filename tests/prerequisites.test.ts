@@ -36,7 +36,7 @@ describe('Prerequisites Tests', () => {
       };
       
       await expect(validateSearchPrerequisites(invalidConfig)).rejects.toThrow(PrerequisiteError);
-      await expect(validateSearchPrerequisites(invalidConfig)).rejects.toThrow('Qdrant database is inaccessible');
+      await expect(validateSearchPrerequisites(invalidConfig)).rejects.toThrow('Required services are not available');
     });
 
     it('should fail when Ollama is unreachable', async () => {
@@ -46,7 +46,7 @@ describe('Prerequisites Tests', () => {
       };
       
       await expect(validateIndexPrerequisites(invalidConfig)).rejects.toThrow(PrerequisiteError);
-      await expect(validateIndexPrerequisites(invalidConfig)).rejects.toThrow('Ollama embedding service is inaccessible');
+      await expect(validateIndexPrerequisites(invalidConfig)).rejects.toThrow('Required services are not available');
     });
 
     it('should fail when OpenAI API key is missing', async () => {
@@ -60,7 +60,7 @@ describe('Prerequisites Tests', () => {
         };
         
         await expect(validateIndexPrerequisites(openaiConfig)).rejects.toThrow(PrerequisiteError);
-        await expect(validateIndexPrerequisites(openaiConfig)).rejects.toThrow('OpenAI API is inaccessible');
+        await expect(validateIndexPrerequisites(openaiConfig)).rejects.toThrow('Required services are not available');
       } finally {
         if (originalKey) process.env.OPENAI_API_KEY = originalKey;
       }

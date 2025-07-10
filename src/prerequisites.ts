@@ -71,41 +71,94 @@ export async function checkOpenAI(config: Config): Promise<boolean> {
   }
 }
 
+export interface ServiceStatus {
+  service: string;
+  status: 'available' | 'unavailable';
+  details?: string;
+}
+
+export interface PrerequisiteValidationResult {
+  allPassed: boolean;
+  services: ServiceStatus[];
+}
+
 /**
- * Generate error message for failed prerequisites
+ * Check all prerequisites and return structured status
  */
-function createErrorMessage(qdrantOk: boolean, embeddingOk: boolean, provider: string): string {
-  const errors: string[] = [];
+export async function checkAllPrerequisitesDetailed(config: Config): Promise<PrerequisiteValidationResult> {
+  const services: ServiceStatus[] = [];
   
-  if (!qdrantOk) {
-    errors.push('Qdrant database is inaccessible');
-  }
+  // Check Qdrant
+  const qdrantOk = await checkQdrant(config);
+  services.push({
+    service: 'qdrant',
+    status: qdrantOk ? 'available' : 'unavailable',
+    details: qdrantOk ? undefined : `Cannot connect to Qdrant at ${config.storage.qdrantEndpoint}`
+  });
   
-  if (!embeddingOk) {
-    if (provider === 'ollama') {
-      errors.push('Ollama embedding service is inaccessible or model unavailable');
-    } else if (provider === 'openai') {
-      errors.push('OpenAI API is inaccessible or key invalid');
+  // Check embedding service
+  let embeddingOk = false;
+  let embeddingDetails: string | undefined;
+  
+  if (config.embedding.provider === 'ollama') {
+    const ollamaOk = await checkOllama(config);
+    const modelOk = ollamaOk ? await checkOllamaModel(config) : false;
+    embeddingOk = ollamaOk && modelOk;
+    
+    if (!ollamaOk) {
+      embeddingDetails = `Cannot connect to Ollama at ${config.embedding.endpoint}`;
+    } else if (!modelOk) {
+      embeddingDetails = `Model "${config.embedding.model}" not available in Ollama`;
     }
+  } else if (config.embedding.provider === 'openai') {
+    embeddingOk = await checkOpenAI(config);
+    if (!embeddingOk) {
+      embeddingDetails = process.env.OPENAI_API_KEY ? 
+        'OpenAI API request failed' : 
+        'OPENAI_API_KEY environment variable not set';
+    }
+  } else if (config.embedding.provider === 'mock') {
+    embeddingOk = true;
+  } else {
+    embeddingDetails = `Unknown embedding provider: ${config.embedding.provider}`;
   }
   
-  errors.push('');
-  errors.push('For setup instructions, see: https://github.com/peteretelej/directory-indexer#setup');
+  services.push({
+    service: config.embedding.provider,
+    status: embeddingOk ? 'available' : 'unavailable',
+    details: embeddingDetails
+  });
   
-  return errors.join('\n');
+  return {
+    allPassed: services.every(s => s.status === 'available'),
+    services
+  };
+}
+
+/**
+ * Generate comprehensive error message that lists all missing services
+ */
+function createComprehensiveErrorMessage(result: PrerequisiteValidationResult): string {
+  const unavailableServices = result.services.filter(s => s.status === 'unavailable');
+  
+  const serviceDescriptions = unavailableServices.map(service => {
+    return `${service.service} (${service.details})`;
+  });
+  
+  const message = `Required services are not available to use directory-indexer features: ${serviceDescriptions.join(', ')}.`;
+  const setup = 'For setup instructions, see: https://github.com/peteretelej/directory-indexer#setup';
+  
+  return `${message}\n\n${setup}`;
 }
 
 /**
  * Validate all prerequisites for indexing (needs both Qdrant and embedding service)
  */
 export async function validateIndexPrerequisites(config: Config): Promise<void> {
-  const [qdrantOk, embeddingOk] = await Promise.all([
-    checkQdrant(config),
-    checkEmbeddingService(config)
-  ]);
+  const result = await checkAllPrerequisitesDetailed(config);
   
-  if (!qdrantOk || !embeddingOk) {
-    throw new PrerequisiteError(createErrorMessage(qdrantOk, embeddingOk, config.embedding.provider));
+  if (!result.allPassed) {
+    throw new PrerequisiteError(createComprehensiveErrorMessage(result));
   }
 }
 
@@ -113,10 +166,16 @@ export async function validateIndexPrerequisites(config: Config): Promise<void> 
  * Validate prerequisites for search (needs only Qdrant)
  */
 export async function validateSearchPrerequisites(config: Config): Promise<void> {
-  const qdrantOk = await checkQdrant(config);
+  const result = await checkAllPrerequisitesDetailed(config);
+  const qdrantService = result.services.find(s => s.service === 'qdrant');
   
-  if (!qdrantOk) {
-    throw new PrerequisiteError(createErrorMessage(false, true, config.embedding.provider));
+  if (qdrantService?.status === 'unavailable') {
+    // Create a result with only Qdrant for error message
+    const qdrantOnlyResult: PrerequisiteValidationResult = {
+      allPassed: false,
+      services: [qdrantService]
+    };
+    throw new PrerequisiteError(createComprehensiveErrorMessage(qdrantOnlyResult));
   }
 }
 
