@@ -32,6 +32,11 @@ vi.mock('../src/config.js', () => ({
   getAvailableWorkspaces: vi.fn()
 }));
 
+vi.mock('../src/prerequisites.js', () => ({
+  validateIndexPrerequisites: vi.fn(),
+  validateSearchPrerequisites: vi.fn()
+}));
+
 describe('MCP Handlers Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();

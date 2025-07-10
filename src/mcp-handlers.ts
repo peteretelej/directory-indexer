@@ -2,6 +2,7 @@ import { Config } from './config.js';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from './search.js';
 import { getIndexStatus } from './storage.js';
+import { validateIndexPrerequisites, validateSearchPrerequisites } from './prerequisites.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Type-safe interfaces for MCP tool arguments
@@ -63,6 +64,9 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
     throw new Error('directory_path is required');
   }
   
+  // Validate prerequisites before proceeding
+  await validateIndexPrerequisites(config);
+  
   const paths = args.directory_path.split(',').map((p: string) => p.trim());
   const result = await indexDirectories(paths, config);
   
@@ -110,6 +114,10 @@ export async function handleSearchTool(args: unknown): Promise<CallToolResult> {
     throw new Error('query is required');
   }
   
+  // Validate prerequisites before proceeding
+  const config = (await import('./config.js')).loadConfig();
+  await validateSearchPrerequisites(config);
+  
   const { workspace, message } = await validateWorkspace(args.workspace);
   const results = await searchContent(args.query, { limit: args.limit || 10, workspace });
   
@@ -126,6 +134,10 @@ export async function handleSimilarFilesTool(args: unknown): Promise<CallToolRes
   if (!isSimilarFilesToolArgs(args)) {
     throw new Error('file_path is required');
   }
+  
+  // Validate prerequisites before proceeding
+  const config = (await import('./config.js')).loadConfig();
+  await validateSearchPrerequisites(config);
   
   const { workspace, message } = await validateWorkspace(args.workspace);
   const results = await findSimilarFiles(args.file_path, args.limit || 10, workspace);
