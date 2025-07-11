@@ -182,6 +182,67 @@ export class QdrantClient {
       throw new StorageError(`Failed to delete points by file path from Qdrant`, error as Error);
     }
   }
+
+  async countPoints(filter?: Record<string, unknown>): Promise<number> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const countBody: Record<string, unknown> = { exact: true };
+      if (filter) {
+        countBody.filter = filter;
+      }
+
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/count`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(countBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to count points: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.result.count;
+    } catch (error) {
+      throw new StorageError(`Failed to count points in Qdrant`, error as Error);
+    }
+  }
+
+  async scrollPoints(filter?: Record<string, unknown>, limit: number = 1000): Promise<QdrantPoint[]> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const scrollBody: Record<string, unknown> = {
+        limit,
+        with_payload: true,
+        with_vector: false
+      };
+      if (filter) {
+        scrollBody.filter = filter;
+      }
+
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/scroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scrollBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to scroll points: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.result.points.map((item: { id: string | number; payload: Record<string, unknown> }) => ({
+        id: item.id,
+        vector: [],
+        payload: item.payload,
+        score: 0
+      }));
+    } catch (error) {
+      throw new StorageError(`Failed to scroll points in Qdrant`, error as Error);
+    }
+  }
 }
 
 export class SQLiteStorage {
@@ -393,7 +454,7 @@ export interface IndexStatus {
 }
 
 async function calculateWorkspaceStatistics(sqlite: SQLiteStorage, config: Config): Promise<WorkspaceStatus[]> {
-  const { getAvailableWorkspaces, getWorkspacePaths, isFileInWorkspace } = await import('./config.js');
+  const { getAvailableWorkspaces, getWorkspacePaths } = await import('./config.js');
   const workspaces: WorkspaceStatus[] = [];
   
   // Get all indexed directories for comparison
@@ -401,28 +462,40 @@ async function calculateWorkspaceStatistics(sqlite: SQLiteStorage, config: Confi
   const indexedDirectories = directoriesStmt.all() as { path: string; status: string }[];
   const indexedDirectoryPaths = indexedDirectories.map(d => d.path);
   
+  // Get Qdrant client for efficient workspace filtering
+  const qdrant = new QdrantClient(config);
+  
   for (const workspaceName of getAvailableWorkspaces(config)) {
     const workspacePaths = getWorkspacePaths(config, workspaceName);
     const workspaceConfig = config.workspaces[workspaceName];
     
-    // Get all files and count those in this workspace
-    const filesStmt = sqlite.db.prepare('SELECT path, chunks_json FROM files');
-    const allFiles = filesStmt.all() as { path: string; chunks_json: string | null }[];
-    
     let filesCount = 0;
     let chunksCount = 0;
     
-    for (const file of allFiles) {
-      if (isFileInWorkspace(file.path, workspacePaths)) {
-        filesCount++;
-        if (file.chunks_json) {
-          try {
-            const chunks = JSON.parse(file.chunks_json);
-            chunksCount += chunks.length;
-          } catch {
-            // Skip malformed JSON
-          }
-        }
+    if (workspacePaths.length > 0) {
+      try {
+        // Build workspace filter using same logic as search
+        const workspaceFilter = {
+          must: [
+            {
+              key: "parentDirectories",
+              match: { any: workspacePaths }
+            }
+          ]
+        };
+        
+        // Get chunk count efficiently using Qdrant
+        chunksCount = await qdrant.countPoints(workspaceFilter);
+        
+        // Get unique file paths using Qdrant scroll
+        const points = await qdrant.scrollPoints(workspaceFilter, 10000);
+        const uniqueFilePaths = new Set(points.map(p => p.payload.filePath));
+        filesCount = uniqueFilePaths.size;
+        
+      } catch {
+        // Fallback to 0 if Qdrant is unavailable
+        filesCount = 0;
+        chunksCount = 0;
       }
     }
     
