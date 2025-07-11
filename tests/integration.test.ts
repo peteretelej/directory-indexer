@@ -8,7 +8,8 @@ import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from
 import { getIndexStatus, SQLiteStorage, QdrantClient } from '../src/storage.js';
 import { startMcpServer } from '../src/mcp.js';
 import { createEmbeddingProvider } from '../src/embedding.js';
-import { normalizePath, calculateHash } from '../src/utils.js';
+import { normalizePath, calculateHash, fileExists } from '../src/utils.js';
+import { promises as fs } from 'fs';
 
 function checkServicesAvailable(): Promise<boolean> {
   return Promise.all([
@@ -582,7 +583,57 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       expect(hash1.length).toBeGreaterThan(0);
       expect(typeof hash1).toBe('string');
     });
+
+    it('should clean up deleted files during re-indexing', async () => {
+      const tempDir = await createTempTestDirectory();
+      const testFile = join(tempDir, 'test-file.md');
+      
+      try {
+        // 1. Create and index a test file
+        await fs.writeFile(testFile, '# Test Content\nThis is test content for deletion.');
+        
+        // Set test-specific collection to avoid conflicts
+        process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-cleanup';
+        const config = await loadConfig({ verbose: false });
+        
+        const indexResult1 = await indexDirectories([tempDir], config);
+        expect(indexResult1.indexed).toBe(1);
+        expect(indexResult1.deleted).toBe(0);
+        
+        // 2. Verify file is searchable
+        const searchResults1 = await searchContent('test content', { limit: 10 });
+        const foundFile = searchResults1.find(r => r.filePath === testFile);
+        expect(foundFile).toBeDefined();
+        
+        // 3. Delete file from filesystem
+        await fs.unlink(testFile);
+        expect(await fileExists(testFile)).toBe(false);
+        
+        // 4. Re-index directory
+        const indexResult2 = await indexDirectories([tempDir], config);
+        expect(indexResult2.deleted).toBe(1);
+        expect(indexResult2.indexed).toBe(0);
+        
+        // 5. Verify file is no longer searchable
+        const searchResults2 = await searchContent('test content', { limit: 10 });
+        const foundFile2 = searchResults2.find(r => r.filePath === testFile);
+        expect(foundFile2).toBeUndefined();
+        
+      } finally {
+        await cleanupTempDirectory(tempDir);
+      }
+    });
   });
+
+  async function createTempTestDirectory(): Promise<string> {
+    const tempDir = join(process.cwd(), 'tests', 'temp-' + Date.now());
+    await fs.mkdir(tempDir, { recursive: true });
+    return tempDir;
+  }
+
+  async function cleanupTempDirectory(dir: string): Promise<void> {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 
   describe('Error Handling', () => {
     it('should handle search with invalid parameters', async () => {

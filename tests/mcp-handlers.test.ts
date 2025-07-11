@@ -49,6 +49,7 @@ describe('MCP Handlers Unit Tests', () => {
         indexed: 5,
         skipped: 2,
         failed: 1,
+        deleted: 0,
         errors: ['error1']
       });
 
@@ -61,7 +62,7 @@ describe('MCP Handlers Unit Tests', () => {
       expect(result).toEqual({
         content: [{
           type: 'text',
-          text: `Indexed 5 files, skipped 2 files, 1 failed
+          text: `Indexed 5 files, skipped 2 files, cleaned up 0 deleted files, 1 failed
 Errors: [
   'error1'
 ]`

@@ -70,7 +70,7 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   const paths = args.directory_path.split(',').map((p: string) => p.trim());
   const result = await indexDirectories(paths, config);
   
-  let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, ${result.failed} failed`;
+  let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
   
   if (result.errors.length > 0) {
     responseText += `\nErrors: [\n`;
