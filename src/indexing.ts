@@ -23,6 +23,7 @@ export interface IndexResult {
   indexed: number;
   skipped: number;
   failed: number;
+  deleted: number;
   errors: string[];
 }
 
@@ -166,6 +167,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   let indexed = 0;
   let skipped = 0;
   let failed = 0;
+  let deleted = 0;
   const errors: string[] = [];
 
   const scanOptions: ScanOptions = {
@@ -264,7 +266,32 @@ export async function indexDirectories(paths: string[], config: Config): Promise
         }
       }
 
-      // TODO: Clean up deleted files from this directory 
+      // Clean up deleted files from this directory
+      const indexedFiles = await sqlite.getFilesByDirectory(normalizedPath);
+      const existingFilePaths = new Set(files.map(f => f.path));
+      const deletedFiles = indexedFiles.filter(f => !existingFilePaths.has(f.path));
+
+      for (const deletedFile of deletedFiles) {
+        try {
+          // Remove from Qdrant
+          await qdrant.deletePointsByFilePath(deletedFile.path);
+          
+          // Remove from SQLite
+          await sqlite.deleteFile(deletedFile.path);
+          
+          deleted++;
+          if (config.verbose) {
+            console.log(`  Cleaned up deleted file: ${deletedFile.path}`);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const fullError = `Failed to clean up deleted file ${deletedFile.path}: ${errorMessage}`;
+          errors.push(fullError);
+          failed++;
+          
+          console.error(`❌ ${fullError}`);
+        }
+      }
 
       // Mark directory as completed if no errors for this directory
       const directoryErrors = errors.filter(err => err.includes(path));
@@ -278,5 +305,5 @@ export async function indexDirectories(paths: string[], config: Config): Promise
     }
   }
 
-  return { indexed, skipped, failed, errors };
+  return { indexed, skipped, failed, deleted, errors };
 }
