@@ -26,27 +26,16 @@ if ! docker images | grep -q test-directory-indexer; then
     docker build -f scripts/docker-debug/Dockerfile.test -t test-directory-indexer .
 fi
 
-# Run container without dist mount first
-echo "Starting container and installing package..."
-docker run -d --name test-directory-indexer --network host \
-    -v "$(pwd)/tests/test_data:/test-data" \
-    test-directory-indexer
-
-# Install the package to create proper structure
-docker exec test-directory-indexer npm install -g directory-indexer@latest
-
-# Stop and recreate with dist mounted for live development
-echo "Recreating container with live dist mount..."
-docker stop test-directory-indexer
-docker rm test-directory-indexer
+# Run container with both mounts from the start
+echo "Starting container with live dist mount..."
 docker run -d --name test-directory-indexer --network host \
     -v "$(pwd)/dist:/usr/lib/node_modules/directory-indexer/dist" \
     -v "$(pwd)/tests/test_data:/test-data" \
     test-directory-indexer
 
-# Reinstall package to recreate symlinks with mounted dist
-echo "Recreating symlinks with mounted dist..."
-docker exec test-directory-indexer npm install -g directory-indexer@latest 2>/dev/null || true
+# Install the package - dist mount will overlay the package's dist files
+echo "Installing package with mounted dist overlay..."
+docker exec test-directory-indexer npm install -g directory-indexer@latest
 
 # Fix permissions on mounted CLI
 docker exec test-directory-indexer chmod +x /usr/lib/node_modules/directory-indexer/dist/cli.js

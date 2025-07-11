@@ -15,6 +15,9 @@ export default defineConfig({
         embedding: resolve(__dirname, 'src/embedding.ts'),
         indexing: resolve(__dirname, 'src/indexing.ts'),
         search: resolve(__dirname, 'src/search.ts'),
+        'mcp-handlers': resolve(__dirname, 'src/mcp-handlers.ts'),
+        mcp: resolve(__dirname, 'src/mcp.ts'),
+        prerequisites: resolve(__dirname, 'src/prerequisites.ts'),
       },
       formats: ['es'],
     },
@@ -71,6 +74,7 @@ export default defineConfig({
       exclude: [
         'coverage/**',
         'dist/**',
+        'scripts/**',
         'tests/**/*.test.ts',
         '**/*.d.ts',
         'vite.config.ts',

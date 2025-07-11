@@ -6,6 +6,7 @@ coverage:
   ignore:
     - "tests/**/*"
     - "dist/**/*"
+    - "scripts/**/*"
     - "*.config.*"
   
   status:
