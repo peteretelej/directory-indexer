@@ -304,6 +304,13 @@ Errors: [
         errors: [],
         directories: [],
         workspaces: [],
+        workspaceHealth: {
+          healthy: 0,
+          warnings: 0,
+          errors: 0,
+          criticalIssues: [],
+          recommendations: []
+        },
         qdrantConsistency: { isConsistent: true, issues: [] }
       };
       vi.mocked(getIndexStatus).mockResolvedValue(mockStatus);

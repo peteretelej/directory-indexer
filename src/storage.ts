@@ -27,6 +27,8 @@ export interface QdrantPoint {
   payload: {
     filePath: string;
     chunkId: string;
+    fileHash: string;
+    content: string;
     parentDirectories: string[];
   };
   score?: number;
@@ -98,22 +100,29 @@ export class QdrantClient {
     }
   }
 
-  async searchPoints(vector: number[], limit: number = 10): Promise<QdrantPoint[]> {
+  async searchPoints(vector: number[], limit: number = 10, filter?: Record<string, unknown>): Promise<QdrantPoint[]> {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
+      const searchBody: Record<string, unknown> = {
+        vector,
+        limit,
+        with_payload: true
+      };
+      
+      if (filter) {
+        searchBody.filter = filter;
+      }
+      
       const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vector,
-          limit,
-          with_payload: true
-        })
+        body: JSON.stringify(searchBody)
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to search points: ${response.statusText}`);
+        const errorBody = await response.text();
+        throw new Error(`Failed to search points: ${response.statusText} - ${errorBody}`);
       }
 
       const data = await response.json();
@@ -146,7 +155,7 @@ export class QdrantClient {
     }
   }
 
-  async deletePointsByFileHash(fileHash: string): Promise<void> {
+  async deletePointsByFilePath(filePath: string): Promise<void> {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
@@ -157,8 +166,8 @@ export class QdrantClient {
           filter: {
             must: [
               {
-                key: 'fileHash',
-                match: { value: fileHash }
+                key: 'filePath',
+                match: { value: filePath }
               }
             ]
           }
@@ -167,10 +176,10 @@ export class QdrantClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to delete points by file hash: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Failed to delete points by file path: ${response.status} ${response.statusText} - ${errorText}`);
       }
     } catch (error) {
-      throw new StorageError(`Failed to delete points by file hash from Qdrant`, error as Error);
+      throw new StorageError(`Failed to delete points by file path from Qdrant`, error as Error);
     }
   }
 }
@@ -354,6 +363,11 @@ export interface WorkspaceStatus {
   isValid: boolean;
   filesCount: number;
   chunksCount: number;
+  health: {
+    status: 'healthy' | 'warning' | 'error';
+    issues: string[];
+    recommendations: string[];
+  };
 }
 
 export interface IndexStatus {
@@ -365,6 +379,13 @@ export interface IndexStatus {
   errors: string[];
   directories: DirectoryStatus[];
   workspaces: WorkspaceStatus[];
+  workspaceHealth: {
+    healthy: number;
+    warnings: number;
+    errors: number;
+    criticalIssues: string[];
+    recommendations: string[];
+  };
   qdrantConsistency: {
     isConsistent: boolean;
     issues: string[];
@@ -374,6 +395,11 @@ export interface IndexStatus {
 async function calculateWorkspaceStatistics(sqlite: SQLiteStorage, config: Config): Promise<WorkspaceStatus[]> {
   const { getAvailableWorkspaces, getWorkspacePaths, isFileInWorkspace } = await import('./config.js');
   const workspaces: WorkspaceStatus[] = [];
+  
+  // Get all indexed directories for comparison
+  const directoriesStmt = sqlite.db.prepare('SELECT path, status FROM directories');
+  const indexedDirectories = directoriesStmt.all() as { path: string; status: string }[];
+  const indexedDirectoryPaths = indexedDirectories.map(d => d.path);
   
   for (const workspaceName of getAvailableWorkspaces(config)) {
     const workspacePaths = getWorkspacePaths(config, workspaceName);
@@ -400,16 +426,136 @@ async function calculateWorkspaceStatistics(sqlite: SQLiteStorage, config: Confi
       }
     }
     
+    // Check workspace health
+    const health = analyzeWorkspaceHealth(workspacePaths, workspaceConfig.isValid, filesCount, indexedDirectoryPaths);
+    
     workspaces.push({
       name: workspaceName,
       paths: workspacePaths,
       isValid: workspaceConfig.isValid,
       filesCount,
-      chunksCount
+      chunksCount,
+      health
     });
   }
   
   return workspaces;
+}
+
+function analyzeWorkspaceHealth(
+  workspacePaths: string[], 
+  isValid: boolean, 
+  filesCount: number, 
+  indexedDirectoryPaths: string[]
+): { status: 'healthy' | 'warning' | 'error'; issues: string[]; recommendations: string[] } {
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+  
+  // Check if workspace paths exist and are valid
+  if (!isValid) {
+    issues.push('One or more workspace directories do not exist on the filesystem');
+    recommendations.push('Verify workspace directory paths exist and are accessible');
+  }
+  
+  // Check if workspace paths are indexed
+  const unindexedPaths: string[] = [];
+  const partiallyIndexedPaths: string[] = [];
+  
+  for (const workspacePath of workspacePaths) {
+    // Check if this exact path is indexed
+    const exactMatch = indexedDirectoryPaths.includes(workspacePath);
+    
+    if (exactMatch) {
+      // Perfect match - workspace directory is directly indexed
+      continue;
+    }
+    
+    // Check if workspace path is covered by a parent directory that is indexed
+    const isChildOfIndexed = indexedDirectoryPaths.some(indexedPath => {
+      // Workspace path must start with indexed path and be a subdirectory
+      return workspacePath.startsWith(indexedPath + '/') || workspacePath.startsWith(indexedPath + '\\');
+    });
+    
+    if (isChildOfIndexed) {
+      partiallyIndexedPaths.push(workspacePath);
+    } else {
+      unindexedPaths.push(workspacePath);
+    }
+  }
+  
+  // Report unindexed paths
+  if (unindexedPaths.length > 0) {
+    issues.push(`Workspace directories not indexed: ${unindexedPaths.join(', ')}`);
+    recommendations.push(`Run indexing on these directories: ${unindexedPaths.join(', ')}`);
+  }
+  
+  // Report partially indexed paths (where parent directory is indexed)
+  if (partiallyIndexedPaths.length > 0) {
+    issues.push(`Workspace directories indexed as part of parent directory: ${partiallyIndexedPaths.join(', ')}`);
+    recommendations.push('Consider indexing workspace directories directly for better organization');
+  }
+  
+  // Check if workspace is empty (no files found)
+  if (isValid && filesCount === 0 && unindexedPaths.length === 0) {
+    issues.push('Workspace contains no indexed files');
+    recommendations.push('Verify the workspace directory contains files and re-index if necessary');
+  }
+  
+  // Determine overall health status
+  let status: 'healthy' | 'warning' | 'error';
+  if (!isValid || unindexedPaths.length > 0) {
+    status = 'error';
+  } else if (issues.length > 0) {
+    status = 'warning';
+  } else {
+    status = 'healthy';
+  }
+  
+  return { status, issues, recommendations };
+}
+
+function calculateWorkspaceHealthSummary(workspaces: WorkspaceStatus[]): {
+  healthy: number;
+  warnings: number; 
+  errors: number;
+  criticalIssues: string[];
+  recommendations: string[];
+} {
+  let healthy = 0;
+  let warnings = 0;
+  let errors = 0;
+  const criticalIssues: string[] = [];
+  const recommendations: string[] = [];
+  
+  for (const workspace of workspaces) {
+    switch (workspace.health.status) {
+      case 'healthy':
+        healthy++;
+        break;
+      case 'warning':
+        warnings++;
+        break;
+      case 'error':
+        errors++;
+        criticalIssues.push(`${workspace.name}: ${workspace.health.issues.join(', ')}`);
+        break;
+    }
+    
+    // Collect unique recommendations
+    for (const rec of workspace.health.recommendations) {
+      if (!recommendations.includes(rec)) {
+        recommendations.push(rec);
+      }
+    }
+  }
+  
+  return {
+    healthy,
+    warnings,
+    errors,
+    criticalIssues,
+    recommendations
+  };
 }
 
 async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Promise<{ isConsistent: boolean; issues: string[] }> {
@@ -502,11 +648,9 @@ export async function getIndexStatus(): Promise<IndexStatus> {
         d.path,
         d.status,
         d.indexed_at,
-        COUNT(f.id) as files_count,
-        COALESCE(SUM(json_array_length(f.chunks_json)), 0) as chunks_count
+        (SELECT COUNT(*) FROM files f WHERE f.path LIKE d.path || '%') as files_count,
+        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE f.path LIKE d.path || '%' AND f.chunks_json IS NOT NULL) as chunks_count
       FROM directories d
-      LEFT JOIN files f ON f.parent_dirs LIKE '%"' || d.path || '"%'
-      GROUP BY d.id, d.path, d.status, d.indexed_at
       ORDER BY d.indexed_at DESC
     `);
     const directoryDetails = directoriesDetailStmt.all() as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number; files_count: number; chunks_count: number }[];
@@ -514,7 +658,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
       const errorsByDirStmt = sqlite.db.prepare(`
         SELECT errors_json FROM files 
-        WHERE parent_dirs LIKE '%"' || ? || '"%' AND errors_json IS NOT NULL
+        WHERE path LIKE ? || '%' AND errors_json IS NOT NULL
       `);
       const dirErrors = errorsByDirStmt.all(row.path) as { errors_json: string }[];
       
@@ -541,6 +685,9 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     const qdrantConsistency = await checkQdrantConsistency(sqlite, config);
     const workspaces = await calculateWorkspaceStatistics(sqlite, config);
     
+    // Calculate workspace health summary
+    const workspaceHealth = calculateWorkspaceHealthSummary(workspaces);
+    
     const fs = await import('fs');
     let databaseSize = '0 KB';
     try {
@@ -566,6 +713,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       errors: allErrors,
       directories,
       workspaces,
+      workspaceHealth,
       qdrantConsistency
     };
   } finally {

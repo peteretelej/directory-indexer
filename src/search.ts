@@ -36,6 +36,10 @@ export class SearchError extends Error {
   }
 }
 
+// Note: Workspace filtering is implemented using post-filtering approach for reliability.
+// Qdrant filtering could be implemented in the future using path prefix filters, but
+// post-filtering ensures workspace functionality works correctly with all file path patterns.
+
 export async function searchContent(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
   const { limit = 10, threshold = 0.0, workspace } = options;
   
@@ -49,8 +53,8 @@ export async function searchContent(query: string, options: SearchOptions = {}):
     // Get workspace paths if workspace is specified
     const workspacePaths = workspace ? getWorkspacePaths(config, workspace) : [];
     
-    // Get more points initially since we'll group by file and potentially filter by workspace
-    const searchLimit = workspace ? limit * 10 : limit * 5;
+    // Use larger search limit to compensate for post-filtering
+    const searchLimit = workspace ? limit * 5 : limit * 2;
     const points = await qdrant.searchPoints(queryEmbedding, searchLimit);
     
     // Group points by file path, filtering by workspace if specified
@@ -62,7 +66,7 @@ export async function searchContent(query: string, options: SearchOptions = {}):
       
       const filePath = point.payload.filePath;
       
-      // Filter by workspace if specified
+      // Filter by workspace if specified (post-filtering approach)
       if (workspace && workspacePaths.length > 0) {
         if (!isFileInWorkspace(filePath, workspacePaths)) {
           continue;
@@ -130,7 +134,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5, work
     if (!fileRecord || fileRecord.chunks.length === 0) {
       const content = await fs.readFile(filePath, 'utf-8');
       const embedding = await generateEmbedding(content, config);
-      const searchLimit = workspace ? (limit + 1) * 5 : limit + 1;
+      const searchLimit = workspace ? (limit + 1) * 5 : (limit + 1) * 2;
       const points = await qdrant.searchPoints(embedding, searchLimit);
       
       const filteredPoints = points
@@ -139,7 +143,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5, work
           // Exclude the reference file itself
           if (pointFilePath === filePath) return false;
           
-          // Filter by workspace if specified
+          // Filter by workspace if specified (post-filtering approach)
           if (workspace && workspacePaths.length > 0) {
             return isFileInWorkspace(pointFilePath, workspacePaths);
           }
@@ -164,7 +168,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5, work
     }
     
     const firstChunkEmbedding = await generateEmbedding(fileRecord.chunks[0].content, config);
-    const searchLimit = workspace ? (limit + 1) * 5 : limit + 1;
+    const searchLimit = workspace ? (limit + 1) * 5 : (limit + 1) * 2;
     const points = await qdrant.searchPoints(firstChunkEmbedding, searchLimit);
     
     const filteredPoints = points
@@ -173,7 +177,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5, work
         // Exclude the reference file itself
         if (pointFilePath === filePath) return false;
         
-        // Filter by workspace if specified
+        // Filter by workspace if specified (post-filtering approach)
         if (workspace && workspacePaths.length > 0) {
           return isFileInWorkspace(pointFilePath, workspacePaths);
         }
