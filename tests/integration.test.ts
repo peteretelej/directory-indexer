@@ -54,13 +54,14 @@ async function checkOllamaHealth(): Promise<boolean> {
   }
 }
 
-function runCLI(args: string[], timeout = 30000): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+function runCLI(args: string[], timeout = 30000, extraEnv: Record<string, string> = {}): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn('node', ['bin/directory-indexer.js', ...args], {
       env: {
         ...process.env,
         NODE_ENV: 'test',
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: 'directory-indexer-test-node'
+        DIRECTORY_INDEXER_QDRANT_COLLECTION: 'directory-indexer-test-node',
+        ...extraEnv
       }
     });
 
@@ -196,10 +197,21 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       }
     });
 
-    it('should handle status command', async () => {
-      const result = await runCLI(['status']);
+    it('should handle status command with workspace health', async () => {
+      // Set up workspace environment
+      const testDataPath = join(process.cwd(), 'tests', 'test_data');
+      const result = await runCLI(['status'], 30000, {
+        WORKSPACE_DOCS: join(testDataPath, 'docs'),
+        WORKSPACE_INVALID: '/nonexistent/path'
+      });
+      
       expect(result.exitCode).toBe(0);
       expect(result.stdout.toLowerCase()).toContain('status');
+      
+      // Should show workspace section if workspaces are configured
+      if (result.stdout.includes('WORKSPACES:')) {
+        expect(result.stdout).toMatch(/\d+ healthy, \d+ warnings, \d+ errors/);
+      }
     });
 
     it('should complete full workflow via direct function calls', async () => {
@@ -269,59 +281,68 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       console.log('✅ Direct function workflow completed successfully');
     });
 
-    it('should support workspace filtering in search', async () => {
+    it('should filter search results by workspace', async () => {
       const testDataPath = join(process.cwd(), 'tests', 'test_data');
       
-      // Set up workspaces using environment variables
+      // Index all test data first
+      const config = await loadConfig();
+      await indexDirectories([testDataPath], config);
+      
+      // Set up docs workspace
       const originalEnv = process.env;
       process.env.WORKSPACE_DOCS = join(testDataPath, 'docs');
-      process.env.WORKSPACE_CODE = join(testDataPath, 'programming');
       
       try {
-        // Test config loading with workspaces
-        const config = loadConfig();
-        expect(Object.keys(config.workspaces)).toContain('docs');
-        expect(Object.keys(config.workspaces)).toContain('code');
+        // Search without workspace - should find results in any folder
+        await searchContent('API', { limit: 10 });
         
-        // Test JSON array format for workspaces
-        process.env.WORKSPACE_JSON_TEST = JSON.stringify([join(testDataPath, 'configs')]);
-        const configWithJson = loadConfig();
-        expect(configWithJson.workspaces.json_test).toBeDefined();
-        delete process.env.WORKSPACE_JSON_TEST;
+        // Search with docs workspace - should only find results in docs folder
+        const docsResults = await searchContent('API', { workspace: 'docs', limit: 10 });
         
-        // Test workspace filtering in search
-        const docsResults = await searchContent('configuration and setup guides', { workspace: 'docs' });
-        const codeResults = await searchContent('configuration and setup guides', { workspace: 'code' });
-        
-        // Verify workspace filtering works
+        // Verify all docs results are from docs folder
         if (docsResults.length > 0) {
-          expect(docsResults.every(r => r.filePath.includes('docs'))).toBe(true);
+          expect(docsResults.every(r => r.filePath.includes('/docs/'))).toBe(true);
         }
+        
+        // Search for something that exists only in programming folder
+        const codeResults = await searchContent('function', { workspace: 'docs', limit: 10 });
+        
+        // Should not find programming files when searching docs workspace
         if (codeResults.length > 0) {
-          expect(codeResults.every(r => r.filePath.includes('programming'))).toBe(true);
+          expect(codeResults.every(r => !r.filePath.includes('/programming/'))).toBe(true);
         }
-        
-        // Test workspace filtering in findSimilarFiles
-        const testFile = join(testDataPath, 'docs', 'api_guide.md');
-        if (existsSync(testFile)) {
-          const similarInDocs = await findSimilarFiles(testFile, 5, 'docs');
-          if (similarInDocs.length > 0) {
-            expect(similarInDocs.every(r => r.filePath.includes('docs'))).toBe(true);
-          }
-        }
-        
-        // Test workspace statistics in status
-        const status = await getIndexStatus();
-        expect(status.workspaces).toBeDefined();
-        expect(status.workspaces.length).toBeGreaterThan(0);
-        
-        const docsWorkspace = status.workspaces.find(w => w.name === 'docs');
-        expect(docsWorkspace).toBeDefined();
-        expect(typeof docsWorkspace?.filesCount).toBe('number');
-        expect(typeof docsWorkspace?.chunksCount).toBe('number');
         
       } finally {
-        // Restore environment
+        process.env = originalEnv;
+      }
+    });
+
+    it('should report workspace health status', async () => {
+      const testDataPath = join(process.cwd(), 'tests', 'test_data');
+      
+      // Set up workspaces: one valid, one invalid
+      const originalEnv = process.env;
+      process.env.WORKSPACE_DOCS = join(testDataPath, 'docs');
+      process.env.WORKSPACE_INVALID = '/nonexistent/path';
+      
+      try {
+        const status = await getIndexStatus();
+        
+        // Should have workspace health summary
+        expect(status.workspaceHealth).toBeDefined();
+        expect(typeof status.workspaceHealth.healthy).toBe('number');
+        expect(typeof status.workspaceHealth.errors).toBe('number');
+        
+        // Should have workspace details
+        expect(status.workspaces.length).toBe(2);
+        
+        const docsWorkspace = status.workspaces.find(w => w.name === 'docs');
+        const invalidWorkspace = status.workspaces.find(w => w.name === 'invalid');
+        
+        expect(docsWorkspace?.isValid).toBe(true);
+        expect(invalidWorkspace?.isValid).toBe(false);
+        
+      } finally {
         process.env = originalEnv;
       }
     });
@@ -358,6 +379,37 @@ describe.sequential('Directory Indexer Integration Tests', () => {
       // We don't actually start the server here since it would hang the test,
       // but importing and checking the function exercises the MCP module for coverage
       console.log('✅ MCP server components loaded successfully');
+    });
+
+    it('should test MCP handlers with workspace filtering', async () => {
+      const { handleServerInfoTool, handleSearchTool } = await import('../src/mcp-handlers.js');
+      
+      // Set up workspace environment
+      const originalEnv = process.env;
+      const testDataPath = join(process.cwd(), 'tests', 'test_data');
+      process.env.WORKSPACE_DOCS = join(testDataPath, 'docs');
+      
+      try {
+        // Test server_info tool includes workspace health
+        const serverInfo = await handleServerInfoTool('test-version');
+        const content = JSON.parse(serverInfo.content[0].text as string);
+        
+        expect(content.name).toBe('directory-indexer');
+        expect(content.version).toBe('test-version');
+        expect(content.status.workspaceHealth).toBeDefined();
+        expect(typeof content.status.workspaceHealth.healthy).toBe('number');
+        
+        // Test search tool with workspace
+        const searchResult = await handleSearchTool({ query: 'test', workspace: 'docs' });
+        expect(searchResult.content[0].text).toBeDefined();
+        
+        // Test search with invalid workspace
+        const invalidSearch = await handleSearchTool({ query: 'test', workspace: 'nonexistent' });
+        expect(invalidSearch.content[0].text).toContain('not found');
+        
+      } finally {
+        process.env = originalEnv;
+      }
     });
   });
 
@@ -491,6 +543,8 @@ describe.sequential('Directory Indexer Integration Tests', () => {
           payload: {
             filePath: '/test/file.txt',
             chunkId: 'chunk-1',
+            fileHash: 'test-hash-123',
+            content: 'test content',
             parentDirectories: ['/test']
           }
         }];

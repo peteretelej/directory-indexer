@@ -228,7 +228,6 @@ jobs:
           DIRECTORY_INDEXER_QDRANT_COLLECTION: directory-indexer-test
 
       - name: Upload coverage to Codecov
-        if: github.ref == 'refs/heads/main'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -238,7 +237,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload test results to Codecov
-        if: github.ref == 'refs/heads/main' && !cancelled()
+        if: success() || failure()
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

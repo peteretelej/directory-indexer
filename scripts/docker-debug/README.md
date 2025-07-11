@@ -110,3 +110,11 @@ The container uses `--network host` to access:
 - **Ollama**: `localhost:11434`
 
 Both services must be running on the host before testing CLI commands that require them.
+
+## Workspace Configuration
+
+Workspaces are configured via environment variables:
+```bash
+export WORKSPACE_<NAME>="/path/to/directory"
+export WORKSPACE_MULTIPATH="/path1,/path2"  # Multiple paths
+```

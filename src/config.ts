@@ -90,14 +90,6 @@ export function getWorkspacePaths(config: Config, workspace: string): string[] {
   return workspaceConfig?.paths || [];
 }
 
-export function isFileInWorkspace(filePath: string, workspacePaths: string[]): boolean {
-  const normalizedFilePath = normalizePath(filePath);
-  return workspacePaths.some(workspacePath => 
-    normalizedFilePath.startsWith(workspacePath + '/') || 
-    normalizedFilePath === workspacePath
-  );
-}
-
 export function getAvailableWorkspaces(config: Config): string[] {
   return Object.keys(config.workspaces);
 }

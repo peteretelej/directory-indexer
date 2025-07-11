@@ -91,9 +91,13 @@ flowchart TD
 ```mermaid
 flowchart TD
     START([Search query]) --> EMBED[Generate query embedding]
-    EMBED -->|Success| VECTOR[Vector search in Qdrant]
+    EMBED -->|Success| WORKSPACE{Workspace specified?}
     EMBED -->|Failure| ERROR[Error: Embedding failed]
+    WORKSPACE -->|Yes| FILTER[Build Qdrant workspace filter]
+    WORKSPACE -->|No| VECTOR[Vector search in Qdrant]
+    FILTER --> VECTOR_FILTERED[Vector search with filter]
     VECTOR --> RESULTS{Results found?}
+    VECTOR_FILTERED --> RESULTS
     RESULTS -->|No| EMPTY[Return empty results]
     RESULTS -->|Yes| GROUP[Group chunks by file path]
     GROUP --> SCORE[Calculate average scores per file]

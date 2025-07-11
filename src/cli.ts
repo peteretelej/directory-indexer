@@ -210,6 +210,44 @@ export async function main() {
           });
         }
         
+        // Show workspace health information
+        if (status.workspaces.length > 0) {
+          console.log('');
+          console.log('WORKSPACES:');
+          console.log(`  • ${status.workspaceHealth.healthy} healthy, ${status.workspaceHealth.warnings} warnings, ${status.workspaceHealth.errors} errors`);
+          
+          if (status.workspaceHealth.errors > 0) {
+            console.log('');
+            console.log('WORKSPACE ERRORS:');
+            status.workspaceHealth.criticalIssues.forEach(issue => {
+              console.log(`  ❌ ${issue}`);
+            });
+          }
+          
+          if (status.workspaceHealth.recommendations.length > 0) {
+            console.log('');
+            console.log('WORKSPACE RECOMMENDATIONS:');
+            status.workspaceHealth.recommendations.forEach(rec => {
+              console.log(`  💡 ${rec}`);
+            });
+          }
+          
+          if (options.verbose) {
+            console.log('');
+            console.log('WORKSPACE DETAILS:');
+            status.workspaces.forEach(workspace => {
+              console.log('');
+              console.log(`  Workspace: ${workspace.name}`);
+              console.log(`    • Status: ${workspace.health.status}`);
+              console.log(`    • Paths: ${workspace.paths.join(', ')}`);
+              console.log(`    • Files: ${workspace.filesCount}, Chunks: ${workspace.chunksCount}`);
+              if (workspace.health.issues.length > 0) {
+                console.log(`    • Issues: ${workspace.health.issues.join('; ')}`);
+              }
+            });
+          }
+        }
+
         if (!status.qdrantConsistency.isConsistent) {
           console.log('');
           console.log('SYSTEM STATUS:');

@@ -214,7 +214,7 @@ const tools = {
 
 **Indexing**: `scanDirectory()` → `chunkText()` → `generateEmbedding()` → `storeInSQLite()` + `storeInQdrant()`
 
-**Search**: `generateEmbedding(query)` → `vectorSearch()` → `groupByFile()` → `calculateAverageScores()` → `rankResults()`
+**Search**: `generateEmbedding(query)` → `buildWorkspaceFilter()` (optional) → `qdrantVectorSearch()` → `groupByFile()` → `calculateAverageScores()` → `rankResults()`
 
 **Storage**: SQLite as source of truth, Qdrant synced for vectors
 
