@@ -450,6 +450,87 @@ export async function initDatabase(dbPath: string): Promise<Database.Database> {
   return new Database(dbPath);
 }
 
+export interface ResetStats {
+  sqliteExists: boolean;
+  sqliteSize?: string;
+  qdrantCollectionExists: boolean;
+  qdrantVectorCount?: number;
+}
+
+export interface ResetResult {
+  sqliteDeleted: boolean;
+  qdrantDeleted: boolean;
+  warnings: string[];
+}
+
+export async function getResetPreview(config: Config): Promise<ResetStats> {
+  const stats: ResetStats = {
+    sqliteExists: false,
+    qdrantCollectionExists: false
+  };
+
+  if (await import('fs').then(fs => fs.existsSync(config.storage.sqlitePath))) {
+    stats.sqliteExists = true;
+    try {
+      const fileStats = await import('fs').then(fs => fs.statSync(config.storage.sqlitePath));
+      const sizeInMB = (fileStats.size / (1024 * 1024)).toFixed(1);
+      stats.sqliteSize = `${sizeInMB} MB`;
+    } catch {
+      stats.sqliteSize = 'unknown size';
+    }
+  }
+
+  try {
+    const qdrant = new QdrantClient(config);
+    const isHealthy = await qdrant.healthCheck();
+    
+    if (isHealthy) {
+      const collectionInfo = await qdrant.getCollectionInfo();
+      if (collectionInfo) {
+        stats.qdrantCollectionExists = true;
+        stats.qdrantVectorCount = collectionInfo.vectors_count || 0;
+      }
+    }
+  } catch {
+    // Qdrant unavailable
+  }
+
+  return stats;
+}
+
+export async function clearDatabase(config: Config): Promise<boolean> {
+  try {
+    if (!await import('fs').then(fs => fs.existsSync(config.storage.sqlitePath))) {
+      return true; // Already clean
+    }
+    
+    await import('fs/promises').then(fs => fs.unlink(config.storage.sqlitePath));
+    return true;
+  } catch (error) {
+    throw new StorageError(`Failed to delete SQLite database: ${error instanceof Error ? error.message : 'Unknown error'}`, error as Error);
+  }
+}
+
+export async function clearVectorCollection(config: Config): Promise<boolean> {
+  try {
+    const qdrant = new QdrantClient(config);
+    const isHealthy = await qdrant.healthCheck();
+    
+    if (!isHealthy) {
+      throw new StorageError(`Qdrant unavailable at ${config.storage.qdrantEndpoint}`);
+    }
+    
+    const collectionInfo = await qdrant.getCollectionInfo();
+    if (collectionInfo) {
+      await qdrant.deleteCollection();
+    }
+    
+    return true;
+  } catch (error) {
+    throw new StorageError(`Failed to reset Qdrant collection: ${error instanceof Error ? error.message : 'Unknown error'}`, error as Error);
+  }
+}
+
 export interface DirectoryStatus {
   path: string;
   status: string;

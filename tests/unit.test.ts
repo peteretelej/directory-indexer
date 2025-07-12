@@ -4,6 +4,7 @@ import { loadConfig } from '../src/config.js';
 import { normalizePath, calculateHash } from '../src/utils.js';
 import { createEmbeddingProvider } from '../src/embedding.js';
 import { chunkText } from '../src/indexing.js';
+import { clearDatabase, clearVectorCollection } from '../src/storage.js';
 
 describe('Configuration', () => {
   it('should load default configuration', async () => {
@@ -156,6 +157,38 @@ describe('Text Chunking', () => {
   });
 });
 
+describe('Reset Functions', () => {
+  it('should clear database when no file exists', async () => {
+    const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
+    try {
+      process.env.DIRECTORY_INDEXER_DATA_DIR = `/tmp/test-clear-db-nonexistent-${Date.now()}`;
+      const config = loadConfig({ verbose: false });
+      
+      const result = await clearDatabase(config);
+      expect(result).toBe(true);
+    } finally {
+      if (originalDataDir) {
+        process.env.DIRECTORY_INDEXER_DATA_DIR = originalDataDir;
+      } else {
+        delete process.env.DIRECTORY_INDEXER_DATA_DIR;
+      }
+    }
+  });
 
-
-
+  it('should handle clearVectorCollection with invalid endpoint', async () => {
+    const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
+    try {
+      process.env.DIRECTORY_INDEXER_DATA_DIR = `/tmp/test-clear-collection-${Date.now()}`;
+      const config = loadConfig({ verbose: false });
+      config.storage.qdrantEndpoint = 'http://invalid-endpoint:9999';
+      
+      await expect(clearVectorCollection(config)).rejects.toThrow();
+    } finally {
+      if (originalDataDir) {
+        process.env.DIRECTORY_INDEXER_DATA_DIR = originalDataDir;
+      } else {
+        delete process.env.DIRECTORY_INDEXER_DATA_DIR;
+      }
+    }
+  });
+});

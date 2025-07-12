@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { promises as fs } from 'fs';
 import { resolve, normalize, sep } from 'path';
+import { createInterface } from 'readline';
 
 export interface FileInfo {
   path: string;
@@ -124,7 +125,6 @@ export function isSupportedFileType(filePath: string): boolean {
 }
 
 export async function readlineSync(prompt: string): Promise<string> {
-  const { createInterface } = await import('readline');
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout

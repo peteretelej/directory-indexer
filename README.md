@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/peteretelej/directory-indexer/workflows/CI/badge.svg)](https://github.com/peteretelej/directory-indexer/actions)
 
-Self-hosted semantic search for local files. Enable AI assistants to search your documents using vector embeddings and MCP integration.
+Self-hosted semantic search for local files. Give your AI assistant access to search, read, and work with your local files and directories. Ask about topics, patterns, or examples and get meaningful results from your actual knowledge base.
 
 ## Quick Start
 
