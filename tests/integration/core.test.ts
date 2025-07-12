@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { join } from 'path';
 import { promises as fs } from 'fs';
-import { setupServicesCheck, createTempTestDirectory, cleanupTempDirectory } from '../utils/test-helpers.js';
+import { 
+  setupServicesCheck, 
+  createIsolatedTestEnvironment
+} from '../utils/test-helpers.js';
 import { loadConfig } from '../../src/config.js';
 import { indexDirectories } from '../../src/indexing.js';
 import { searchContent, findSimilarFiles, getFileContent } from '../../src/search.js';
@@ -147,57 +150,44 @@ describe.sequential('Core Functionality Integration Tests', () => {
     });
 
     it('should clean up deleted files during re-indexing', async () => {
-      const tempDir = await createTempTestDirectory();
-      const customDataDir = await createTempTestDirectory();
-      const testFile = join(tempDir, 'test-file.md');
+      const testEnv = await createIsolatedTestEnvironment('cleanup');
       
-      const originalEnv = {
-        collection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION,
-        dataDir: process.env.DIRECTORY_INDEXER_DATA_DIR
-      };
+      // Create temporary directory for test files
+      const tempDir = join(testEnv.dataDir, 'test-files');
+      await fs.mkdir(tempDir, { recursive: true });
+      const testFile = join(tempDir, 'test-file.md');
       
       try {
         await fs.writeFile(testFile, '# Test Content\nThis is test content for deletion.');
         
-        process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-cleanup';
-        process.env.DIRECTORY_INDEXER_DATA_DIR = customDataDir;
         const config = await loadConfig({ verbose: false });
         
+        // First indexing - should add the file
         const indexResult1 = await indexDirectories([tempDir], config);
         expect(indexResult1.indexed).toBe(1);
         expect(indexResult1.deleted).toBe(0);
         
+        // Verify file was indexed
         const searchResults1 = await searchContent('test content', { limit: 10 });
         const foundFile = searchResults1.find(r => r.filePath === testFile);
         expect(foundFile).toBeDefined();
         
+        // Delete the file
         await fs.unlink(testFile);
         expect(await fileExists(testFile)).toBe(false);
         
+        // Second indexing - should detect and clean up deleted file
         const indexResult2 = await indexDirectories([tempDir], config);
         expect(indexResult2.deleted).toBe(1);
         expect(indexResult2.indexed).toBe(0);
         
+        // Verify file was removed from search results
         const searchResults2 = await searchContent('test content', { limit: 10 });
         const foundFile2 = searchResults2.find(r => r.filePath === testFile);
         expect(foundFile2).toBeUndefined();
         
       } finally {
-        // Restore environment variables
-        if (originalEnv.collection) {
-          process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = originalEnv.collection;
-        } else {
-          delete process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION;
-        }
-        
-        if (originalEnv.dataDir) {
-          process.env.DIRECTORY_INDEXER_DATA_DIR = originalEnv.dataDir;
-        } else {
-          delete process.env.DIRECTORY_INDEXER_DATA_DIR;
-        }
-        
-        await cleanupTempDirectory(tempDir);
-        await cleanupTempDirectory(customDataDir);
+        await testEnv.cleanup();
       }
     });
   });
