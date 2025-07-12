@@ -1,5 +1,38 @@
-import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { defineConfig } from 'vitest/config';
+import { resolve, dirname } from 'path';
+import { readdirSync, statSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Automatically discover all TypeScript files in src/
+function getEntryPoints() {
+  const entries: Record<string, string> = {};
+  
+  function scanDir(dir: string, basePath = '') {
+    const items = readdirSync(dir);
+    
+    for (const item of items) {
+      const fullPath = join(dir, item);
+      const stat = statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        scanDir(fullPath, basePath ? `${basePath}/${item}` : item);
+      } else if (item.endsWith('.ts') && !item.endsWith('.d.ts')) {
+        const name = basePath 
+          ? `${basePath}/${item.replace('.ts', '')}`.replace(/\//g, '-')
+          : item.replace('.ts', '');
+        
+        entries[name] = resolve(__dirname, fullPath);
+      }
+    }
+  }
+  
+  scanDir(resolve(__dirname, 'src'));
+  return entries;
+}
 
 export default defineConfig({
   define: {
@@ -7,18 +40,7 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: {
-        cli: resolve(__dirname, 'src/cli.ts'),
-        config: resolve(__dirname, 'src/config.ts'),
-        storage: resolve(__dirname, 'src/storage.ts'),
-        utils: resolve(__dirname, 'src/utils.ts'),
-        embedding: resolve(__dirname, 'src/embedding.ts'),
-        indexing: resolve(__dirname, 'src/indexing.ts'),
-        search: resolve(__dirname, 'src/search.ts'),
-        'mcp-handlers': resolve(__dirname, 'src/mcp-handlers.ts'),
-        mcp: resolve(__dirname, 'src/mcp.ts'),
-        prerequisites: resolve(__dirname, 'src/prerequisites.ts'),
-      },
+      entry: getEntryPoints(),
       formats: ['es'],
     },
     target: 'node18',

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { promises as fs } from 'fs';
 import { resolve, normalize, sep } from 'path';
+import { createInterface } from 'readline';
 
 export interface FileInfo {
   path: string;
@@ -121,4 +122,18 @@ export function isSupportedFileType(filePath: string): boolean {
   ];
   
   return supportedExtensions.some(ext => filePath.toLowerCase().endsWith(ext));
+}
+
+export async function readlineSync(prompt: string): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
 }

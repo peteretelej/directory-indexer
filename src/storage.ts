@@ -243,6 +243,47 @@ export class QdrantClient {
       throw new StorageError(`Failed to scroll points in Qdrant`, error as Error);
     }
   }
+
+  async getCollectionInfo(): Promise<{ vectors_count?: number } | null> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to get collection info: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return {
+        vectors_count: data.result?.points_count || data.result?.vectors_count || 0
+      };
+    } catch (error) {
+      throw new StorageError(`Failed to get collection info from Qdrant`, error as Error);
+    }
+  }
+
+  async deleteCollection(): Promise<void> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`, {
+        method: 'DELETE',
+        headers: this.config.storage.qdrantApiKey ? {
+          'api-key': this.config.storage.qdrantApiKey
+        } : {}
+      });
+
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Failed to delete collection: ${response.statusText}`);
+      }
+    } catch (error) {
+      throw new StorageError(`Failed to delete collection from Qdrant`, error as Error);
+    }
+  }
 }
 
 export class SQLiteStorage {
@@ -407,6 +448,87 @@ export async function initializeStorage(config: Config): Promise<{ sqlite: SQLit
 
 export async function initDatabase(dbPath: string): Promise<Database.Database> {
   return new Database(dbPath);
+}
+
+export interface ResetStats {
+  sqliteExists: boolean;
+  sqliteSize?: string;
+  qdrantCollectionExists: boolean;
+  qdrantVectorCount?: number;
+}
+
+export interface ResetResult {
+  sqliteDeleted: boolean;
+  qdrantDeleted: boolean;
+  warnings: string[];
+}
+
+export async function getResetPreview(config: Config): Promise<ResetStats> {
+  const stats: ResetStats = {
+    sqliteExists: false,
+    qdrantCollectionExists: false
+  };
+
+  if (await import('fs').then(fs => fs.existsSync(config.storage.sqlitePath))) {
+    stats.sqliteExists = true;
+    try {
+      const fileStats = await import('fs').then(fs => fs.statSync(config.storage.sqlitePath));
+      const sizeInMB = (fileStats.size / (1024 * 1024)).toFixed(1);
+      stats.sqliteSize = `${sizeInMB} MB`;
+    } catch {
+      stats.sqliteSize = 'unknown size';
+    }
+  }
+
+  try {
+    const qdrant = new QdrantClient(config);
+    const isHealthy = await qdrant.healthCheck();
+    
+    if (isHealthy) {
+      const collectionInfo = await qdrant.getCollectionInfo();
+      if (collectionInfo) {
+        stats.qdrantCollectionExists = true;
+        stats.qdrantVectorCount = collectionInfo.vectors_count || 0;
+      }
+    }
+  } catch {
+    // Qdrant unavailable
+  }
+
+  return stats;
+}
+
+export async function clearDatabase(config: Config): Promise<boolean> {
+  try {
+    if (!await import('fs').then(fs => fs.existsSync(config.storage.sqlitePath))) {
+      return true; // Already clean
+    }
+    
+    await import('fs/promises').then(fs => fs.unlink(config.storage.sqlitePath));
+    return true;
+  } catch (error) {
+    throw new StorageError(`Failed to delete SQLite database: ${error instanceof Error ? error.message : 'Unknown error'}`, error as Error);
+  }
+}
+
+export async function clearVectorCollection(config: Config): Promise<boolean> {
+  try {
+    const qdrant = new QdrantClient(config);
+    const isHealthy = await qdrant.healthCheck();
+    
+    if (!isHealthy) {
+      throw new StorageError(`Qdrant unavailable at ${config.storage.qdrantEndpoint}`);
+    }
+    
+    const collectionInfo = await qdrant.getCollectionInfo();
+    if (collectionInfo) {
+      await qdrant.deleteCollection();
+    }
+    
+    return true;
+  } catch (error) {
+    throw new StorageError(`Failed to reset Qdrant collection: ${error instanceof Error ? error.message : 'Unknown error'}`, error as Error);
+  }
 }
 
 export interface DirectoryStatus {
