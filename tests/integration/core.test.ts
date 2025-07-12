@@ -148,12 +148,19 @@ describe.sequential('Core Functionality Integration Tests', () => {
 
     it('should clean up deleted files during re-indexing', async () => {
       const tempDir = await createTempTestDirectory();
+      const customDataDir = await createTempTestDirectory();
       const testFile = join(tempDir, 'test-file.md');
+      
+      const originalEnv = {
+        collection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION,
+        dataDir: process.env.DIRECTORY_INDEXER_DATA_DIR
+      };
       
       try {
         await fs.writeFile(testFile, '# Test Content\nThis is test content for deletion.');
         
         process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-cleanup';
+        process.env.DIRECTORY_INDEXER_DATA_DIR = customDataDir;
         const config = await loadConfig({ verbose: false });
         
         const indexResult1 = await indexDirectories([tempDir], config);
@@ -176,7 +183,21 @@ describe.sequential('Core Functionality Integration Tests', () => {
         expect(foundFile2).toBeUndefined();
         
       } finally {
+        // Restore environment variables
+        if (originalEnv.collection) {
+          process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = originalEnv.collection;
+        } else {
+          delete process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION;
+        }
+        
+        if (originalEnv.dataDir) {
+          process.env.DIRECTORY_INDEXER_DATA_DIR = originalEnv.dataDir;
+        } else {
+          delete process.env.DIRECTORY_INDEXER_DATA_DIR;
+        }
+        
         await cleanupTempDirectory(tempDir);
+        await cleanupTempDirectory(customDataDir);
       }
     });
   });

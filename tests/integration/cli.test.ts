@@ -35,39 +35,50 @@ describe.sequential('CLI Commands Integration Tests', () => {
   describe('Main CLI Workflow', () => {
     it('should complete full indexing and search workflow', async () => {
       const testDataPath = getTestDataPath();
+      const customDataDir = await createTempTestDirectory();
       
       if (!existsSync(testDataPath)) {
         throw new Error(`Test data not found at ${testDataPath}`);
       }
 
-      console.log('🔄 Indexing test data...');
-      const indexResult = await runCLI(['index', testDataPath], 120000);
-      expect(indexResult.exitCode).toBe(0);
-      expect(indexResult.stdout.toLowerCase()).toContain('index');
+      try {
+        const env = {
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: `directory-indexer-test-main-workflow-${Date.now()}`,
+          DIRECTORY_INDEXER_DATA_DIR: customDataDir
+        };
 
-      console.log('🔄 Checking status...');
-      const statusResult = await runCLI(['status']);
-      expect(statusResult.exitCode).toBe(0);
-      expect(statusResult.stdout.toLowerCase()).toContain('status');
+        console.log('🔄 Indexing test data...');
+        const indexResult = await runCLI(['index', testDataPath], 120000, env);
+        expect(indexResult.exitCode).toBe(0);
+        expect(indexResult.stdout.toLowerCase()).toContain('index');
 
-      console.log('🔄 Testing search...');
-      const searchResult = await runCLI(['search', 'authentication', '--limit', '5']);
-      expect(searchResult.exitCode).toBe(0);
+        console.log('🔄 Checking status...');
+        const statusResult = await runCLI(['status'], 30000, env);
+        expect(statusResult.exitCode).toBe(0);
+        expect(statusResult.stdout.toLowerCase()).toContain('status');
 
-      const testFile = getTestFile();
-      if (existsSync(testFile)) {
-        console.log('🔄 Testing similar files...');
-        const similarResult = await runCLI(['similar', testFile, '--limit', '3']);
-        expect(similarResult.exitCode).toBe(0);
+        console.log('🔄 Testing search...');
+        const searchResult = await runCLI(['search', 'authentication', '--limit', '5'], 30000, env);
+        expect(searchResult.exitCode).toBe(0);
+
+        const testFile = getTestFile();
+        if (existsSync(testFile)) {
+          console.log('🔄 Testing similar files...');
+          const similarResult = await runCLI(['similar', testFile, '--limit', '3'], 30000, env);
+          expect(similarResult.exitCode).toBe(0);
+        }
+
+        if (existsSync(testFile)) {
+          console.log('🔄 Testing get content...');
+          const getResult = await runCLI(['get', testFile], 30000, env);
+          expect(getResult.exitCode).toBe(0);
+        }
+
+        console.log('✅ Full CLI workflow completed successfully');
+        
+      } finally {
+        await cleanupTempDirectory(customDataDir);
       }
-
-      if (existsSync(testFile)) {
-        console.log('🔄 Testing get content...');
-        const getResult = await runCLI(['get', testFile]);
-        expect(getResult.exitCode).toBe(0);
-      }
-
-      console.log('✅ Full CLI workflow completed successfully');
     });
 
     it('should handle search with limit', async () => {
@@ -106,8 +117,11 @@ describe.sequential('CLI Commands Integration Tests', () => {
         throw new Error(`Test data not found at ${testDataPath}`);
       }
 
+      const originalEnv = process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION;
       process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = 'directory-indexer-test-node';
-      const config = await loadConfig({ verbose: false });
+      
+      try {
+        const config = await loadConfig({ verbose: false });
 
       console.log('🔄 Testing indexDirectories() directly...');
       const indexResult = await indexDirectories([testDataPath], config);
@@ -155,6 +169,14 @@ describe.sequential('CLI Commands Integration Tests', () => {
       }
 
       console.log('✅ Direct function workflow completed successfully');
+      
+      } finally {
+        if (originalEnv) {
+          process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION = originalEnv;
+        } else {
+          delete process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION;
+        }
+      }
     });
 
     it('should filter search results by workspace', async () => {
@@ -215,63 +237,13 @@ describe.sequential('CLI Commands Integration Tests', () => {
   });
 
   describe('Reset Command', () => {
-    it('should reset directory-indexer data with --force flag', async () => {
+    it('should handle reset command with preview, force, and custom configuration sequentially', async () => {
       const testDataPath = getTestDataPath();
-      const testCollectionName = 'directory-indexer-test-reset-force';
-      
-      console.log('🔄 Setting up test data for reset...');
-      const indexResult = await runCLI(['index', testDataPath], 120000, {
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName
-      });
-      expect(indexResult.exitCode).toBe(0);
-      
-      const statusBefore = await runCLI(['status'], 30000, {
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName
-      });
-      expect(statusBefore.exitCode).toBe(0);
-      expect(statusBefore.stdout.toLowerCase()).toContain('file');
-      
-      console.log('🔄 Testing reset --force...');
-      const resetResult = await runCLI(['reset', '--force'], 30000, {
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName
-      });
-      
-      if (resetResult.exitCode !== 0) {
-        console.log('Reset command failed:');
-        console.log('stdout:', resetResult.stdout);
-        console.log('stderr:', resetResult.stderr);
-      }
-      
-      expect(resetResult.exitCode).toBe(0);
-      expect(resetResult.stdout.toLowerCase()).toContain('reset');
-      
-      const statusAfter = await runCLI(['status'], 30000, {
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName
-      });
-      expect(statusAfter.exitCode).toBe(0);
-      
-      const searchResult = await runCLI(['search', 'authentication'], 30000, {
-        DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName
-      });
-      
-      if (searchResult.exitCode !== 0) {
-        console.log('Search command failed after reset:');
-        console.log('stdout:', searchResult.stdout);
-        console.log('stderr:', searchResult.stderr);
-      }
-      
-      expect(searchResult.exitCode).toBe(0);
-      expect(searchResult.stdout.trim()).toBe('No results found');
-      
-      console.log('✅ Reset --force completed successfully');
-    });
-
-    it('should show preview and handle custom configuration in reset', async () => {
-      const testDataPath = getTestDataPath();
-      const testCollectionName = 'directory-indexer-test-reset-custom';
+      const testCollectionName = `directory-indexer-test-reset-sequential-${Date.now()}`;
       const customDataDir = await createTempTestDirectory();
       
       try {
+        // Step 1: Set up test data with custom configuration
         console.log('🔄 Setting up test data with custom config...');
         const indexResult = await runCLI(['index', testDataPath], 120000, {
           DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
@@ -283,10 +255,18 @@ describe.sequential('CLI Commands Integration Tests', () => {
           console.log('stdout:', indexResult.stdout);
           console.log('stderr:', indexResult.stderr);
         }
-        
         expect(indexResult.exitCode).toBe(0);
         
-        // Test reset preview - this will timeout because it waits for input, which is expected
+        // Step 2: Verify data exists before reset
+        const statusBefore = await runCLI(['status'], 30000, {
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
+          DIRECTORY_INDEXER_DATA_DIR: customDataDir
+        });
+        expect(statusBefore.exitCode).toBe(0);
+        expect(statusBefore.stdout.toLowerCase()).toContain('file');
+        
+        // Step 3: Test reset preview (expects timeout due to interactive prompt)
+        console.log('🔄 Testing reset preview...');
         try {
           await runCLI(['reset'], 5000, {
             DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
@@ -297,16 +277,42 @@ describe.sequential('CLI Commands Integration Tests', () => {
           expect((error as Error).message).toContain('Command timed out');
         }
         
-        // Instead, test with --force and verify the custom paths are used
-        const resetForce = await runCLI(['reset', '--force'], 30000, {
+        // Step 4: Test reset with --force flag
+        console.log('🔄 Testing reset --force...');
+        const resetResult = await runCLI(['reset', '--force'], 30000, {
           DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
           DIRECTORY_INDEXER_DATA_DIR: customDataDir
         });
         
-        expect(resetForce.exitCode).toBe(0);
-        expect(resetForce.stdout.toLowerCase()).toContain('reset');
+        if (resetResult.exitCode !== 0) {
+          console.log('Reset command failed:');
+          console.log('stdout:', resetResult.stdout);
+          console.log('stderr:', resetResult.stderr);
+        }
+        expect(resetResult.exitCode).toBe(0);
+        expect(resetResult.stdout.toLowerCase()).toContain('reset');
         
-        console.log('✅ Reset preview with custom config shown correctly');
+        // Step 5: Verify reset was successful
+        const statusAfter = await runCLI(['status'], 30000, {
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
+          DIRECTORY_INDEXER_DATA_DIR: customDataDir
+        });
+        expect(statusAfter.exitCode).toBe(0);
+        
+        const searchResult = await runCLI(['search', 'authentication'], 30000, {
+          DIRECTORY_INDEXER_QDRANT_COLLECTION: testCollectionName,
+          DIRECTORY_INDEXER_DATA_DIR: customDataDir
+        });
+        
+        if (searchResult.exitCode !== 0) {
+          console.log('Search command failed after reset:');
+          console.log('stdout:', searchResult.stdout);
+          console.log('stderr:', searchResult.stderr);
+        }
+        expect(searchResult.exitCode).toBe(0);
+        expect(searchResult.stdout.trim()).toBe('No results found');
+        
+        console.log('✅ Sequential reset testing completed successfully');
         
       } finally {
         await cleanupTempDirectory(customDataDir);
