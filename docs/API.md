@@ -121,6 +121,27 @@ npx directory-indexer serve
 npx directory-indexer serve --verbose
 ```
 
+### `reset`
+
+Reset directory-indexer data (database and vector collection).
+
+```bash
+npx directory-indexer reset [options]
+```
+
+**Options:**
+
+- `--force` - Skip confirmation prompt
+- `-v, --verbose` - Enable verbose logging
+
+**Examples:**
+
+```bash
+npx directory-indexer reset
+npx directory-indexer reset --force
+npx directory-indexer reset --verbose
+```
+
 ### `status`
 
 Show indexing status and statistics.

@@ -16,6 +16,7 @@ const ConfigSchema = z.object({
     sqlitePath: z.string(),
     qdrantEndpoint: z.string().url(),
     qdrantCollection: z.string(),
+    qdrantApiKey: z.string().optional(),
   }),
   embedding: z.object({
     provider: z.enum(['ollama', 'openai', 'mock']),
@@ -110,6 +111,7 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
       sqlitePath: join(dataDir, dbFileName),
       qdrantEndpoint: process.env.QDRANT_ENDPOINT || 'http://127.0.0.1:6333',
       qdrantCollection: process.env.DIRECTORY_INDEXER_QDRANT_COLLECTION || defaultCollection,
+      qdrantApiKey: process.env.QDRANT_API_KEY,
     },
     embedding: {
       provider: (process.env.EMBEDDING_PROVIDER as Config['embedding']['provider']) || 'ollama',

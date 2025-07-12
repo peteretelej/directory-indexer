@@ -122,3 +122,18 @@ export function isSupportedFileType(filePath: string): boolean {
   
   return supportedExtensions.some(ext => filePath.toLowerCase().endsWith(ext));
 }
+
+export async function readlineSync(prompt: string): Promise<string> {
+  const { createInterface } = await import('readline');
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}

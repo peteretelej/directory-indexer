@@ -10,6 +10,7 @@ import { loadConfig } from './config.js';
 import { getIndexStatus } from './storage.js';
 import { startMcpServer } from './mcp.js';
 import { validateIndexPrerequisites, validateSearchPrerequisites, getServiceStatus } from './prerequisites.js';
+import { resetEnvironment } from './reset.js';
 
 // Read version from package.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -144,6 +145,28 @@ export async function main() {
         await startMcpServer(config);
       } catch (error) {
         console.error('Error starting MCP server:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('reset')
+    .description('Reset directory-indexer data (database and vector collection)')
+    .option('--force', 'Skip confirmation prompt')
+    .option('-v, --verbose', 'Enable verbose logging')
+    .action(async (options) => {
+      try {
+        const config = await loadConfig({ verbose: options.verbose });
+        await resetEnvironment(config, { 
+          force: options.force, 
+          verbose: options.verbose 
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Reset cancelled by user') {
+          console.log('\nReset cancelled.');
+          process.exit(0);
+        }
+        console.error('Error during reset:', error);
         process.exit(1);
       }
     });

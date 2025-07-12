@@ -243,6 +243,47 @@ export class QdrantClient {
       throw new StorageError(`Failed to scroll points in Qdrant`, error as Error);
     }
   }
+
+  async getCollectionInfo(): Promise<{ vectors_count?: number } | null> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to get collection info: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return {
+        vectors_count: data.result?.points_count || data.result?.vectors_count || 0
+      };
+    } catch (error) {
+      throw new StorageError(`Failed to get collection info from Qdrant`, error as Error);
+    }
+  }
+
+  async deleteCollection(): Promise<void> {
+    const collectionName = this.config.storage.qdrantCollection;
+    
+    try {
+      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`, {
+        method: 'DELETE',
+        headers: this.config.storage.qdrantApiKey ? {
+          'api-key': this.config.storage.qdrantApiKey
+        } : {}
+      });
+
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Failed to delete collection: ${response.statusText}`);
+      }
+    } catch (error) {
+      throw new StorageError(`Failed to delete collection from Qdrant`, error as Error);
+    }
+  }
 }
 
 export class SQLiteStorage {
