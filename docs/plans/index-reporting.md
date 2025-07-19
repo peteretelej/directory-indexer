@@ -102,6 +102,24 @@ Indexed 183 files, skipped 1,067 unchanged files, 0 failed
 - Maintains backward compatibility
 - Simple implementation with minimal code changes
 
+## Testing
+
+Add integration tests to `tests/integration/cli.test.ts`:
+
+```typescript
+it('should show progress messages during indexing', async () => {
+  const indexResult = await runCLIWithLogging(['index', testDataPath], testEnv.env);
+  expect(indexResult.stdout).toMatch(/Processing \d+ files\.\.\./);
+  expect(indexResult.stdout).toMatch(/Indexed \d+ files, skipped \d+ files/);
+});
+
+it('should show detailed progress in verbose mode', async () => {
+  const indexResult = await runCLIWithLogging(['index', testDataPath, '--verbose'], testEnv.env);
+  expect(indexResult.stdout).toMatch(/Indexed: .*\.md \(\d+ chunks\)/);
+  expect(indexResult.stdout).toMatch(/Found \d+ files to process in/);
+});
+```
+
 ## Benefits
 
 - Better user experience for large directory operations
