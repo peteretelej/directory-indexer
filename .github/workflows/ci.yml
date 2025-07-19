@@ -69,6 +69,7 @@ jobs:
           cache: "npm"
 
       - name: Restore build artifacts
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist/
@@ -79,14 +80,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build if not cached
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Build artifacts not found, building..."
-            npm run build
-          else
-            echo "Build artifacts found in cache"
-          fi
+          echo "Cache miss detected, building..."
+          npm run build
 
       - name: Run unit tests
         run: npm run test:unit
@@ -97,8 +95,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: lint
     if: >
-      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-      github.event_name == 'pull_request' && github.base_ref == 'main'
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -114,6 +112,7 @@ jobs:
           cache: "npm"
 
       - name: Restore build artifacts
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist/
@@ -124,26 +123,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build if not cached (Windows)
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if (!(Test-Path "dist")) {
-            Write-Host "Build artifacts not found, building..."
-            npm run build
-          } else {
-            Write-Host "Build artifacts found in cache"
-          }
-        shell: pwsh
-        if: runner.os == 'Windows'
-
-      - name: Build if not cached (Unix)
-        run: |
-          if [ ! -d "dist" ]; then
-            echo "Build artifacts not found, building..."
-            npm run build
-          else
-            echo "Build artifacts found in cache"
-          fi
-        if: runner.os != 'Windows'
+          echo "Cache miss detected, building..."
+          npm run build
 
       - name: Run unit tests
         run: npm run test:unit
@@ -155,8 +139,8 @@ jobs:
     needs: [lint, test-unit-ubuntu]
     # Only run integration tests on main branch, PRs to main, or when forced
     if: >
-      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-      github.event_name == 'pull_request' && github.base_ref == 'main' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       contains(github.event.head_commit.message, '[integration]') ||
       contains(github.event.pull_request.title, '[integration]')
 
@@ -170,6 +154,7 @@ jobs:
           cache: "npm"
 
       - name: Restore build artifacts
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist/
@@ -232,14 +217,11 @@ jobs:
             echo "✅ Model pull completed"
           fi
 
-      - name: Build if not cached
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Build artifacts not found, building..."
-            npm run build
-          else
-            echo "Build artifacts found in cache"
-          fi
+          echo "Cache miss detected, building..."
+          npm run build
 
       - name: Run all tests with coverage and JUnit report
         run: npm run test:coverage -- --reporter=junit --outputFile=test-report.junit.xml
