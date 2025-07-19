@@ -37,11 +37,13 @@ npm run lint
 echo "Running build..."
 npm run build
 
-echo "Running tests..."
+echo "Running all tests..."
 export DIRECTORY_INDEXER_DATA_DIR=/tmp/directory-indexer-test
 export DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer-test
 
-npm test
+npm run test:all
+
+echo "All tests completed successfully."
 
 echo "Checking for security vulnerabilities..."
 npm audit --audit-level moderate

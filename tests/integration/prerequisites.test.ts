@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { loadConfig } from '../src/config.js';
+import { loadConfig } from '../../src/config.js';
 import {
   validateIndexPrerequisites,
   validateSearchPrerequisites,
   getServiceStatus,
   PrerequisiteError
-} from '../src/prerequisites.js';
+} from '../../src/prerequisites.js';
 
 describe('Prerequisites Tests', () => {
   let config: any;

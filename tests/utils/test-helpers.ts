@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { join } from 'path';
-import { promises as fs } from 'fs';
+import { promises as fs, rmSync } from 'fs';
 import { QdrantClient } from '../../src/storage.js';
 import { loadConfig } from '../../src/config.js';
 
@@ -130,6 +130,21 @@ export interface TestEnvironment {
   cleanup: () => Promise<void>;
 }
 
+// Track all test environments for automatic cleanup
+const activeTestEnvironments = new Set<TestEnvironment>();
+
+// Cleanup all active environments on process exit
+process.on('exit', () => {
+  for (const env of activeTestEnvironments) {
+    try {
+      // Sync cleanup for temp directories only
+      rmSync(env.dataDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors on exit
+    }
+  }
+});
+
 export async function createIsolatedTestEnvironment(prefix: string): Promise<TestEnvironment> {
   const collection = `directory-indexer-test-${prefix}-${Date.now()}`;
   const dataDir = await createTempTestDirectory();
@@ -193,9 +208,17 @@ export async function createIsolatedTestEnvironment(prefix: string): Promise<Tes
 
     // Wait for all cleanup tasks to complete (but don't propagate failures)
     await Promise.allSettled(cleanupTasks);
+    
+    // Remove from active set after cleanup
+    activeTestEnvironments.delete(testEnv);
   };
 
-  return { collection, dataDir, env, cleanup };
+  const testEnv: TestEnvironment = { collection, dataDir, env, cleanup };
+  
+  // Track this environment for automatic cleanup
+  activeTestEnvironments.add(testEnv);
+  
+  return testEnv;
 }
 
 export async function runCLIWithLogging(
