@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   # Fast checks first
@@ -50,13 +51,12 @@ jobs:
             build-
 
   # Unit tests - no external services needed
-  test-unit:
-    name: Unit Tests
-    runs-on: ${{ matrix.os }}
+  test-unit-ubuntu:
+    name: Unit Tests (Ubuntu - Full Matrix)
+    runs-on: ubuntu-latest
     needs: lint
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         node: ["18", "20"]
 
     steps:
@@ -69,6 +69,7 @@ jobs:
           cache: "npm"
 
       - name: Restore build artifacts
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist/
@@ -79,26 +80,54 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build if not cached (Windows)
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if (!(Test-Path "dist")) {
-            Write-Host "Build artifacts not found, building..."
-            npm run build
-          } else {
-            Write-Host "Build artifacts found in cache"
-          }
-        shell: pwsh
-        if: runner.os == 'Windows'
+          echo "Cache miss detected, building..."
+          npm run build
 
-      - name: Build if not cached (Unix)
+      - name: Run unit tests
+        run: npm run test:unit
+
+  # Cross-platform tests with minimal matrix - only on main branch and PRs to main
+  test-unit-cross-platform:
+    name: Unit Tests (Cross-Platform)
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        node: ["18"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: "npm"
+
+      - name: Restore build artifacts
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: dist/
+          key: build-${{ github.sha }}
+          restore-keys: |
+            build-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Build artifacts not found, building..."
-            npm run build
-          else
-            echo "Build artifacts found in cache"
-          fi
-        if: runner.os != 'Windows'
+          echo "Cache miss detected, building..."
+          npm run build
 
       - name: Run unit tests
         run: npm run test:unit
@@ -107,11 +136,11 @@ jobs:
   test-integration:
     name: Integration Tests & Coverage
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, test-unit-ubuntu]
     # Only run integration tests on main branch, PRs to main, or when forced
     if: >
-      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-      github.event_name == 'pull_request' && github.base_ref == 'main' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       contains(github.event.head_commit.message, '[integration]') ||
       contains(github.event.pull_request.title, '[integration]')
 
@@ -125,6 +154,7 @@ jobs:
           cache: "npm"
 
       - name: Restore build artifacts
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist/
@@ -187,14 +217,11 @@ jobs:
             echo "✅ Model pull completed"
           fi
 
-      - name: Build if not cached
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Build artifacts not found, building..."
-            npm run build
-          else
-            echo "Build artifacts found in cache"
-          fi
+          echo "Cache miss detected, building..."
+          npm run build
 
       - name: Run all tests with coverage and JUnit report
         run: npm run test:coverage -- --reporter=junit --outputFile=test-report.junit.xml
@@ -252,7 +279,7 @@ jobs:
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, test-unit-ubuntu]
 
     steps:
       - uses: actions/checkout@v4
