@@ -208,7 +208,8 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   }
 
   if (!config.verbose && totalFiles > 0) {
-    console.log();
+    // Add a blank line for spacing in the console output
+    console.log('');
     console.log(`Found ${totalFiles} files to process (checking for changes...)`);
   }
 
