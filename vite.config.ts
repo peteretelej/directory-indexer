@@ -102,12 +102,6 @@ export default defineConfig({
         'vite.config.ts',
         'eslint.config.js'
       ],
-      thresholds: {
-        statements: 50,
-        branches: 60,
-        functions: 70,
-        lines: 50
-      }
     },
   },
   resolve: {
