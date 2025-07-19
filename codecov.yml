@@ -1,23 +1,13 @@
 coverage:
-  precision: 1
-  round: down
-  range: "50...80"
-  
-  ignore:
-    - "tests/**/*"
-    - "dist/**/*"
-    - "scripts/**/*"
-    - "*.config.*"
-  
   status:
     project:
       default:
+        target: 70%
+        threshold: 5%
+    patch:
+      default:
         target: 60%
-        threshold: 10%
-        if_ci_failed: error
-    patch: off
 
 comment:
-  layout: "diff"
+  layout: "header, diff"
   behavior: default
-  require_changes: false
