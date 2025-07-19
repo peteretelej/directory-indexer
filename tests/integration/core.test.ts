@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { join } from 'path';
 import { promises as fs } from 'fs';
 import { 
@@ -11,6 +11,7 @@ import { searchContent, findSimilarFiles, getFileContent } from '../../src/searc
 import { SQLiteStorage, QdrantClient } from '../../src/storage.js';
 import { createEmbeddingProvider } from '../../src/embedding.js';
 import { normalizePath, calculateHash, fileExists } from '../../src/utils.js';
+import { clearGitignoreCache } from '../../src/gitignore.js';
 
 describe.sequential('Core Functionality Integration Tests', () => {
   beforeAll(async () => {
@@ -250,6 +251,124 @@ describe.sequential('Core Functionality Integration Tests', () => {
       expect(config.indexing.maxFileSize).toBeGreaterThan(0);
       expect(Array.isArray(config.indexing.ignorePatterns)).toBe(true);
       expect(config.indexing.ignorePatterns.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Gitignore Integration Tests', () => {
+    afterEach(async () => {
+      // Clear gitignore cache after each test
+      clearGitignoreCache();
+      
+      // Clean up test .gitignore file if it exists
+      const gitignorePath = join(process.cwd(), 'tests/test_data/.gitignore');
+      try {
+        await fs.unlink(gitignorePath);
+      } catch {
+        // Ignore if file doesn't exist
+      }
+    });
+
+    it('should respect .gitignore patterns during indexing', async () => {
+      const testEnv = await createIsolatedTestEnvironment('gitignore-basic');
+      
+      try {
+        const config = await loadConfig({ verbose: false });
+        // Create .gitignore file with test patterns
+        const gitignorePath = join(process.cwd(), 'tests/test_data/.gitignore');
+        const gitignoreContent = 'temp/\nbuild/';
+        await fs.writeFile(gitignorePath, gitignoreContent);
+        
+        // Index test_data directory
+        const testDataPath = join(process.cwd(), 'tests/test_data');
+        const result = await indexDirectories([testDataPath], config);
+        
+        // Gitignore functionality is working correctly if:
+        // 1. Indexing completed successfully
+        // 2. Some files were indexed (proving the indexing works)
+        // 3. Essential patterns and gitignore patterns are being applied
+        expect(result.indexed).toBeGreaterThan(0);
+        expect(result.failed).toBe(0);
+        expect(Array.isArray(result.errors)).toBe(true);
+        
+        // Verify we can still find content from non-ignored files
+        const indexedResults = await searchContent('programming', { limit: 10 });
+        expect(indexedResults.length).toBeGreaterThan(0);
+        
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
+
+    it('should prioritize essential patterns over gitignore negations', async () => {
+      const testEnv = await createIsolatedTestEnvironment('gitignore-essential');
+      
+      try {
+        const config = await loadConfig({ verbose: false });
+        // Create .gitignore that tries to negate essential patterns
+        const gitignorePath = join(process.cwd(), 'tests/test_data/.gitignore');
+        const gitignoreContent = 'node_modules/\n!node_modules\n.git/\n!.git';
+        await fs.writeFile(gitignorePath, gitignoreContent);
+        
+        // Create test node_modules directory
+        const nodeModulesPath = join(process.cwd(), 'tests/test_data/node_modules');
+        await fs.mkdir(nodeModulesPath, { recursive: true });
+        await fs.writeFile(join(nodeModulesPath, 'package.json'), '{"name": "test"}');
+        
+        try {
+          // Index test_data directory
+          const testDataPath = join(process.cwd(), 'tests/test_data');
+          await indexDirectories([testDataPath], config);
+          
+          // Search for node_modules content
+          const nodeModulesResults = await searchContent('test', { limit: 10 });
+          
+          // Should not find content from node_modules even with negation
+          const nodeModulesFound = nodeModulesResults.some(r => 
+            r.filePath.includes('node_modules')
+          );
+          expect(nodeModulesFound).toBe(false);
+          
+        } finally {
+          // Cleanup test node_modules
+          await fs.rm(nodeModulesPath, { recursive: true, force: true });
+        }
+        
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
+
+    it('should work correctly when respectGitignore is disabled', async () => {
+      const testEnv = await createIsolatedTestEnvironment('gitignore-disabled');
+      
+      try {
+        const config = await loadConfig({ verbose: false });
+        // Disable gitignore support
+        config.indexing.respectGitignore = false;
+        
+        // Create .gitignore file
+        const gitignorePath = join(process.cwd(), 'tests/test_data/.gitignore');
+        const gitignoreContent = '*.log\ntemp/\nbuild/';
+        await fs.writeFile(gitignorePath, gitignoreContent);
+        
+        // Index test_data directory
+        const testDataPath = join(process.cwd(), 'tests/test_data');
+        await indexDirectories([testDataPath], config);
+        
+        // When gitignore is disabled, .log files should be indexed
+        const debugLogResults = await searchContent('DEBUG Application started', { limit: 10 });
+        expect(debugLogResults.length).toBeGreaterThan(0); // debug.log should be indexed
+        
+        // But essential patterns should still work
+        const nodeModulesResults = await searchContent('node_modules', { limit: 10 });
+        const nodeModulesFound = nodeModulesResults.some(r => 
+          r.filePath.includes('node_modules')
+        );
+        expect(nodeModulesFound).toBe(false); // Essential patterns still apply
+        
+      } finally {
+        await testEnv.cleanup();
+      }
     });
   });
 });

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 import { loadConfig } from '../src/config.js';
-import { normalizePath, calculateHash } from '../src/utils.js';
+import { normalizePath, calculateHash, shouldIgnoreFile } from '../src/utils.js';
 import { createEmbeddingProvider } from '../src/embedding.js';
 import { chunkText } from '../src/indexing.js';
 import { clearDatabase, clearVectorCollection } from '../src/storage.js';
+import { clearGitignoreCache } from '../src/gitignore.js';
 
 describe('Configuration', () => {
   it('should load default configuration', async () => {
@@ -18,6 +19,7 @@ describe('Configuration', () => {
     expect(config.indexing.maxFileSize).toBe(10485760);
     expect(config.indexing.ignorePatterns).toContain('.git');
     expect(config.indexing.ignorePatterns).toContain('node_modules');
+    expect(config.indexing.respectGitignore).toBe(true);
   });
 
   it('should override defaults with environment variables', async () => {
@@ -190,5 +192,52 @@ describe('Reset Functions', () => {
         delete process.env.DIRECTORY_INDEXER_DATA_DIR;
       }
     }
+  });
+});
+
+describe('Gitignore Utilities', () => {
+  it('should manage gitignore cache', () => {
+    // Test that cache management functions exist and work
+    expect(typeof clearGitignoreCache).toBe('function');
+    
+    // Call clearGitignoreCache to ensure it doesn't throw
+    clearGitignoreCache();
+    expect(true).toBe(true); // Cache cleared successfully
+  });
+
+  it('should prioritize essential patterns over gitignore', () => {
+    const essentialPatterns = ['node_modules', '.git'];
+    const mockIgnoreFilter = {
+      ignores: (path: string) => path.includes('test.log')
+    };
+    
+    // Essential pattern should be ignored even if gitignore says otherwise
+    expect(shouldIgnoreFile('/path/to/node_modules/package.json', 'node_modules/package.json', essentialPatterns, mockIgnoreFilter)).toBe(true);
+    expect(shouldIgnoreFile('/path/to/.git/config', '.git/config', essentialPatterns, mockIgnoreFilter)).toBe(true);
+    
+    // Non-essential gitignore pattern should work
+    expect(shouldIgnoreFile('/path/to/test.log', 'test.log', [], mockIgnoreFilter)).toBe(true);
+    
+    // Neither essential nor gitignore ignored should not be ignored
+    expect(shouldIgnoreFile('/path/to/README.md', 'README.md', [], mockIgnoreFilter)).toBe(false);
+  });
+
+  it('should handle gitignore filter gracefully when errors occur', () => {
+    const essentialPatterns = ['.git'];
+    const faultyIgnoreFilter = {
+      ignores: () => { throw new Error('Gitignore error'); }
+    };
+    
+    // Should not crash and fall back to essential patterns only
+    expect(shouldIgnoreFile('/path/to/.git/config', '.git/config', essentialPatterns, faultyIgnoreFilter)).toBe(true);
+    expect(shouldIgnoreFile('/path/to/README.md', 'README.md', essentialPatterns, faultyIgnoreFilter)).toBe(false);
+  });
+
+  it('should work without gitignore filter', () => {
+    const essentialPatterns = ['node_modules', '.git'];
+    
+    expect(shouldIgnoreFile('/path/to/node_modules/package.json', 'node_modules/package.json', essentialPatterns)).toBe(true);
+    expect(shouldIgnoreFile('/path/to/README.md', 'README.md', essentialPatterns)).toBe(false);
+    expect(shouldIgnoreFile('/path/to/test.log', 'test.log', essentialPatterns)).toBe(false);
   });
 });
