@@ -36,6 +36,12 @@ export async function main() {
         const config = await loadConfig({ verbose: options.verbose });
         await validateIndexPrerequisites(config);
         console.log(`Indexing ${paths.length} ${paths.length === 1 ? 'directory' : 'directories'}: ${paths.join(', ')}`);
+        if (!options.verbose) {
+          console.log('Run with --verbose for detailed per-file indexing reports');
+          console.log('Indexing can be safely stopped and resumed - progress is automatically saved');
+          console.log('You can start using the MCP server while indexing continues');
+          console.log('Indexing may take time due to embedding generation - see project README for performance tips');
+        }
         const result = await indexDirectories(paths, config);
         console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`);
         if (result.errors.length > 0) {

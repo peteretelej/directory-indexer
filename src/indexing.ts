@@ -196,7 +196,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   }
 
   if (!config.verbose && totalFiles > 0) {
-    console.log(`Processing ${totalFiles} files...`);
+    console.log(`Found ${totalFiles} files to process (checking for changes...)`);
   }
 
   for (const path of paths) {
@@ -207,6 +207,13 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
       const files = await scanDirectory(path, scanOptions);
 
+      // Track directory-specific counters
+      const dirStartIndexed = indexed;
+      const dirStartSkipped = skipped;
+
+      // Calculate progress interval for non-verbose updates
+      const progressInterval = Math.max(10, Math.floor(totalFiles / 20));
+
       for (const file of files) {
         try {
           // Check if file already exists and needs reprocessing
@@ -216,6 +223,13 @@ export async function indexDirectories(paths: string[], config: Config): Promise
             const needsReprocessing = await shouldReprocessFile(file.path, existingFile, config);
             if (!needsReprocessing) {
               skipped++;
+              if (config.verbose) {
+                console.log(`  Skipped: ${file.path} (unchanged)`);
+              }
+              // Show periodic progress in non-verbose mode
+              if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
+                console.log(`  Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
+              }
               continue; // Skip unchanged file
             }
 
@@ -253,6 +267,10 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           indexed++;
           if (config.verbose) {
             console.log(`  Indexed: ${file.path} (${chunks.length} chunks)`);
+          }
+          // Show periodic progress in non-verbose mode
+          if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
+            console.log(`  Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -297,6 +315,16 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       const directoryErrors = errors.filter(err => err.includes(path));
       const directoryStatus = directoryErrors.length > 0 ? 'failed' : 'completed';
       await sqlite.upsertDirectory(normalizedPath, directoryStatus);
+
+      // Show directory completion
+      const dirFiles = files.length;
+      const dirIndexed = indexed - dirStartIndexed;
+      const dirSkipped = skipped - dirStartSkipped;
+      if (config.verbose) {
+        console.log(`  Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
+      } else {
+        console.log(`  Directory ${path} completed: ${dirFiles} files processed`);
+      }
 
     } catch (error) {
       const normalizedPath = normalizePath(path);
