@@ -55,6 +55,12 @@ describe.sequential('CLI Commands Integration Tests', () => {
         expectCLISuccess(indexResult);
         expect(indexResult.stdout.toLowerCase()).toContain('index');
 
+        // Test progress reporting messages
+        expect(indexResult.stdout).toMatch(/Found \d+ files to process/);
+        expect(indexResult.stdout).toMatch(/Indexed \d+ files, skipped \d+ files/);
+        expect(indexResult.stdout).toContain('Run with --verbose for detailed per-file indexing reports');
+        expect(indexResult.stdout).toContain('Indexing can be safely stopped and resumed');
+
         console.log('🔄 Checking status...');
         const statusResult = await runCLIWithLogging(['status'], testEnv.env);
         expectCLISuccess(statusResult);
@@ -342,6 +348,44 @@ describe.sequential('CLI Commands Integration Tests', () => {
         expect(output.toLowerCase()).toMatch(/(reset|warning|unavailable)/);
         
         console.log('✅ Reset with unavailable services handled gracefully');
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
+  });
+
+  describe('Progress Reporting Tests', () => {
+    it('should show progress messages during indexing', async () => {
+      const testDataPath = getTestDataPath();
+      const testEnv = await createIsolatedTestEnvironment('progress-reporting');
+      
+      try {
+        const indexResult = await runCLIWithLogging(['index', testDataPath], testEnv.env, 120000);
+        expectCLISuccess(indexResult);
+        
+        // Test progress messages
+        expect(indexResult.stdout).toMatch(/Found \d+ files to process/);
+        expect(indexResult.stdout).toMatch(/Indexed \d+ files, skipped \d+ files/);
+        expect(indexResult.stdout).toContain('Run with --verbose for detailed per-file indexing reports');
+        expect(indexResult.stdout).toContain('Indexing can be safely stopped and resumed');
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
+
+    it('should show detailed progress in verbose mode', async () => {
+      const testDataPath = getTestDataPath();
+      const testEnv = await createIsolatedTestEnvironment('verbose-progress');
+      
+      try {
+        const indexResult = await runCLIWithLogging(['index', testDataPath, '--verbose'], testEnv.env, 120000);
+        expectCLISuccess(indexResult);
+        
+        // Test verbose mode messages
+        expect(indexResult.stdout).toMatch(/Scanning directory:/);
+        expect(indexResult.stdout).toMatch(/Found \d+ files to process in/);
+        expect(indexResult.stdout).toMatch(/Indexed: .*\.\w+ \(\d+ chunks\)/);
+        expect(indexResult.stdout).toMatch(/Directory .* completed:/);
       } finally {
         await testEnv.cleanup();
       }
