@@ -207,6 +207,10 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
       const files = await scanDirectory(path, scanOptions);
 
+      // Track directory-specific counters
+      const dirStartIndexed = indexed;
+      const dirStartSkipped = skipped;
+
       // Calculate progress interval for non-verbose updates
       const progressInterval = Math.max(10, Math.floor(totalFiles / 20));
 
@@ -314,8 +318,8 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
       // Show directory completion
       const dirFiles = files.length;
-      const dirIndexed = indexed;
-      const dirSkipped = skipped;
+      const dirIndexed = indexed - dirStartIndexed;
+      const dirSkipped = skipped - dirStartSkipped;
       if (config.verbose) {
         console.log(`  Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
       } else {

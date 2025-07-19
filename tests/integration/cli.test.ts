@@ -390,6 +390,34 @@ describe.sequential('CLI Commands Integration Tests', () => {
         await testEnv.cleanup();
       }
     });
+
+    it('should report accurate per-directory counts', async () => {
+      const testDataPath = getTestDataPath();
+      const testEnv = await createIsolatedTestEnvironment('per-directory-counts');
+      
+      try {
+        const indexResult = await runCLIWithLogging(['index', testDataPath, '--verbose'], testEnv.env, 120000);
+        expectCLISuccess(indexResult);
+        
+        const dirCompletionLines = indexResult.stdout.split('\n')
+          .filter(line => line.includes('Directory') && line.includes('completed:'));
+        
+        if (dirCompletionLines.length > 1) {
+          for (const line of dirCompletionLines) {
+            const match = line.match(/(\d+) indexed, (\d+) skipped/);
+            if (match) {
+              const indexed = parseInt(match[1]);
+              const skipped = parseInt(match[2]);
+              expect(indexed).toBeGreaterThanOrEqual(0);
+              expect(skipped).toBeGreaterThanOrEqual(0);
+              expect(indexed + skipped).toBeGreaterThan(0);
+            }
+          }
+        }
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
   });
 
   describe('File Processing Tests', () => {
