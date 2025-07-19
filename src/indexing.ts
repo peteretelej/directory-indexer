@@ -208,6 +208,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   }
 
   if (!config.verbose && totalFiles > 0) {
+    console.log();
     console.log(`Found ${totalFiles} files to process (checking for changes...)`);
   }
 
@@ -224,7 +225,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       const dirStartSkipped = skipped;
 
       // Calculate progress interval for non-verbose updates
-      const progressInterval = Math.max(10, Math.floor(totalFiles / 20));
+      const progressInterval = totalFiles > 1000 ? 50 : 10;
 
       for (const file of files) {
         try {
@@ -240,7 +241,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
               }
               // Show periodic progress in non-verbose mode
               if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
-                console.log(`  Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
+                console.log(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
               }
               continue; // Skip unchanged file
             }
@@ -282,7 +283,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           }
           // Show periodic progress in non-verbose mode
           if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
-            console.log(`  Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
+            console.log(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -333,9 +334,9 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       const dirIndexed = indexed - dirStartIndexed;
       const dirSkipped = skipped - dirStartSkipped;
       if (config.verbose) {
-        console.log(`  Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
+        console.log(`Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
       } else {
-        console.log(`  Directory ${path} completed: ${dirFiles} files processed`);
+        console.log(`Directory ${path} completed: ${dirFiles} files processed`);
       }
 
     } catch (error) {

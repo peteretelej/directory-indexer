@@ -4,9 +4,13 @@ coverage:
       default:
         target: 70%
         threshold: 5%
+        paths:
+          - "src/"
     patch:
       default:
         target: 60%
+        paths:
+          - "src/"
 
 comment:
   layout: "header, diff"

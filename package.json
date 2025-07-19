@@ -1,6 +1,6 @@
 {
   "name": "directory-indexer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AI-powered directory indexing with semantic search for MCP servers",
   "main": "dist/cli.js",
   "bin": {
@@ -17,7 +17,6 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf dist",
     "prepare": "npm run build",
     "cli": "node bin/directory-indexer.js"
   },
@@ -62,7 +61,6 @@
     "@typescript-eslint/parser": "^8.15.0",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.15.0",
-    "rimraf": "^5.0.0",
     "tmp": "^0.2.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
