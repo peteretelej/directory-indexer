@@ -37,6 +37,17 @@ vi.mock('../src/prerequisites.js', () => ({
   validateSearchPrerequisites: vi.fn()
 }));
 
+vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
+  Server: vi.fn().mockImplementation(() => ({
+    setRequestHandler: vi.fn(),
+    connect: vi.fn().mockResolvedValue(undefined)
+  }))
+}));
+
+vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+  StdioServerTransport: vi.fn()
+}));
+
 describe('MCP Handlers Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -375,6 +386,27 @@ Errors: [
         }],
         isError: true
       });
+    });
+  });
+
+  describe('startMcpServer', () => {
+    it('should initialize MCP server', async () => {
+      const { startMcpServer } = await import('../src/mcp.js');
+      const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+      
+      const mockServer = {
+        setRequestHandler: vi.fn(),
+        connect: vi.fn().mockResolvedValue(undefined)
+      };
+      vi.mocked(Server).mockReturnValue(mockServer as any);
+      
+      const config = { verbose: false } as any;
+      
+      await startMcpServer(config);
+      
+      expect(Server).toHaveBeenCalled();
+      expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(2);
+      expect(mockServer.connect).toHaveBeenCalled();
     });
   });
 });
