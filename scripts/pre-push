@@ -5,13 +5,17 @@
 
 set -e
 
-# Skip checks if only pushing tags
-while read local_ref local_sha remote_ref remote_sha; do
-    if [[ "$remote_ref" == refs/tags/* ]]; then
-        echo "Pushing tag $remote_ref, skipping pre-push checks..."
-        exit 0
-    fi
-done
+# Skip checks if only pushing tags (only when run as git hook)
+if [ -t 0 ]; then
+    echo "Running in terminal mode, skipping git hook input parsing..."
+else
+    while read local_ref local_sha remote_ref remote_sha; do
+        if [[ "$remote_ref" == refs/tags/* ]]; then
+            echo "Pushing tag $remote_ref, skipping pre-push checks..."
+            exit 0
+        fi
+    done
+fi
 
 echo "Running pre-push checks..."
 

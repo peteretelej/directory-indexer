@@ -2,13 +2,20 @@ import { describe, it, expect, vi } from 'vitest';
 import { 
   handleIndex, 
   handleSearch, 
-  handleGet 
+  handleSimilar,
+  handleGet,
+  handleServe,
+  handleReset,
+  handleStatus
 } from '../src/cli-handlers.js';
 
 vi.mock('../src/indexing.js');
 vi.mock('../src/search.js');
 vi.mock('../src/config.js');
 vi.mock('../src/prerequisites.js');
+vi.mock('../src/storage.js');
+vi.mock('../src/mcp.js');
+vi.mock('../src/reset.js');
 
 describe('CLI Handlers - Unit Tests', () => {
   
@@ -62,5 +69,64 @@ describe('CLI Handlers - Unit Tests', () => {
     await handleGet('/test/file.txt', { chunks: '1-3', verbose: false });
 
     expect(getFileContent).toHaveBeenCalledWith('/test/file.txt', '1-3');
+  });
+
+  it('should call findSimilarFiles with correct params', async () => {
+    const { findSimilarFiles } = await import('../src/search.js');
+    const { loadConfig } = await import('../src/config.js');
+    
+    vi.mocked(loadConfig).mockResolvedValue({} as any);
+    vi.mocked(findSimilarFiles).mockResolvedValue([]);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await handleSimilar('/test/file.txt', { limit: 10, verbose: false });
+
+    expect(findSimilarFiles).toHaveBeenCalledWith('/test/file.txt', 10);
+  });
+
+  it('should call startMcpServer with config', async () => {
+    const { startMcpServer } = await import('../src/mcp.js');
+    const { loadConfig } = await import('../src/config.js');
+    
+    const mockConfig = { test: 'config' };
+    vi.mocked(loadConfig).mockResolvedValue(mockConfig as any);
+    vi.mocked(startMcpServer).mockResolvedValue(undefined);
+
+    await handleServe({ verbose: false });
+
+    expect(startMcpServer).toHaveBeenCalledWith(mockConfig);
+  });
+
+  it('should call resetEnvironment with config and options', async () => {
+    const { resetEnvironment } = await import('../src/reset.js');
+    const { loadConfig } = await import('../src/config.js');
+    
+    const mockConfig = { test: 'config' };
+    vi.mocked(loadConfig).mockResolvedValue(mockConfig as any);
+    vi.mocked(resetEnvironment).mockResolvedValue(undefined);
+
+    await handleReset({ force: true, verbose: false });
+
+    expect(resetEnvironment).toHaveBeenCalledWith(mockConfig, { force: true, verbose: false });
+  });
+
+  it('should call getIndexStatus and getServiceStatus', async () => {
+    const { getIndexStatus } = await import('../src/storage.js');
+    const { getServiceStatus } = await import('../src/prerequisites.js');
+    const { loadConfig } = await import('../src/config.js');
+    
+    const mockConfig = { test: 'config' };
+    const mockStatus = { directoriesIndexed: 0, filesIndexed: 0, chunksIndexed: 0, databaseSize: '0B', directories: [], errors: [], workspaces: [], workspaceHealth: { healthy: 0, warnings: 0, errors: 0, criticalIssues: [], recommendations: [] }, qdrantConsistency: { isConsistent: true, issues: [] } };
+    const mockServiceStatus = { qdrant: true, embedding: true, embeddingProvider: 'ollama' };
+    
+    vi.mocked(loadConfig).mockResolvedValue(mockConfig as any);
+    vi.mocked(getIndexStatus).mockResolvedValue(mockStatus as any);
+    vi.mocked(getServiceStatus).mockResolvedValue(mockServiceStatus as any);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await handleStatus({ verbose: false });
+
+    expect(getIndexStatus).toHaveBeenCalled();
+    expect(getServiceStatus).toHaveBeenCalledWith(mockConfig);
   });
 });
