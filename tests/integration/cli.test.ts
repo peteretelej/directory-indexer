@@ -425,7 +425,8 @@ describe.sequential('CLI Commands Integration Tests', () => {
       const testDataPath = getTestDataPath();
       const files = await scanDirectory(testDataPath, {
         ignorePatterns: ['.git', 'node_modules', '*.log'],
-        maxFileSize: 1000000
+        maxFileSize: 1000000,
+        respectGitignore: true
       });
       
       expect(Array.isArray(files)).toBe(true);

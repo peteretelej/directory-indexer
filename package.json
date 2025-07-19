@@ -50,6 +50,7 @@
     "@modelcontextprotocol/sdk": "^0.6.0",
     "better-sqlite3": "^11.5.0",
     "commander": "^12.1.0",
+    "ignore": "^7.0.5",
     "mime-types": "^2.1.35",
     "zod": "^3.23.8"
   },

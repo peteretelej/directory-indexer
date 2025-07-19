@@ -11,12 +11,14 @@ import {
   isDirectory,
   isFile
 } from './utils.js';
+import { loadGitignoreRules } from './gitignore.js';
 import { generateEmbedding } from './embedding.js';
 import { initializeStorage, FileRecord } from './storage.js';
 
 export interface ScanOptions {
   ignorePatterns: string[];
   maxFileSize: number;
+  respectGitignore: boolean;
 }
 
 export interface IndexResult {
@@ -77,6 +79,10 @@ export function chunkText(content: string, chunkSize: number, overlap: number): 
 export async function scanDirectory(dirPath: string, options: ScanOptions): Promise<FileInfo[]> {
   const files: FileInfo[] = [];
   const visited = new Set<string>();
+  const basePath = normalizePath(dirPath);
+  
+  // Load gitignore rules for the root directory if enabled
+  const gitignoreFilter = options.respectGitignore ? await loadGitignoreRules(dirPath) : null;
 
   async function walkDirectory(currentPath: string): Promise<void> {
     const normalizedPath = normalizePath(currentPath);
@@ -87,7 +93,12 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
     visited.add(normalizedPath);
 
     try {
-      if (shouldIgnoreFile(normalizedPath, options.ignorePatterns)) {
+      // Convert to relative path for gitignore matching
+      const relativePath = normalizedPath.startsWith(basePath) 
+        ? normalizedPath.slice(basePath.length + 1)
+        : normalizedPath;
+        
+      if (shouldIgnoreFile(normalizedPath, relativePath, options.ignorePatterns, gitignoreFilter)) {
         return;
       }
 
@@ -172,7 +183,8 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
   const scanOptions: ScanOptions = {
     ignorePatterns: config.indexing.ignorePatterns,
-    maxFileSize: config.indexing.maxFileSize
+    maxFileSize: config.indexing.maxFileSize,
+    respectGitignore: config.indexing.respectGitignore
   };
 
   // Initialize storage

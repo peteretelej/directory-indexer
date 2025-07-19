@@ -107,9 +107,29 @@ export async function ensureDirectory(dirPath: string): Promise<void> {
   }
 }
 
-export function shouldIgnoreFile(filePath: string, ignorePatterns: string[]): boolean {
+export function shouldIgnoreFile(
+  filePath: string, 
+  relativePath: string,
+  ignorePatterns: string[],
+  gitignoreFilter?: { ignores: (path: string) => boolean } | null
+): boolean {
   const normalizedPath = normalizePath(filePath);
-  return ignorePatterns.some(pattern => normalizedPath.includes(pattern));
+  
+  // Essential patterns always take precedence
+  if (ignorePatterns.some(pattern => normalizedPath.includes(pattern))) {
+    return true;
+  }
+  
+  // Check gitignore patterns using relative path
+  if (gitignoreFilter && relativePath) {
+    try {
+      return gitignoreFilter.ignores(relativePath);
+    } catch {
+      // Ignore errors in gitignore matching
+    }
+  }
+  
+  return false;
 }
 
 export function isSupportedFileType(filePath: string): boolean {
