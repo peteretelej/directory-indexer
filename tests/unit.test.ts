@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 import { loadConfig } from '../src/config.js';
 import { normalizePath, calculateHash, shouldIgnoreFile } from '../src/utils.js';
@@ -195,26 +195,6 @@ describe('Reset Functions', () => {
   });
 });
 
-describe('Indexing Functions', () => {
-  it('should handle fs.stat errors in shouldReprocessFile', async () => {
-    const { indexDirectories } = await import('../src/indexing.js');
-    
-    // Mock file system to trigger error path
-    const mockFsModule = {
-      stat: vi.fn().mockRejectedValue(new Error('File not accessible')),
-      readFile: vi.fn()
-    };
-    
-    vi.doMock('fs/promises', () => ({ default: mockFsModule }));
-    
-    // Test that indexDirectories handles the error gracefully
-    const config = await loadConfig();
-    const result = await indexDirectories(['/nonexistent'], config);
-    
-    expect(result.failed).toBeGreaterThanOrEqual(0);
-    expect(Array.isArray(result.errors)).toBe(true);
-  });
-});
 
 describe('Gitignore Utilities', () => {
   it('should manage gitignore cache', () => {

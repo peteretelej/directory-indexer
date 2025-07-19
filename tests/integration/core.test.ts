@@ -220,6 +220,23 @@ describe.sequential('Core Functionality Integration Tests', () => {
         expect(error).toBeInstanceOf(Error);
       }
     });
+
+    it('should handle indexing with inaccessible files', async () => {
+      const testEnv = await createIsolatedTestEnvironment('fs-errors');
+      
+      try {
+        const config = await loadConfig({ verbose: false });
+        
+        // Try to index nonexistent directory - should handle gracefully
+        const result = await indexDirectories(['/nonexistent/path'], config);
+        
+        expect(result.failed).toBeGreaterThanOrEqual(0);
+        expect(Array.isArray(result.errors)).toBe(true);
+        
+      } finally {
+        await testEnv.cleanup();
+      }
+    });
   });
 
   describe('Configuration Tests', () => {
