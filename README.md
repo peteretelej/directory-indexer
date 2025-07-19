@@ -89,7 +89,7 @@ Then use the following MCP configuration
 
 Your AI assistant will automatically start the MCP server and can now search your indexed files.
 
-**Advanced:** For organizing content into focused search areas, see [Workspace Support](#workspace-support).
+**Advanced:** For organizing content into focused search areas, see [Workspace Support](#workspace-support). For faster indexing, see [Performance Tips](#performance-tips).
 
 ## Setup
 
@@ -281,12 +281,33 @@ export QDRANT_API_KEY="your-key-here"
 
 For all configuration options, see [Environment Variables](./docs/design.md#environment-variables).
 
+## Performance Tips
+
+**Speed up embedding generation:**
+
+- **Install Ollama natively** - Enables automatic GPU acceleration (Docker version uses CPU only)
+- **Use OpenAI API** - Faster than local embeddings but requires paid API key and sends data to OpenAI servers
+
+**Smart indexing:**
+
+- **Index parent directories** - Avoids duplicates since full file paths are stored
+- **Keep folders focused** - Only index directories with documents you want searchable
+- **Start with key folders** - Index your most important documentation first
+
+**Time management:**
+
+- **Run during off-hours** - Let large directories index overnight
+- **Continue working** - MCP server works immediately while indexing runs in background
+- **Re-index efficiently** - Only changed files are reprocessed when you re-run indexing
+
 ## Supported Files
 
 - **Text**: `.md`, `.txt`
 - **Code**: `.rs`, `.py`, `.js`, `.ts`, `.go`, `.java`, etc.
 - **Data**: `.json`, `.yaml`, `.csv`, `.toml`
 - **Config**: `.env`, `.conf`, `.ini`
+
+- Upcoming: Support for more file types like PDFs, docx, etc, see [#11](https://github.com/peteretelej/directory-indexer/issues/11)
 
 ## Documentation
 

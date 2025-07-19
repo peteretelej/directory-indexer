@@ -40,6 +40,7 @@ export async function main() {
           console.log('Run with --verbose for detailed per-file indexing reports');
           console.log('Indexing can be safely stopped and resumed - progress is automatically saved');
           console.log('You can start using the MCP server while indexing continues');
+          console.log('Indexing may take time due to embedding generation - see project README for performance tips');
         }
         const result = await indexDirectories(paths, config);
         console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`);
