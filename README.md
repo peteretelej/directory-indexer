@@ -286,7 +286,7 @@ For all configuration options, see [Environment Variables](./docs/design.md#envi
 **Speed up embedding generation:**
 
 - **Install Ollama natively** - Enables automatic GPU acceleration (Docker version uses CPU only)
-- **Use OpenAI API** - Faster than local embeddings but requires paid API key and sends data to OpenAI servers
+- or **Use OpenAI API** - Faster than local embeddings but requires paid API key and _sends data to OpenAI servers_
 
 **Smart indexing:**
 
