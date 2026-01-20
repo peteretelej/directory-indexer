@@ -135,7 +135,7 @@ export function shouldIgnoreFile(
 export function isSupportedFileType(filePath: string): boolean {
   const supportedExtensions = [
     '.md', '.txt', '.rst',
-    '.rs', '.py', '.js', '.ts', '.go', '.java', '.cpp', '.c',
+    '.rs', '.py', '.js', '.ts', '.go', '.java', '.cpp', '.c', '.pl', '.pm',
     '.json', '.yaml', '.yml', '.toml', '.csv',
     '.env', '.conf', '.ini',
     '.html', '.xml'
