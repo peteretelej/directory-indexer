@@ -35,9 +35,6 @@ function getEntryPoints() {
 }
 
 export default defineConfig({
-  define: {
-    __dirname: 'import.meta.dirname',
-  },
   build: {
     lib: {
       entry: getEntryPoints(),
