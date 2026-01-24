@@ -46,18 +46,19 @@ describe.sequential('MCP Server Integration Tests', () => {
       
       try {
         const serverInfo = await handleServerInfoTool('test-version');
-        const content = JSON.parse(serverInfo.content[0].text as string);
-        
+        const serverInfoText = (serverInfo.content[0] as { type: 'text'; text: string }).text;
+        const content = JSON.parse(serverInfoText);
+
         expect(content.name).toBe('directory-indexer');
         expect(content.version).toBe('test-version');
         expect(content.status.workspaceHealth).toBeDefined();
         expect(typeof content.status.workspaceHealth.healthy).toBe('number');
-        
+
         const searchResult = await handleSearchTool({ query: 'test', workspace: 'docs' });
-        expect(searchResult.content[0].text).toBeDefined();
-        
+        expect((searchResult.content[0] as { type: 'text'; text: string }).text).toBeDefined();
+
         const invalidSearch = await handleSearchTool({ query: 'test', workspace: 'nonexistent' });
-        expect(invalidSearch.content[0].text).toContain('not found');
+        expect((invalidSearch.content[0] as { type: 'text'; text: string }).text).toContain('not found');
         
       } finally {
         process.env = originalEnv;

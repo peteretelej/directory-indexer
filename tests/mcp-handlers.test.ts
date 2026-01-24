@@ -136,8 +136,9 @@ Errors: [
       const result = await handleSearchTool(args);
 
       expect(searchContent).toHaveBeenCalledWith('test search', { limit: 10, workspace: undefined });
-      expect(result.content[0].text).toContain('Workspace \'invalid\' not found');
-      expect(result.content[0].text).toContain('Available workspaces: docs');
+      const text = (result.content[0] as { type: 'text'; text: string }).text;
+      expect(text).toContain('Workspace \'invalid\' not found');
+      expect(text).toContain('Available workspaces: docs');
     });
 
     it('should handle invalid workspace when no workspaces configured', async () => {
@@ -153,7 +154,7 @@ Errors: [
       const result = await handleSearchTool(args);
 
       expect(searchContent).toHaveBeenCalledWith('test search', { limit: 10, workspace: undefined });
-      expect(result.content[0].text).toContain('no workspaces are configured');
+      expect((result.content[0] as { type: 'text'; text: string }).text).toContain('no workspaces are configured');
     });
 
     it('should throw error for missing query', async () => {
@@ -209,8 +210,9 @@ Errors: [
       const result = await handleSimilarFilesTool(args);
 
       expect(findSimilarFiles).toHaveBeenCalledWith('/test.md', 10, undefined);
-      expect(result.content[0].text).toContain('Workspace \'invalid\' not found');
-      expect(result.content[0].text).toContain('Available workspaces: code');
+      const text = (result.content[0] as { type: 'text'; text: string }).text;
+      expect(text).toContain('Workspace \'invalid\' not found');
+      expect(text).toContain('Available workspaces: code');
     });
 
     it('should handle invalid workspace when no workspaces configured', async () => {
@@ -226,7 +228,7 @@ Errors: [
       const result = await handleSimilarFilesTool(args);
 
       expect(findSimilarFiles).toHaveBeenCalledWith('/test.md', 10, undefined);
-      expect(result.content[0].text).toContain('no workspaces are configured');
+      expect((result.content[0] as { type: 'text'; text: string }).text).toContain('no workspaces are configured');
     });
 
     it('should throw error for missing file_path', async () => {
@@ -393,17 +395,17 @@ Errors: [
     it('should initialize MCP server', async () => {
       const { startMcpServer } = await import('../src/mcp.js');
       const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
-      
+
       const mockServer = {
         setRequestHandler: vi.fn(),
         connect: vi.fn().mockResolvedValue(undefined)
       };
       vi.mocked(Server).mockReturnValue(mockServer as any);
-      
+
       const config = { verbose: false } as any;
-      
+
       await startMcpServer(config);
-      
+
       expect(Server).toHaveBeenCalled();
       expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(2);
       expect(mockServer.connect).toHaveBeenCalled();
