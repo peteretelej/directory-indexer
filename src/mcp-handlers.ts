@@ -74,6 +74,10 @@ interface GetChunkToolArgs {
   chunk_id: string;
 }
 
+interface DeleteIndexToolArgs {
+  directory_path: string;
+}
+
 // Type guard functions
 function isIndexToolArgs(args: unknown): args is IndexToolArgs {
   return typeof args === 'object' && args !== null &&
@@ -96,9 +100,14 @@ function isGetContentToolArgs(args: unknown): args is GetContentToolArgs {
 }
 
 function isGetChunkToolArgs(args: unknown): args is GetChunkToolArgs {
-  return typeof args === 'object' && args !== null && 
+  return typeof args === 'object' && args !== null &&
          typeof (args as GetChunkToolArgs).file_path === 'string' &&
          typeof (args as GetChunkToolArgs).chunk_id === 'string';
+}
+
+function isDeleteIndexToolArgs(args: unknown): args is DeleteIndexToolArgs {
+  return typeof args === 'object' && args !== null &&
+         typeof (args as DeleteIndexToolArgs).directory_path === 'string';
 }
 
 export async function handleIndexTool(args: unknown, config: Config): Promise<CallToolResult> {
@@ -317,6 +326,61 @@ export async function handleServerInfoTool(version: string): Promise<CallToolRes
       }
     ]
   };
+}
+
+export async function handleDeleteIndexTool(args: unknown, config: Config): Promise<CallToolResult> {
+  if (!isDeleteIndexToolArgs(args)) {
+    throw new Error('directory_path is required');
+  }
+
+  const dirPath = args.directory_path.trim();
+  const { sqlite, qdrant } = await initializeStorage(config);
+
+  try {
+    // Check if the directory is actually indexed
+    const directory = await sqlite.getDirectory(dirPath);
+    if (!directory) {
+      throw new Error(
+        `Directory '${dirPath}' is not indexed. Use 'server_info' to see indexed directories.`
+      );
+    }
+
+    // Get files for this directory to clean up Qdrant points
+    const files = await sqlite.getFilesByDirectory(dirPath);
+    for (const file of files) {
+      try {
+        await qdrant.deletePointsByFilePath(file.path);
+      } catch (error) {
+        log('warning', 'Failed to delete Qdrant points for file', {
+          path: file.path,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    // Delete file records and directory record from SQLite
+    const deletedFiles = sqlite.deleteFilesByDirectory(dirPath);
+    sqlite.deleteDirectory(dirPath);
+
+    // Refresh the indexed directories cache
+    refreshIndexedDirsCache(sqlite);
+
+    const chunksCount = files.reduce((sum, f) => sum + (f.chunks?.length || 0), 0);
+
+    log('info', 'Index deleted', { directory: dirPath, files: deletedFiles, chunks: chunksCount });
+    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_deleted', directory: dirPath } });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Deleted index for ${dirPath}: removed ${deletedFiles} files and ${chunksCount} chunks`
+        }
+      ]
+    };
+  } finally {
+    sqlite.close();
+  }
 }
 
 export function formatErrorResponse(error: unknown): CallToolResult {

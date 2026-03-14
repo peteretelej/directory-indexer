@@ -18,6 +18,7 @@ import {
   handleGetContentTool,
   handleGetChunkTool,
   handleServerInfoTool,
+  handleDeleteIndexTool,
   formatErrorResponse,
   setMcpServer
 } from './mcp-handlers.js';
@@ -28,7 +29,46 @@ const packageJsonPath = join(__dirname, '../package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 const VERSION = packageJson.version;
 
-const MCP_TOOLS: Tool[] = [
+const DELETE_INDEX_TOOL: Tool = {
+  name: 'delete_index',
+  description: `Remove the index for a directory. Deletes all file records, vector embeddings, and the directory entry from the database.
+
+When to use this tool:
+- User wants to remove a directory from the search index
+- Cleaning up old or irrelevant indexed content
+- Freeing database space by removing unused indexes
+
+How it works:
+- Removes all file records for the specified directory from SQLite
+- Deletes corresponding vector embeddings from Qdrant
+- Removes the directory entry from the directories table
+- Does NOT delete the actual files on disk
+
+Examples:
+- Remove old project: directory_path="/home/user/old-project"
+- Clean up test data: directory_path="/home/user/test-files"
+
+Use server_info to see what directories are currently indexed before removing.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      directory_path: {
+        type: 'string',
+        description: 'Absolute path of the directory whose index should be removed'
+      }
+    },
+    required: ['directory_path']
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false
+  }
+};
+
+export function getMcpTools(): Tool[] {
+  const tools: Tool[] = [
   {
     name: 'index',
     description: `Index directories to make their files searchable. Processes files to create vector embeddings for semantic search.
@@ -296,7 +336,15 @@ Returns server version, indexing statistics, directory list, workspace informati
       openWorldHint: false
     }
   }
-];
+  ];
+
+  // Include delete_index tool unless DISABLE_DESTRUCTIVE is set
+  if (process.env.DISABLE_DESTRUCTIVE !== 'true') {
+    tools.push(DELETE_INDEX_TOOL);
+  }
+
+  return tools;
+}
 
 export async function startMcpServer(config: Config): Promise<void> {
   initLogLevel();
@@ -318,7 +366,7 @@ export async function startMcpServer(config: Config): Promise<void> {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: MCP_TOOLS
+      tools: getMcpTools()
     };
   });
 
@@ -344,7 +392,10 @@ export async function startMcpServer(config: Config): Promise<void> {
         
         case 'server_info':
           return await handleServerInfoTool(VERSION);
-        
+
+        case 'delete_index':
+          return await handleDeleteIndexTool(args, config);
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }

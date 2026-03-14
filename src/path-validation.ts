@@ -12,6 +12,14 @@ export function validatePathWithinIndexedDirs(filePath: string, indexedDirs: Set
     throw new Error('Access denied: path contains null bytes');
   }
 
+  // Validate Windows UNC path format if it starts with \\
+  if (filePath.startsWith('\\\\')) {
+    const uncParts = filePath.split('\\').filter(Boolean);
+    if (uncParts.length < 2) {
+      throw new Error('Invalid UNC path format: expected \\\\server\\share\\... pattern');
+    }
+  }
+
   // Resolve the path, following symlinks if the file exists
   let resolved: string;
   try {

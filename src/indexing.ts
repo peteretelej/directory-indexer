@@ -14,6 +14,7 @@ import {
 import { loadGitignoreRules } from './gitignore.js';
 import { generateEmbedding } from './embedding.js';
 import { initializeStorage, FileRecord } from './storage.js';
+import { log } from './logger.js';
 
 export interface ScanOptions {
   ignorePatterns: string[];
@@ -251,7 +252,18 @@ export async function indexDirectories(paths: string[], config: Config): Promise
             await qdrant.deletePointsByFilePath(file.path);
           }
 
-          const content = await fs.readFile(file.path, 'utf-8');
+          const rawContent = await fs.readFile(file.path, 'utf-8');
+
+          // Skip non-UTF-8 files (Node.js inserts U+FFFD for invalid byte sequences)
+          if (rawContent.includes('\uFFFD')) {
+            log('warning', 'Skipping non-UTF-8 file', { path: file.path });
+            await sqlite.upsertFile(file, [], ['Skipped: file appears to be non-UTF-8 encoded']);
+            skipped++;
+            continue;
+          }
+
+          // Normalize CRLF to LF for consistent chunk boundaries
+          const content = rawContent.replace(/\r\n/g, '\n');
           const chunks = chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
 
           // Store file metadata in SQLite

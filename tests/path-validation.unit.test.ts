@@ -133,6 +133,22 @@ describe('validatePathWithinIndexedDirs', () => {
       validatePathWithinIndexedDirs('/any/path', new Set())
     ).toThrow('Access denied');
   });
+
+  it('should reject malformed UNC paths', () => {
+    const dirs = new Set(['\\\\server\\share']);
+    expect(() =>
+      validatePathWithinIndexedDirs('\\\\', dirs)
+    ).toThrow('Invalid UNC path format');
+  });
+
+  it('should accept valid UNC path format', () => {
+    // This will throw Access denied (not UNC format error) because path is valid UNC
+    // but not in indexed dirs (path resolution differs on non-Windows)
+    const dirs = new Set(['/some/dir']);
+    expect(() =>
+      validatePathWithinIndexedDirs('\\\\server\\share\\file.txt', dirs)
+    ).toThrow('Access denied');
+  });
 });
 
 describe('resolveIndexedDirectories', () => {

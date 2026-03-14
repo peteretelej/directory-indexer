@@ -457,6 +457,17 @@ export class SQLiteStorage {
     }
   }
 
+  deleteDirectory(path: string): void {
+    this.db.prepare('DELETE FROM directories WHERE path = ?').run(path);
+  }
+
+  deleteFilesByDirectory(directoryPath: string): number {
+    const result = this.db.prepare('DELETE FROM files WHERE path = ? OR path LIKE ?').run(
+      directoryPath, `${directoryPath}/%`
+    );
+    return result.changes;
+  }
+
   close(): void {
     openStorageInstances.delete(this);
     this.db.close();
