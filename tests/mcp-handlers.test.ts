@@ -55,10 +55,16 @@ vi.mock('../src/path-validation.js', () => ({
   resolveIndexedDirectories: vi.fn().mockReturnValue(new Set())
 }));
 
+vi.mock('../src/logger.js', () => ({
+  log: vi.fn(),
+  initLogLevel: vi.fn()
+}));
+
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: vi.fn().mockImplementation(() => ({
     setRequestHandler: vi.fn(),
-    connect: vi.fn().mockResolvedValue(undefined)
+    connect: vi.fn().mockResolvedValue(undefined),
+    sendLoggingMessage: vi.fn()
   }))
 }));
 
@@ -426,6 +432,61 @@ describe('MCP Handlers Unit Tests', () => {
     });
   });
 
+  describe('indexing mutex', () => {
+    it('should serialize concurrent calls for the same directory', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const callOrder: string[] = [];
+
+      vi.mocked(indexDirectories).mockImplementation(async (paths) => {
+        callOrder.push(`start:${paths[0]}`);
+        await new Promise(r => setTimeout(r, 50));
+        callOrder.push(`end:${paths[0]}`);
+        return { indexed: 1, skipped: 0, failed: 0, deleted: 0, errors: [] };
+      });
+
+      const config = loadConfig();
+
+      // Launch two concurrent calls for the same directory
+      const [r1, r2] = await Promise.all([
+        handleIndexTool({ directory_paths: ['/same'] }, config),
+        handleIndexTool({ directory_paths: ['/same'] }, config)
+      ]);
+
+      expect(r1).toBeDefined();
+      expect(r2).toBeDefined();
+      // Both should have completed
+      expect(callOrder.filter(c => c.startsWith('start')).length).toBe(2);
+    });
+  });
+
+  describe('improved error messages', () => {
+    it('should provide recovery hint for file not found in get_content', async () => {
+      const { getFileContent } = await import('../src/search.js');
+      vi.mocked(getFileContent).mockRejectedValue(new Error('ENOENT: no such file'));
+
+      await expect(handleGetContentTool({ file_path: '/missing.txt' }))
+        .rejects.toThrow("File not found: /missing.txt");
+    });
+
+    it('should provide recovery hint for file not found in get_chunk', async () => {
+      const { getChunkContent } = await import('../src/search.js');
+      vi.mocked(getChunkContent).mockRejectedValue(new Error('ENOENT: no such file'));
+
+      await expect(handleGetChunkTool({ file_path: '/missing.txt', chunk_id: '0' }))
+        .rejects.toThrow("File not found: /missing.txt");
+    });
+
+    it('should provide recovery hint for index failures', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      vi.mocked(indexDirectories).mockRejectedValue(new Error('permission denied'));
+
+      const config = loadConfig();
+
+      await expect(handleIndexTool({ directory_paths: ['/bad/path'] }, config))
+        .rejects.toThrow('Indexing failed');
+    });
+  });
+
   describe('startMcpServer', () => {
     it('should initialize MCP server', async () => {
       const { startMcpServer } = await import('../src/mcp.js');
@@ -433,7 +494,8 @@ describe('MCP Handlers Unit Tests', () => {
 
       const mockServer = {
         setRequestHandler: vi.fn(),
-        connect: vi.fn().mockResolvedValue(undefined)
+        connect: vi.fn().mockResolvedValue(undefined),
+        sendLoggingMessage: vi.fn()
       };
       vi.mocked(Server).mockReturnValue(mockServer as any);
 

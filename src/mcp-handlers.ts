@@ -4,7 +4,23 @@ import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from
 import { getIndexStatus, SQLiteStorage, initializeStorage } from './storage.js';
 import { validateIndexPrerequisites, validateSearchPrerequisites } from './prerequisites.js';
 import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from './path-validation.js';
+import { log } from './logger.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+
+// MCP server reference for sending client-visible log notifications
+let mcpServer: Server | null = null;
+
+/**
+ * Set the MCP server reference for logging notifications.
+ * Called from startMcpServer() after server creation.
+ */
+export function setMcpServer(server: Server): void {
+  mcpServer = server;
+}
+
+// Workspace-level indexing mutex: keyed by normalized directory path
+const indexingMutex = new Map<string, Promise<void>>();
 
 // Cached set of resolved indexed directory paths for path validation
 let indexedDirsCache: Set<string> = new Set();
@@ -94,34 +110,71 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   await validateIndexPrerequisites(config);
 
   const paths = args.directory_paths.map((p: string) => p.trim());
-  const result = await indexDirectories(paths, config);
 
-  // Refresh the indexed directories cache after successful indexing
-  const { sqlite } = await initializeStorage(config);
+  log('info', 'Index start', { directories: paths });
+  mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_start', directories: paths } });
+
+  // Per-directory mutex: serialize concurrent calls targeting the same directory
+  for (const dirPath of paths) {
+    const existing = indexingMutex.get(dirPath);
+    if (existing) {
+      log('info', 'Waiting for ongoing indexing', { directory: dirPath });
+      await existing;
+    }
+  }
+
+  // Create a deferred promise for this indexing operation
+  let resolveIndexing: () => void;
+  const indexingPromise = new Promise<void>((resolve) => { resolveIndexing = resolve; });
+  for (const dirPath of paths) {
+    indexingMutex.set(dirPath, indexingPromise);
+  }
+
   try {
-    refreshIndexedDirsCache(sqlite);
+    const result = await indexDirectories(paths, config);
+
+    // Refresh the indexed directories cache after successful indexing
+    const { sqlite } = await initializeStorage(config);
+    try {
+      refreshIndexedDirsCache(sqlite);
+    } finally {
+      sqlite.close();
+    }
+
+    log('info', 'Index complete', { result });
+    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_complete', result } });
+
+    let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
+
+    if (result.errors.length > 0) {
+      responseText += `\nErrors: [\n`;
+      result.errors.forEach(error => {
+        responseText += `  '${error}'\n`;
+      });
+      responseText += `]`;
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: responseText
+        }
+      ]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log('error', 'Index error', { error: errorMessage, directories: paths });
+    mcpServer?.sendLoggingMessage({ level: 'error', data: { event: 'index_error', error: errorMessage } });
+    throw new Error(
+      `Indexing failed for ${paths.join(', ')}. Verify the directory exists and is readable. Use 'server_info' to check current status.`
+    );
   } finally {
-    sqlite.close();
+    resolveIndexing!();
+    for (const dirPath of paths) {
+      indexingMutex.delete(dirPath);
+    }
   }
-  
-  let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
-  
-  if (result.errors.length > 0) {
-    responseText += `\nErrors: [\n`;
-    result.errors.forEach(error => {
-      responseText += `  '${error}'\n`;
-    });
-    responseText += `]`;
-  }
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: responseText
-      }
-    ]
-  };
 }
 
 async function validateWorkspace(workspace?: string): Promise<{ workspace?: string; message?: string }> {
@@ -195,16 +248,26 @@ export async function handleGetContentTool(args: unknown, config?: Config): Prom
   await ensureIndexedDirsCache(resolvedConfig);
   validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
 
-  const content = await getFileContent(args.file_path, args.chunks);
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: content
-      }
-    ]
-  };
+  try {
+    const content = await getFileContent(args.file_path, args.chunks);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: content
+        }
+      ]
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('ENOENT') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no such file')) {
+      throw new Error(
+        `File not found: ${args.file_path}. The file may have been moved or deleted. Use 'search' to find similar content.`
+      );
+    }
+    throw error;
+  }
 }
 
 export async function handleGetChunkTool(args: unknown, config?: Config): Promise<CallToolResult> {
@@ -217,16 +280,26 @@ export async function handleGetChunkTool(args: unknown, config?: Config): Promis
   await ensureIndexedDirsCache(resolvedConfig);
   validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
 
-  const content = await getChunkContent(args.file_path, args.chunk_id);
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: content
-      }
-    ]
-  };
+  try {
+    const content = await getChunkContent(args.file_path, args.chunk_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: content
+        }
+      ]
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('ENOENT') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no such file')) {
+      throw new Error(
+        `File not found: ${args.file_path}. The file may have been moved or deleted. Use 'search' to find similar content.`
+      );
+    }
+    throw error;
+  }
 }
 
 export async function handleServerInfoTool(version: string): Promise<CallToolResult> {
@@ -248,6 +321,7 @@ export async function handleServerInfoTool(version: string): Promise<CallToolRes
 
 export function formatErrorResponse(error: unknown): CallToolResult {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  log('error', 'Tool error', { error: errorMessage });
   return {
     content: [
       {

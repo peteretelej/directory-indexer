@@ -3,6 +3,22 @@ import { Config } from './config.js';
 import { FileInfo, ChunkInfo, ensureDirectory } from './utils.js';
 import { dirname } from 'path';
 
+// Registry of all open SQLiteStorage instances for graceful shutdown
+const openStorageInstances = new Set<SQLiteStorage>();
+
+/**
+ * Close all open SQLiteStorage instances. Called during graceful shutdown.
+ */
+export function closeAllStorage(): void {
+  for (const instance of openStorageInstances) {
+    try {
+      instance.close();
+    } catch {
+      // Ignore errors during shutdown cleanup
+    }
+  }
+}
+
 export interface DirectoryRecord {
   id: number;
   path: string;
@@ -291,6 +307,7 @@ export class SQLiteStorage {
 
   constructor(private config: Config) {
     this.db = this.initializeDatabase();
+    openStorageInstances.add(this);
   }
 
   private initializeDatabase(): Database.Database {
@@ -441,6 +458,7 @@ export class SQLiteStorage {
   }
 
   close(): void {
+    openStorageInstances.delete(this);
     this.db.close();
   }
 }

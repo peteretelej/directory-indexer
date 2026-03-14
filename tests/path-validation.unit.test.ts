@@ -109,14 +109,20 @@ describe('validatePathWithinIndexedDirs', () => {
 
     const dirs = new Set([testDir]);
 
-    // Access via /tmp (symlink) should work because realpathSync resolves it
+    // A completely different path under /tmp should be rejected
     expect(() =>
-      validatePathWithinIndexedDirs(join('/tmp', `mac-tmp-test-${Date.now().toString().slice(0, -1)}0`, 'test.txt'), dirs)
-    ).toThrow('Access denied'); // Different timestamp, won't match
+      validatePathWithinIndexedDirs(join('/tmp', 'nonexistent-dir-xyz', 'test.txt'), dirs)
+    ).toThrow('Access denied');
 
-    // But the actual resolved path works
+    // The actual resolved path works
     expect(() =>
       validatePathWithinIndexedDirs(join(testDir, 'test.txt'), dirs)
+    ).not.toThrow();
+
+    // Access via /tmp symlink should also work (realpathSync resolves /tmp to /private/tmp)
+    const symlinkTestDir = testDir.replace(realTmp, '/tmp');
+    expect(() =>
+      validatePathWithinIndexedDirs(join(symlinkTestDir, 'test.txt'), dirs)
     ).not.toThrow();
 
     rmSync(testDir, { recursive: true, force: true });

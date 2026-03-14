@@ -9,14 +9,17 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Config } from './config.js';
-import { 
-  handleIndexTool, 
-  handleSearchTool, 
-  handleSimilarFilesTool, 
-  handleGetContentTool, 
-  handleGetChunkTool, 
+import { closeAllStorage } from './storage.js';
+import { initLogLevel, log } from './logger.js';
+import {
+  handleIndexTool,
+  handleSearchTool,
+  handleSimilarFilesTool,
+  handleGetContentTool,
+  handleGetChunkTool,
   handleServerInfoTool,
-  formatErrorResponse
+  formatErrorResponse,
+  setMcpServer
 } from './mcp-handlers.js';
 
 // Read version from package.json
@@ -296,6 +299,8 @@ Returns server version, indexing statistics, directory list, workspace informati
 ];
 
 export async function startMcpServer(config: Config): Promise<void> {
+  initLogLevel();
+
   const server = new Server(
     {
       name: 'directory-indexer',
@@ -303,10 +308,13 @@ export async function startMcpServer(config: Config): Promise<void> {
     },
     {
       capabilities: {
-        tools: {}
+        tools: {},
+        logging: {}
       }
     }
   );
+
+  setMcpServer(server);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -347,8 +355,19 @@ export async function startMcpServer(config: Config): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
+
+  // Graceful shutdown: close all SQLite connections before exiting
+  const cleanup = () => {
+    log('info', 'Shutting down MCP server');
+    closeAllStorage();
+    process.exit(0);
+  };
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+
   if (config.verbose) {
     console.error('MCP server started successfully');
   }
+
+  log('info', 'MCP server started', { version: VERSION });
 }
