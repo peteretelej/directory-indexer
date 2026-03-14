@@ -42,20 +42,27 @@ How it works:
 - Stores in database for fast retrieval
 
 Examples:
-- Index documentation: "/home/user/docs/project-wiki"
-- Index codebase: "/home/user/projects/api-server"
-- Index multiple directories: "/home/user/docs,/home/user/configs"
+- Index documentation: ["/home/user/docs/project-wiki"]
+- Index codebase: ["/home/user/projects/api-server"]
+- Index multiple directories: ["/home/user/docs", "/home/user/configs"]
 
 Indexing can take several minutes for large directories. Most users will already have directories indexed and can directly use search tool. Use server_info to check current indexing status first.`,
     inputSchema: {
       type: 'object',
       properties: {
-        directory_path: {
-          type: 'string',
-          description: 'Comma-separated list of absolute directory paths to index. Must be absolute paths since MCP server runs independently. Examples: "/home/user/projects" (Unix) or "C:\\Users\\user\\projects" (Windows)'
+        directory_paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of absolute directory paths to index. Must be absolute paths since MCP server runs independently. Examples: ["/home/user/projects"] (Unix) or ["C:\\\\Users\\\\user\\\\projects"] (Windows)'
         }
       },
-      required: ['directory_path']
+      required: ['directory_paths']
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
     }
   },
   {
@@ -112,6 +119,11 @@ Example queries:
         }
       },
       required: ['query']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -154,6 +166,11 @@ Returns file paths with similarity scores. Use get_content to read full files or
         }
       },
       required: ['file_path']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -191,6 +208,11 @@ Returns file content as text. Use this after search or similar_files to read act
         }
       },
       required: ['file_path']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -228,6 +250,11 @@ Returns chunk content as text. Use this with chunk IDs from search results to ge
         }
       },
       required: ['file_path', 'chunk_id']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -259,6 +286,11 @@ Returns server version, indexing statistics, directory list, workspace informati
       type: 'object',
       properties: {},
       additionalProperties: false
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   }
 ];
@@ -297,10 +329,10 @@ export async function startMcpServer(config: Config): Promise<void> {
           return await handleSimilarFilesTool(args);
         
         case 'get_content':
-          return await handleGetContentTool(args);
-        
+          return await handleGetContentTool(args, config);
+
         case 'get_chunk':
-          return await handleGetChunkTool(args);
+          return await handleGetChunkTool(args, config);
         
         case 'server_info':
           return await handleServerInfoTool(VERSION);

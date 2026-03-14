@@ -47,7 +47,7 @@
     "bin/"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^11.5.0",
     "commander": "^12.1.0",
     "ignore": "^7.0.5",

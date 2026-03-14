@@ -1,13 +1,39 @@
 import { Config } from './config.js';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from './search.js';
-import { getIndexStatus } from './storage.js';
+import { getIndexStatus, SQLiteStorage, initializeStorage } from './storage.js';
 import { validateIndexPrerequisites, validateSearchPrerequisites } from './prerequisites.js';
+import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from './path-validation.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+// Cached set of resolved indexed directory paths for path validation
+let indexedDirsCache: Set<string> = new Set();
+
+/**
+ * Refresh the indexed directories cache from storage.
+ * Exported for testability.
+ */
+export function refreshIndexedDirsCache(storage: SQLiteStorage): void {
+  indexedDirsCache = resolveIndexedDirectories(storage);
+}
+
+/**
+ * Ensure the cache is populated, lazily initializing from storage if empty.
+ */
+async function ensureIndexedDirsCache(config: Config): Promise<void> {
+  if (indexedDirsCache.size === 0) {
+    const { sqlite } = await initializeStorage(config);
+    try {
+      refreshIndexedDirsCache(sqlite);
+    } finally {
+      sqlite.close();
+    }
+  }
+}
 
 // Type-safe interfaces for MCP tool arguments
 interface IndexToolArgs {
-  directory_path: string;
+  directory_paths: string[];
 }
 
 interface SearchToolArgs {
@@ -34,8 +60,8 @@ interface GetChunkToolArgs {
 
 // Type guard functions
 function isIndexToolArgs(args: unknown): args is IndexToolArgs {
-  return typeof args === 'object' && args !== null && 
-         typeof (args as IndexToolArgs).directory_path === 'string';
+  return typeof args === 'object' && args !== null &&
+         Array.isArray((args as IndexToolArgs).directory_paths);
 }
 
 function isSearchToolArgs(args: unknown): args is SearchToolArgs {
@@ -61,14 +87,22 @@ function isGetChunkToolArgs(args: unknown): args is GetChunkToolArgs {
 
 export async function handleIndexTool(args: unknown, config: Config): Promise<CallToolResult> {
   if (!isIndexToolArgs(args)) {
-    throw new Error('directory_path is required');
+    throw new Error('directory_paths is required and must be an array');
   }
-  
+
   // Validate prerequisites before proceeding
   await validateIndexPrerequisites(config);
-  
-  const paths = args.directory_path.split(',').map((p: string) => p.trim());
+
+  const paths = args.directory_paths.map((p: string) => p.trim());
   const result = await indexDirectories(paths, config);
+
+  // Refresh the indexed directories cache after successful indexing
+  const { sqlite } = await initializeStorage(config);
+  try {
+    refreshIndexedDirsCache(sqlite);
+  } finally {
+    sqlite.close();
+  }
   
   let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
   
@@ -151,11 +185,16 @@ export async function handleSimilarFilesTool(args: unknown): Promise<CallToolRes
   };
 }
 
-export async function handleGetContentTool(args: unknown): Promise<CallToolResult> {
+export async function handleGetContentTool(args: unknown, config?: Config): Promise<CallToolResult> {
   if (!isGetContentToolArgs(args)) {
     throw new Error('file_path is required');
   }
-  
+
+  // Lazily populate cache and validate path
+  const resolvedConfig = config || (await import('./config.js')).loadConfig();
+  await ensureIndexedDirsCache(resolvedConfig);
+  validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
+
   const content = await getFileContent(args.file_path, args.chunks);
   
   return {
@@ -168,11 +207,16 @@ export async function handleGetContentTool(args: unknown): Promise<CallToolResul
   };
 }
 
-export async function handleGetChunkTool(args: unknown): Promise<CallToolResult> {
+export async function handleGetChunkTool(args: unknown, config?: Config): Promise<CallToolResult> {
   if (!isGetChunkToolArgs(args)) {
     throw new Error('file_path and chunk_id are required');
   }
-  
+
+  // Lazily populate cache and validate path
+  const resolvedConfig = config || (await import('./config.js')).loadConfig();
+  await ensureIndexedDirsCache(resolvedConfig);
+  validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
+
   const content = await getChunkContent(args.file_path, args.chunk_id);
   
   return {

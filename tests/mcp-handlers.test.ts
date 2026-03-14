@@ -23,7 +23,20 @@ vi.mock('../src/search.js', () => ({
 }));
 
 vi.mock('../src/storage.js', () => ({
-  getIndexStatus: vi.fn()
+  getIndexStatus: vi.fn(),
+  SQLiteStorage: vi.fn().mockImplementation(() => ({
+    getDirectories: vi.fn().mockReturnValue([]),
+    close: vi.fn(),
+    db: {}
+  })),
+  initializeStorage: vi.fn().mockResolvedValue({
+    sqlite: {
+      getDirectories: vi.fn().mockReturnValue([]),
+      close: vi.fn(),
+      db: {}
+    },
+    qdrant: {}
+  })
 }));
 
 vi.mock('../src/config.js', () => ({
@@ -35,6 +48,11 @@ vi.mock('../src/config.js', () => ({
 vi.mock('../src/prerequisites.js', () => ({
   validateIndexPrerequisites: vi.fn(),
   validateSearchPrerequisites: vi.fn()
+}));
+
+vi.mock('../src/path-validation.js', () => ({
+  validatePathWithinIndexedDirs: vi.fn(),
+  resolveIndexedDirectories: vi.fn().mockReturnValue(new Set())
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
@@ -54,7 +72,7 @@ describe('MCP Handlers Unit Tests', () => {
   });
 
   describe('handleIndexTool', () => {
-    it('should handle valid index request', async () => {
+    it('should handle valid index request with array input', async () => {
       const { indexDirectories } = await import('../src/indexing.js');
       vi.mocked(indexDirectories).mockResolvedValue({
         indexed: 5,
@@ -65,7 +83,7 @@ describe('MCP Handlers Unit Tests', () => {
       });
 
       const config = loadConfig();
-      const args = { directory_path: '/path1,/path2' };
+      const args = { directory_paths: ['/path1', '/path2'] };
 
       const result = await handleIndexTool(args, config);
 
@@ -73,20 +91,17 @@ describe('MCP Handlers Unit Tests', () => {
       expect(result).toEqual({
         content: [{
           type: 'text',
-          text: `Indexed 5 files, skipped 2 files, cleaned up 0 deleted files, 1 failed
-Errors: [
-  'error1'
-]`
+          text: `Indexed 5 files, skipped 2 files, cleaned up 0 deleted files, 1 failed\nErrors: [\n  'error1'\n]`
         }]
       });
     });
 
-    it('should throw error for missing directory_path', async () => {
+    it('should throw error for missing directory_paths', async () => {
       const config = loadConfig();
 
-      await expect(handleIndexTool({}, config)).rejects.toThrow('directory_path is required');
-      await expect(handleIndexTool(null, config)).rejects.toThrow('directory_path is required');
-      await expect(handleIndexTool({ directory_path: 123 }, config)).rejects.toThrow('directory_path is required');
+      await expect(handleIndexTool({}, config)).rejects.toThrow('directory_paths is required');
+      await expect(handleIndexTool(null, config)).rejects.toThrow('directory_paths is required');
+      await expect(handleIndexTool({ directory_paths: 'not-an-array' }, config)).rejects.toThrow('directory_paths is required');
     });
   });
 
@@ -272,6 +287,16 @@ Errors: [
       await expect(handleGetContentTool(null)).rejects.toThrow('file_path is required');
       await expect(handleGetContentTool({ file_path: 123 })).rejects.toThrow('file_path is required');
     });
+
+    it('should call path validation before reading content', async () => {
+      const { getFileContent } = await import('../src/search.js');
+      const { validatePathWithinIndexedDirs } = await import('../src/path-validation.js');
+      vi.mocked(getFileContent).mockResolvedValue('content');
+
+      await handleGetContentTool({ file_path: '/test/file.txt' });
+
+      expect(validatePathWithinIndexedDirs).toHaveBeenCalled();
+    });
   });
 
   describe('handleGetChunkTool', () => {
@@ -303,6 +328,16 @@ Errors: [
     it('should throw error for missing both parameters', async () => {
       await expect(handleGetChunkTool({})).rejects.toThrow('file_path and chunk_id are required');
       await expect(handleGetChunkTool(null)).rejects.toThrow('file_path and chunk_id are required');
+    });
+
+    it('should call path validation before reading chunk', async () => {
+      const { getChunkContent } = await import('../src/search.js');
+      const { validatePathWithinIndexedDirs } = await import('../src/path-validation.js');
+      vi.mocked(getChunkContent).mockResolvedValue('chunk content');
+
+      await handleGetChunkTool({ file_path: '/test/file.txt', chunk_id: '0' });
+
+      expect(validatePathWithinIndexedDirs).toHaveBeenCalled();
     });
   });
 

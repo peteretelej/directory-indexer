@@ -323,6 +323,9 @@ export class SQLiteStorage {
         CREATE INDEX IF NOT EXISTS idx_directories_path ON directories(path);
       `);
 
+      db.pragma('journal_mode = WAL');
+      db.pragma('busy_timeout = 5000');
+
       return db;
     } catch (error) {
       throw new StorageError(`Failed to initialize SQLite database`, error as Error);
@@ -412,10 +415,15 @@ export class SQLiteStorage {
     }
   }
 
+  getDirectories(): string[] {
+    const rows = this.db.prepare('SELECT path FROM directories').all() as { path: string }[];
+    return rows.map(row => row.path);
+  }
+
   async getFilesByDirectory(directoryPath: string): Promise<FileRecord[]> {
     try {
-      const stmt = this.db.prepare('SELECT * FROM files WHERE path LIKE ?');
-      const rows = stmt.all(`${directoryPath}%`) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
+      const stmt = this.db.prepare('SELECT * FROM files WHERE path = ? OR path LIKE ?');
+      const rows = stmt.all(directoryPath, `${directoryPath}/${"%"}`) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
       
       return rows.map(row => ({
         id: row.id,
@@ -839,12 +847,12 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     });
     
     const directoriesDetailStmt = sqlite.db.prepare(`
-      SELECT 
+      SELECT
         d.path,
         d.status,
         d.indexed_at,
-        (SELECT COUNT(*) FROM files f WHERE f.path LIKE d.path || '%') as files_count,
-        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE f.path LIKE d.path || '%' AND f.chunks_json IS NOT NULL) as chunks_count
+        (SELECT COUNT(*) FROM files f WHERE f.path = d.path OR f.path LIKE d.path || '/' || '%') as files_count,
+        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE (f.path = d.path OR f.path LIKE d.path || '/' || '%') AND f.chunks_json IS NOT NULL) as chunks_count
       FROM directories d
       ORDER BY d.indexed_at DESC
     `);
@@ -852,10 +860,10 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
       const errorsByDirStmt = sqlite.db.prepare(`
-        SELECT errors_json FROM files 
-        WHERE path LIKE ? || '%' AND errors_json IS NOT NULL
+        SELECT errors_json FROM files
+        WHERE (path = ? OR path LIKE ? || '/' || '%') AND errors_json IS NOT NULL
       `);
-      const dirErrors = errorsByDirStmt.all(row.path) as { errors_json: string }[];
+      const dirErrors = errorsByDirStmt.all(row.path, row.path) as { errors_json: string }[];
       
       const dirErrorsList: string[] = [];
       dirErrors.forEach(errorRow => {
