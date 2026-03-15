@@ -162,12 +162,10 @@ jobs:
           restore-keys: |
             build-
 
-      - name: Cache Docker images and Ollama models
+      - name: Cache Ollama models
         uses: actions/cache@v4
         with:
-          path: |
-            /tmp/docker-cache
-            /tmp/ollama-models
+          path: /tmp/ollama-models
           key: ollama-nomic-embed-text-v1
           restore-keys: |
             ollama-nomic-embed-text-
@@ -178,7 +176,7 @@ jobs:
       - name: Setup services for integration tests
         run: |
           # Create directories for caching
-          mkdir -p /tmp/docker-cache /tmp/ollama-models
+          mkdir -p /tmp/ollama-models
 
           # Pull Docker images (will use Docker's built-in layer cache)
           echo "Pulling Docker images..."
