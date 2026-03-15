@@ -3,6 +3,29 @@ import { Config } from './config.js';
 import { FileInfo, ChunkInfo, ensureDirectory } from './utils.js';
 import { dirname } from 'path';
 
+/**
+ * Escape special characters in a string for use in a SQL LIKE pattern.
+ * Escapes %, _, and \ using \ as the escape character.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Build a SQL WHERE clause that matches files within a directory,
+ * handling both `/` and `\` as path separators so queries work
+ * regardless of how paths were stored.
+ *
+ * Returns [clause, ...params] where clause uses `?` placeholders.
+ */
+function directoryLikeClause(column: string, dirPath: string): { clause: string; params: string[] } {
+  const escaped = escapeLike(dirPath);
+  return {
+    clause: `(${column} = ? OR ${column} LIKE ? ESCAPE '\\' OR ${column} LIKE ? ESCAPE '\\')`,
+    params: [dirPath, `${escaped}/%`, `${escaped}\\%`]
+  };
+}
+
 // Registry of all open SQLiteStorage instances for graceful shutdown
 const openStorageInstances = new Set<SQLiteStorage>();
 
@@ -439,9 +462,10 @@ export class SQLiteStorage {
 
   async getFilesByDirectory(directoryPath: string): Promise<FileRecord[]> {
     try {
-      const stmt = this.db.prepare('SELECT * FROM files WHERE path = ? OR path LIKE ?');
-      const rows = stmt.all(directoryPath, `${directoryPath}/${"%"}`) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
-      
+      const { clause, params } = directoryLikeClause('path', directoryPath);
+      const stmt = this.db.prepare(`SELECT * FROM files WHERE ${clause}`);
+      const rows = stmt.all(...params) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
+
       return rows.map(row => ({
         id: row.id,
         path: row.path,
@@ -462,9 +486,8 @@ export class SQLiteStorage {
   }
 
   deleteFilesByDirectory(directoryPath: string): number {
-    const result = this.db.prepare('DELETE FROM files WHERE path = ? OR path LIKE ?').run(
-      directoryPath, `${directoryPath}/%`
-    );
+    const { clause, params } = directoryLikeClause('path', directoryPath);
+    const result = this.db.prepare(`DELETE FROM files WHERE ${clause}`).run(...params);
     return result.changes;
   }
 
@@ -880,19 +903,20 @@ export async function getIndexStatus(): Promise<IndexStatus> {
         d.path,
         d.status,
         d.indexed_at,
-        (SELECT COUNT(*) FROM files f WHERE f.path = d.path OR f.path LIKE d.path || '/' || '%') as files_count,
-        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE (f.path = d.path OR f.path LIKE d.path || '/' || '%') AND f.chunks_json IS NOT NULL) as chunks_count
+        (SELECT COUNT(*) FROM files f WHERE f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') as files_count,
+        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE (f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') AND f.chunks_json IS NOT NULL) as chunks_count
       FROM directories d
       ORDER BY d.indexed_at DESC
     `);
     const directoryDetails = directoriesDetailStmt.all() as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number; files_count: number; chunks_count: number }[];
-    
+
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
+      const { clause, params } = directoryLikeClause('path', row.path);
       const errorsByDirStmt = sqlite.db.prepare(`
         SELECT errors_json FROM files
-        WHERE (path = ? OR path LIKE ? || '/' || '%') AND errors_json IS NOT NULL
+        WHERE ${clause} AND errors_json IS NOT NULL
       `);
-      const dirErrors = errorsByDirStmt.all(row.path, row.path) as { errors_json: string }[];
+      const dirErrors = errorsByDirStmt.all(...params) as { errors_json: string }[];
       
       const dirErrorsList: string[] = [];
       dirErrors.forEach(errorRow => {

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { loadConfig } from '../src/config.js';
 import { clearDatabase, clearVectorCollection } from '../src/storage.js';
 
@@ -49,7 +51,7 @@ describe('Storage Operations', () => {
   it('should clear database when no file exists', async () => {
     const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
     try {
-      process.env.DIRECTORY_INDEXER_DATA_DIR = `/tmp/test-clear-db-nonexistent-${Date.now()}`;
+      process.env.DIRECTORY_INDEXER_DATA_DIR = join(tmpdir(), `test-clear-db-nonexistent-${Date.now()}`);
       const config = loadConfig({ verbose: false });
       
       const result = await clearDatabase(config);
@@ -66,7 +68,7 @@ describe('Storage Operations', () => {
   it('should handle clearVectorCollection with invalid endpoint', async () => {
     const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
     try {
-      process.env.DIRECTORY_INDEXER_DATA_DIR = `/tmp/test-clear-collection-${Date.now()}`;
+      process.env.DIRECTORY_INDEXER_DATA_DIR = join(tmpdir(), `test-clear-collection-${Date.now()}`);
       const config = loadConfig({ verbose: false });
       config.storage.qdrantEndpoint = 'http://invalid-endpoint:9999';
       
@@ -86,7 +88,7 @@ describe('SQLite WAL Mode', () => {
     const { SQLiteStorage } = await import('../src/storage.js');
     const config = await loadConfig();
     // Use a temp file since :memory: databases don't persist WAL mode
-    const tmpPath = `/tmp/test-wal-mode-${Date.now()}.db`;
+    const tmpPath = join(tmpdir(), `test-wal-mode-${Date.now()}.db`);
     config.storage.sqlitePath = tmpPath;
     const storage = new SQLiteStorage(config);
 
@@ -115,7 +117,7 @@ describe('SQLiteStorage.getDirectories', () => {
       storage.db.prepare('INSERT INTO directories (path, status) VALUES (?, ?)').run('/dir2', 'pending');
 
       const dirs = storage.getDirectories();
-      expect(dirs).toEqual(['/dir1', '/dir2']);
+      expect(dirs.sort()).toEqual(['/dir1', '/dir2']);
     } finally {
       storage.close();
     }
@@ -159,7 +161,7 @@ describe('Storage Error Handling', () => {
   it('should handle getIndexStatus with temp directory', async () => {
     const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
     try {
-      const tempDir = `/tmp/test-index-status-${Date.now()}`;
+      const tempDir = join(tmpdir(), `test-index-status-${Date.now()}`);
       await import('fs/promises').then(fs => fs.mkdir(tempDir, { recursive: true }));
       process.env.DIRECTORY_INDEXER_DATA_DIR = tempDir;
       

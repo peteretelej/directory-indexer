@@ -456,6 +456,11 @@ describe('MCP Handlers Unit Tests', () => {
       expect(r2).toBeDefined();
       // Both should have completed
       expect(callOrder.filter(c => c.startsWith('start')).length).toBe(2);
+      // Verify serialization: first call must finish before second call starts
+      expect(callOrder[0]).toBe('start:/same');
+      expect(callOrder[1]).toBe('end:/same');
+      expect(callOrder[2]).toBe('start:/same');
+      expect(callOrder[3]).toBe('end:/same');
     });
   });
 
