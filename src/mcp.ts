@@ -9,14 +9,18 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Config } from './config.js';
-import { 
-  handleIndexTool, 
-  handleSearchTool, 
-  handleSimilarFilesTool, 
-  handleGetContentTool, 
-  handleGetChunkTool, 
+import { closeAllStorage } from './storage.js';
+import { initLogLevel, log } from './logger.js';
+import {
+  handleIndexTool,
+  handleSearchTool,
+  handleSimilarFilesTool,
+  handleGetContentTool,
+  handleGetChunkTool,
   handleServerInfoTool,
-  formatErrorResponse
+  handleDeleteIndexTool,
+  formatErrorResponse,
+  setMcpServer
 } from './mcp-handlers.js';
 
 // Read version from package.json
@@ -25,7 +29,46 @@ const packageJsonPath = join(__dirname, '../package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 const VERSION = packageJson.version;
 
-const MCP_TOOLS: Tool[] = [
+const DELETE_INDEX_TOOL: Tool = {
+  name: 'delete_index',
+  description: `Remove the index for a directory. Deletes all file records, vector embeddings, and the directory entry from the database.
+
+When to use this tool:
+- User wants to remove a directory from the search index
+- Cleaning up old or irrelevant indexed content
+- Freeing database space by removing unused indexes
+
+How it works:
+- Removes all file records for the specified directory from SQLite
+- Deletes corresponding vector embeddings from Qdrant
+- Removes the directory entry from the directories table
+- Does NOT delete the actual files on disk
+
+Examples:
+- Remove old project: directory_path="/home/user/old-project"
+- Clean up test data: directory_path="/home/user/test-files"
+
+Use server_info to see what directories are currently indexed before removing.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      directory_path: {
+        type: 'string',
+        description: 'Absolute path of the directory whose index should be removed'
+      }
+    },
+    required: ['directory_path']
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false
+  }
+};
+
+export function getMcpTools(): Tool[] {
+  const tools: Tool[] = [
   {
     name: 'index',
     description: `Index directories to make their files searchable. Processes files to create vector embeddings for semantic search.
@@ -42,20 +85,27 @@ How it works:
 - Stores in database for fast retrieval
 
 Examples:
-- Index documentation: "/home/user/docs/project-wiki"
-- Index codebase: "/home/user/projects/api-server"
-- Index multiple directories: "/home/user/docs,/home/user/configs"
+- Index documentation: ["/home/user/docs/project-wiki"]
+- Index codebase: ["/home/user/projects/api-server"]
+- Index multiple directories: ["/home/user/docs", "/home/user/configs"]
 
 Indexing can take several minutes for large directories. Most users will already have directories indexed and can directly use search tool. Use server_info to check current indexing status first.`,
     inputSchema: {
       type: 'object',
       properties: {
-        directory_path: {
-          type: 'string',
-          description: 'Comma-separated list of absolute directory paths to index. Must be absolute paths since MCP server runs independently. Examples: "/home/user/projects" (Unix) or "C:\\Users\\user\\projects" (Windows)'
+        directory_paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of absolute directory paths to index. Must be absolute paths since MCP server runs independently. Examples: ["/home/user/projects"] (Unix) or ["C:\\\\Users\\\\user\\\\projects"] (Windows)'
         }
       },
-      required: ['directory_path']
+      required: ['directory_paths']
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
     }
   },
   {
@@ -112,6 +162,11 @@ Example queries:
         }
       },
       required: ['query']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -154,6 +209,11 @@ Returns file paths with similarity scores. Use get_content to read full files or
         }
       },
       required: ['file_path']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -191,6 +251,11 @@ Returns file content as text. Use this after search or similar_files to read act
         }
       },
       required: ['file_path']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -228,6 +293,11 @@ Returns chunk content as text. Use this with chunk IDs from search results to ge
         }
       },
       required: ['file_path', 'chunk_id']
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   },
   {
@@ -259,11 +329,26 @@ Returns server version, indexing statistics, directory list, workspace informati
       type: 'object',
       properties: {},
       additionalProperties: false
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
     }
   }
-];
+  ];
+
+  // Include delete_index tool unless DISABLE_DESTRUCTIVE is set
+  if (process.env.DISABLE_DESTRUCTIVE !== 'true') {
+    tools.push(DELETE_INDEX_TOOL);
+  }
+
+  return tools;
+}
 
 export async function startMcpServer(config: Config): Promise<void> {
+  initLogLevel();
+
   const server = new Server(
     {
       name: 'directory-indexer',
@@ -271,14 +356,17 @@ export async function startMcpServer(config: Config): Promise<void> {
     },
     {
       capabilities: {
-        tools: {}
+        tools: {},
+        logging: {}
       }
     }
   );
 
+  setMcpServer(server);
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: MCP_TOOLS
+      tools: getMcpTools()
     };
   });
 
@@ -297,14 +385,20 @@ export async function startMcpServer(config: Config): Promise<void> {
           return await handleSimilarFilesTool(args);
         
         case 'get_content':
-          return await handleGetContentTool(args);
-        
+          return await handleGetContentTool(args, config);
+
         case 'get_chunk':
-          return await handleGetChunkTool(args);
+          return await handleGetChunkTool(args, config);
         
         case 'server_info':
           return await handleServerInfoTool(VERSION);
-        
+
+        case 'delete_index':
+          if (process.env.DISABLE_DESTRUCTIVE === 'true') {
+            throw new Error('delete_index is disabled via DISABLE_DESTRUCTIVE environment variable');
+          }
+          return await handleDeleteIndexTool(args, config);
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -315,8 +409,19 @@ export async function startMcpServer(config: Config): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
+
+  // Graceful shutdown: close all SQLite connections before exiting
+  const cleanup = () => {
+    log('info', 'Shutting down MCP server');
+    closeAllStorage();
+    process.exit(0);
+  };
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+
   if (config.verbose) {
     console.error('MCP server started successfully');
   }
+
+  log('info', 'MCP server started', { version: VERSION });
 }

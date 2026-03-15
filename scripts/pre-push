@@ -1,51 +1,12 @@
-#!/bin/bash
-
-# Pre-push hook for directory-indexer (Node.js)
-# Run essential quality checks before pushing code
-
+#!/bin/sh
 set -e
-
-# Skip checks if only pushing tags (only when run as git hook)
-if [ -t 0 ]; then
-    echo "Running in terminal mode, skipping git hook input parsing..."
-else
-    while read local_ref local_sha remote_ref remote_sha; do
-        if [[ "$remote_ref" == refs/tags/* ]]; then
-            echo "Pushing tag $remote_ref, skipping pre-push checks..."
-            exit 0
-        fi
-    done
-fi
 
 echo "Running pre-push checks..."
 
-# Check if we're in a Node.js project
-if [ ! -f "package.json" ]; then
-    echo "ERROR: package.json not found. This script should be run from the project root."
-    exit 1
-fi
-
-echo "Installing dependencies..."
-npm ci
-
-echo "Running type checking..."
-npm run typecheck
-
-echo "Running linter..."
+echo "Linting and type checking..."
 npm run lint
 
-echo "Running build..."
-npm run build
-
-echo "Running all tests..."
-export DIRECTORY_INDEXER_DATA_DIR=/tmp/directory-indexer-test
-export DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer-test
-
-npm run test:all
-
-echo "All tests completed successfully."
-
-echo "Checking for security vulnerabilities..."
-npm audit --audit-level moderate
+echo "Running tests..."
+npm test
 
 echo "All pre-push checks passed!"

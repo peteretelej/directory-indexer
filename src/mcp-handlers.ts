@@ -1,13 +1,80 @@
 import { Config } from './config.js';
 import { indexDirectories } from './indexing.js';
 import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from './search.js';
-import { getIndexStatus } from './storage.js';
+import { getIndexStatus, SQLiteStorage, initializeStorage } from './storage.js';
 import { validateIndexPrerequisites, validateSearchPrerequisites } from './prerequisites.js';
+import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from './path-validation.js';
+import { log } from './logger.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { resolve, sep } from 'path';
+import { realpathSync } from 'fs';
+
+// MCP server reference for sending client-visible log notifications
+let mcpServer: Server | null = null;
+
+/**
+ * Set the MCP server reference for logging notifications.
+ * Called from startMcpServer() after server creation.
+ */
+export function setMcpServer(server: Server): void {
+  mcpServer = server;
+}
+
+/**
+ * Normalize a directory path for use as a mutex key.
+ * Resolves symlinks, makes absolute, and strips trailing separators
+ * so that '/repo', '/repo/', and symlinks all map to the same key.
+ */
+function normalizeMutexKey(dirPath: string): string {
+  let normalized: string;
+  try {
+    normalized = realpathSync(resolve(dirPath));
+  } catch {
+    // Directory may not exist yet; fall back to resolve only
+    normalized = resolve(dirPath);
+  }
+  // Strip trailing separator (but keep root '/' or 'C:\')
+  while (normalized.length > 1 && normalized.endsWith(sep)) {
+    normalized = normalized.slice(0, -sep.length);
+  }
+  return normalized;
+}
+
+// Workspace-level indexing mutex: keyed by normalized directory path
+const indexingMutex = new Map<string, Promise<void>>();
+
+// Cached set of resolved indexed directory paths for path validation
+let indexedDirsCache: Set<string> = new Set();
+let indexedDirsCacheInitialized = false;
+
+/**
+ * Refresh the indexed directories cache from storage.
+ * Exported for testability.
+ */
+export function refreshIndexedDirsCache(storage: SQLiteStorage): void {
+  indexedDirsCache = resolveIndexedDirectories(storage);
+  indexedDirsCacheInitialized = true;
+}
+
+/**
+ * Ensure the cache is populated, lazily initializing from SQLite only (no Qdrant).
+ * Uses a boolean flag so an empty result doesn't re-trigger initialization.
+ */
+async function ensureIndexedDirsCache(config: Config): Promise<void> {
+  if (!indexedDirsCacheInitialized) {
+    const sqlite = new SQLiteStorage(config);
+    try {
+      refreshIndexedDirsCache(sqlite);
+    } finally {
+      sqlite.close();
+    }
+  }
+}
 
 // Type-safe interfaces for MCP tool arguments
 interface IndexToolArgs {
-  directory_path: string;
+  directory_paths: string[];
 }
 
 interface SearchToolArgs {
@@ -32,10 +99,14 @@ interface GetChunkToolArgs {
   chunk_id: string;
 }
 
+interface DeleteIndexToolArgs {
+  directory_path: string;
+}
+
 // Type guard functions
 function isIndexToolArgs(args: unknown): args is IndexToolArgs {
-  return typeof args === 'object' && args !== null && 
-         typeof (args as IndexToolArgs).directory_path === 'string';
+  return typeof args === 'object' && args !== null &&
+         Array.isArray((args as IndexToolArgs).directory_paths);
 }
 
 function isSearchToolArgs(args: unknown): args is SearchToolArgs {
@@ -54,40 +125,91 @@ function isGetContentToolArgs(args: unknown): args is GetContentToolArgs {
 }
 
 function isGetChunkToolArgs(args: unknown): args is GetChunkToolArgs {
-  return typeof args === 'object' && args !== null && 
+  return typeof args === 'object' && args !== null &&
          typeof (args as GetChunkToolArgs).file_path === 'string' &&
          typeof (args as GetChunkToolArgs).chunk_id === 'string';
 }
 
+function isDeleteIndexToolArgs(args: unknown): args is DeleteIndexToolArgs {
+  return typeof args === 'object' && args !== null &&
+         typeof (args as DeleteIndexToolArgs).directory_path === 'string';
+}
+
 export async function handleIndexTool(args: unknown, config: Config): Promise<CallToolResult> {
   if (!isIndexToolArgs(args)) {
-    throw new Error('directory_path is required');
+    throw new Error('directory_paths is required and must be an array');
   }
-  
+
   // Validate prerequisites before proceeding
   await validateIndexPrerequisites(config);
-  
-  const paths = args.directory_path.split(',').map((p: string) => p.trim());
-  const result = await indexDirectories(paths, config);
-  
-  let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
-  
-  if (result.errors.length > 0) {
-    responseText += `\nErrors: [\n`;
-    result.errors.forEach(error => {
-      responseText += `  '${error}'\n`;
-    });
-    responseText += `]`;
+
+  const paths = args.directory_paths.map((p: string) => p.trim());
+  const mutexKeys = paths.map(normalizeMutexKey);
+
+  log('info', 'Index start', { directories: paths });
+  mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_start', directories: paths } });
+
+  // Per-directory mutex: serialize concurrent calls targeting the same directory
+  for (const key of mutexKeys) {
+    const existing = indexingMutex.get(key);
+    if (existing) {
+      log('info', 'Waiting for ongoing indexing', { directory: key });
+      await existing;
+    }
   }
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: responseText
-      }
-    ]
-  };
+
+  // Create a deferred promise for this indexing operation
+  let resolveIndexing: () => void;
+  const indexingPromise = new Promise<void>((resolve) => { resolveIndexing = resolve; });
+  for (const key of mutexKeys) {
+    indexingMutex.set(key, indexingPromise);
+  }
+
+  try {
+    const result = await indexDirectories(paths, config);
+
+    // Refresh the indexed directories cache after successful indexing
+    const { sqlite } = await initializeStorage(config);
+    try {
+      refreshIndexedDirsCache(sqlite);
+    } finally {
+      sqlite.close();
+    }
+
+    log('info', 'Index complete', { result });
+    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_complete', result } });
+
+    let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
+
+    if (result.errors.length > 0) {
+      responseText += `\nErrors: [\n`;
+      result.errors.forEach(error => {
+        responseText += `  '${error}'\n`;
+      });
+      responseText += `]`;
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: responseText
+        }
+      ]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log('error', 'Index error', { error: errorMessage, directories: paths });
+    mcpServer?.sendLoggingMessage({ level: 'error', data: { event: 'index_error', error: errorMessage } });
+    throw new Error(
+      `Indexing failed for ${paths.join(', ')}. Verify the directory exists and is readable. Use 'server_info' to check current status.`
+    );
+  } finally {
+    resolveIndexing!();
+    for (const key of mutexKeys) {
+      indexingMutex.delete(key);
+    }
+  }
 }
 
 async function validateWorkspace(workspace?: string): Promise<{ workspace?: string; message?: string }> {
@@ -151,38 +273,68 @@ export async function handleSimilarFilesTool(args: unknown): Promise<CallToolRes
   };
 }
 
-export async function handleGetContentTool(args: unknown): Promise<CallToolResult> {
+export async function handleGetContentTool(args: unknown, config?: Config): Promise<CallToolResult> {
   if (!isGetContentToolArgs(args)) {
     throw new Error('file_path is required');
   }
-  
-  const content = await getFileContent(args.file_path, args.chunks);
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: content
-      }
-    ]
-  };
+
+  // Lazily populate cache and validate path
+  const resolvedConfig = config || (await import('./config.js')).loadConfig();
+  await ensureIndexedDirsCache(resolvedConfig);
+  validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
+
+  try {
+    const content = await getFileContent(args.file_path, args.chunks);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: content
+        }
+      ]
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('ENOENT') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no such file')) {
+      throw new Error(
+        `File not found: ${args.file_path}. The file may have been moved or deleted. Use 'search' to find similar content.`
+      );
+    }
+    throw error;
+  }
 }
 
-export async function handleGetChunkTool(args: unknown): Promise<CallToolResult> {
+export async function handleGetChunkTool(args: unknown, config?: Config): Promise<CallToolResult> {
   if (!isGetChunkToolArgs(args)) {
     throw new Error('file_path and chunk_id are required');
   }
-  
-  const content = await getChunkContent(args.file_path, args.chunk_id);
-  
-  return {
-    content: [
-      {
-        type: 'text',
-        text: content
-      }
-    ]
-  };
+
+  // Lazily populate cache and validate path
+  const resolvedConfig = config || (await import('./config.js')).loadConfig();
+  await ensureIndexedDirsCache(resolvedConfig);
+  validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
+
+  try {
+    const content = await getChunkContent(args.file_path, args.chunk_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: content
+        }
+      ]
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('ENOENT') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no such file')) {
+      throw new Error(
+        `File not found: ${args.file_path}. The file may have been moved or deleted. Use 'search' to find similar content.`
+      );
+    }
+    throw error;
+  }
 }
 
 export async function handleServerInfoTool(version: string): Promise<CallToolResult> {
@@ -202,8 +354,91 @@ export async function handleServerInfoTool(version: string): Promise<CallToolRes
   };
 }
 
+export async function handleDeleteIndexTool(args: unknown, config: Config): Promise<CallToolResult> {
+  if (!isDeleteIndexToolArgs(args)) {
+    throw new Error('directory_path is required');
+  }
+
+  const dirPath = args.directory_path.trim();
+  const mutexKey = normalizeMutexKey(dirPath);
+
+  // Acquire per-directory mutex to avoid racing with in-flight indexing
+  const existing = indexingMutex.get(mutexKey);
+  if (existing) {
+    log('info', 'Waiting for ongoing indexing before delete', { directory: dirPath });
+    await existing;
+  }
+
+  let resolveDelete: () => void;
+  const deletePromise = new Promise<void>((r) => { resolveDelete = r; });
+  indexingMutex.set(mutexKey, deletePromise);
+
+  const { sqlite, qdrant } = await initializeStorage(config);
+
+  try {
+    // Check if the directory is actually indexed
+    const directory = await sqlite.getDirectory(dirPath);
+    if (!directory) {
+      throw new Error(
+        `Directory '${dirPath}' is not indexed. Use 'server_info' to see indexed directories.`
+      );
+    }
+
+    // Get files for this directory to clean up Qdrant points
+    const files = await sqlite.getFilesByDirectory(dirPath);
+    const vectorErrors: string[] = [];
+    for (const file of files) {
+      try {
+        await qdrant.deletePointsByFilePath(file.path);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        log('warning', 'Failed to delete Qdrant points for file', {
+          path: file.path,
+          error: msg
+        });
+        vectorErrors.push(`${file.path}: ${msg}`);
+      }
+    }
+
+    // If any vector deletions failed, abort to prevent orphaned vectors
+    if (vectorErrors.length > 0) {
+      throw new Error(
+        `Aborting delete: failed to remove vector embeddings for ${vectorErrors.length} file(s). ` +
+        `SQLite rows were NOT deleted to avoid orphaned vectors.\n` +
+        vectorErrors.join('\n')
+      );
+    }
+
+    // Delete file records and directory record from SQLite
+    const deletedFiles = sqlite.deleteFilesByDirectory(dirPath);
+    sqlite.deleteDirectory(dirPath);
+
+    // Refresh the indexed directories cache
+    refreshIndexedDirsCache(sqlite);
+
+    const chunksCount = files.reduce((sum, f) => sum + (f.chunks?.length || 0), 0);
+
+    log('info', 'Index deleted', { directory: dirPath, files: deletedFiles, chunks: chunksCount });
+    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_deleted', directory: dirPath } });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Deleted index for ${dirPath}: removed ${deletedFiles} files and ${chunksCount} chunks`
+        }
+      ]
+    };
+  } finally {
+    resolveDelete!();
+    indexingMutex.delete(mutexKey);
+    sqlite.close();
+  }
+}
+
 export function formatErrorResponse(error: unknown): CallToolResult {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  log('error', 'Tool error', { error: errorMessage });
   return {
     content: [
       {

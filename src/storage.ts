@@ -3,6 +3,45 @@ import { Config } from './config.js';
 import { FileInfo, ChunkInfo, ensureDirectory } from './utils.js';
 import { dirname } from 'path';
 
+/**
+ * Escape special characters in a string for use in a SQL LIKE pattern.
+ * Escapes %, _, and \ using \ as the escape character.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Build a SQL WHERE clause that matches files within a directory,
+ * handling both `/` and `\` as path separators so queries work
+ * regardless of how paths were stored.
+ *
+ * Returns [clause, ...params] where clause uses `?` placeholders.
+ */
+function directoryLikeClause(column: string, dirPath: string): { clause: string; params: string[] } {
+  const escaped = escapeLike(dirPath);
+  return {
+    clause: `(${column} = ? OR ${column} LIKE ? ESCAPE '\\' OR ${column} LIKE ? ESCAPE '\\')`,
+    params: [dirPath, `${escaped}/%`, `${escaped}\\%`]
+  };
+}
+
+// Registry of all open SQLiteStorage instances for graceful shutdown
+const openStorageInstances = new Set<SQLiteStorage>();
+
+/**
+ * Close all open SQLiteStorage instances. Called during graceful shutdown.
+ */
+export function closeAllStorage(): void {
+  for (const instance of openStorageInstances) {
+    try {
+      instance.close();
+    } catch {
+      // Ignore errors during shutdown cleanup
+    }
+  }
+}
+
 export interface DirectoryRecord {
   id: number;
   path: string;
@@ -291,6 +330,7 @@ export class SQLiteStorage {
 
   constructor(private config: Config) {
     this.db = this.initializeDatabase();
+    openStorageInstances.add(this);
   }
 
   private initializeDatabase(): Database.Database {
@@ -322,6 +362,9 @@ export class SQLiteStorage {
         CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
         CREATE INDEX IF NOT EXISTS idx_directories_path ON directories(path);
       `);
+
+      db.pragma('journal_mode = WAL');
+      db.pragma('busy_timeout = 5000');
 
       return db;
     } catch (error) {
@@ -412,11 +455,17 @@ export class SQLiteStorage {
     }
   }
 
+  getDirectories(): string[] {
+    const rows = this.db.prepare('SELECT path FROM directories').all() as { path: string }[];
+    return rows.map(row => row.path);
+  }
+
   async getFilesByDirectory(directoryPath: string): Promise<FileRecord[]> {
     try {
-      const stmt = this.db.prepare('SELECT * FROM files WHERE path LIKE ?');
-      const rows = stmt.all(`${directoryPath}%`) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
-      
+      const { clause, params } = directoryLikeClause('path', directoryPath);
+      const stmt = this.db.prepare(`SELECT * FROM files WHERE ${clause}`);
+      const rows = stmt.all(...params) as { id: number; path: string; size: number; modified_time: number; hash: string; parent_dirs: string; chunks_json: string | null; errors_json: string | null }[];
+
       return rows.map(row => ({
         id: row.id,
         path: row.path,
@@ -432,7 +481,18 @@ export class SQLiteStorage {
     }
   }
 
+  deleteDirectory(path: string): void {
+    this.db.prepare('DELETE FROM directories WHERE path = ?').run(path);
+  }
+
+  deleteFilesByDirectory(directoryPath: string): number {
+    const { clause, params } = directoryLikeClause('path', directoryPath);
+    const result = this.db.prepare(`DELETE FROM files WHERE ${clause}`).run(...params);
+    return result.changes;
+  }
+
   close(): void {
+    openStorageInstances.delete(this);
     this.db.close();
   }
 }
@@ -839,23 +899,24 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     });
     
     const directoriesDetailStmt = sqlite.db.prepare(`
-      SELECT 
+      SELECT
         d.path,
         d.status,
         d.indexed_at,
-        (SELECT COUNT(*) FROM files f WHERE f.path LIKE d.path || '%') as files_count,
-        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE f.path LIKE d.path || '%' AND f.chunks_json IS NOT NULL) as chunks_count
+        (SELECT COUNT(*) FROM files f WHERE f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') as files_count,
+        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE (f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') AND f.chunks_json IS NOT NULL) as chunks_count
       FROM directories d
       ORDER BY d.indexed_at DESC
     `);
     const directoryDetails = directoriesDetailStmt.all() as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number; files_count: number; chunks_count: number }[];
-    
+
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
+      const { clause, params } = directoryLikeClause('path', row.path);
       const errorsByDirStmt = sqlite.db.prepare(`
-        SELECT errors_json FROM files 
-        WHERE path LIKE ? || '%' AND errors_json IS NOT NULL
+        SELECT errors_json FROM files
+        WHERE ${clause} AND errors_json IS NOT NULL
       `);
-      const dirErrors = errorsByDirStmt.all(row.path) as { errors_json: string }[];
+      const dirErrors = errorsByDirStmt.all(...params) as { errors_json: string }[];
       
       const dirErrorsList: string[] = [];
       dirErrors.forEach(errorRow => {

@@ -43,15 +43,13 @@ jobs:
           node-version: "18"
           cache: "npm"
 
-      - name: Cache Docker images and Ollama models
+      - name: Cache Ollama models
         uses: actions/cache@v4
         with:
-          path: |
-            /tmp/docker-cache
-            /tmp/ollama-models
-          key: integration-cache-${{ hashFiles('.github/workflows/release.yml') }}-v2
+          path: /tmp/ollama-models
+          key: ollama-nomic-embed-text-v1
           restore-keys: |
-            integration-cache-
+            ollama-nomic-embed-text-
 
       - name: Install dependencies
         run: npm ci
@@ -68,12 +66,12 @@ jobs:
       - name: Setup services for integration tests
         run: |
           # Create directories for caching
-          mkdir -p /tmp/docker-cache /tmp/ollama-models
+          mkdir -p /tmp/ollama-models
 
           # Pull Docker images (will use Docker's built-in layer cache)
           echo "Pulling Docker images..."
           docker pull qdrant/qdrant:v1.11.0 &
-          docker pull ollama/ollama:0.3.12 &
+          docker pull ollama/ollama:latest &
           wait
           echo "✅ Docker images ready"
 
@@ -87,7 +85,7 @@ jobs:
             -p 11434:11434 \
             -v /tmp/ollama-models:/root/.ollama \
             -e OLLAMA_HOST=0.0.0.0 \
-            ollama/ollama:0.3.12
+            ollama/ollama:latest
 
           # Wait for services
           echo "Waiting for Qdrant..."
@@ -98,12 +96,12 @@ jobs:
           timeout 180 bash -c 'until curl -f http://localhost:11434/api/tags; do echo "  Ollama not ready, waiting..."; sleep 5; done'
           echo "✅ Ollama is ready!"
 
-          # Check if model is already cached
+          # Pull model (ollama CLI handles retries and stall detection internally)
           if [ -f "/tmp/ollama-models/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest" ]; then
             echo "✅ nomic-embed-text model found in cache"
           else
             echo "Pulling nomic-embed-text model..."
-            curl -X POST http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}' --max-time 300
+            docker exec ollama ollama pull nomic-embed-text
             echo "✅ Model pull completed"
           fi
 
