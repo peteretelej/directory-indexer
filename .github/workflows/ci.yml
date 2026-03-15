@@ -183,7 +183,7 @@ jobs:
           # Pull Docker images (will use Docker's built-in layer cache)
           echo "Pulling Docker images..."
           docker pull qdrant/qdrant:v1.11.0 &
-          docker pull ollama/ollama:0.3.12 &
+          docker pull ollama/ollama:latest &
           wait
           echo "✅ Docker images ready"
 
@@ -197,7 +197,7 @@ jobs:
             -p 11434:11434 \
             -v /tmp/ollama-models:/root/.ollama \
             -e OLLAMA_HOST=0.0.0.0 \
-            ollama/ollama:0.3.12
+            ollama/ollama:latest
 
           # Wait for services
           echo "Waiting for Qdrant..."
@@ -208,24 +208,13 @@ jobs:
           timeout 180 bash -c 'until curl -f http://localhost:11434/api/tags; do echo "  Ollama not ready, waiting..."; sleep 5; done'
           echo "✅ Ollama is ready!"
 
-          # Check if model is already cached
+          # Pull model (ollama CLI handles retries and stall detection internally)
           if [ -f "/tmp/ollama-models/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest" ]; then
             echo "✅ nomic-embed-text model found in cache"
           else
-            echo "Pulling nomic-embed-text model (with retry)..."
-            for attempt in 1 2 3 4 5; do
-              echo "  Attempt $attempt/5..."
-              if curl -X POST http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}' --max-time 600 2>&1; then
-                echo "✅ Model pull completed"
-                break
-              fi
-              if [ $attempt -eq 5 ]; then
-                echo "❌ Failed to pull model after 5 attempts"
-                exit 1
-              fi
-              echo "  Retrying in 10s (partial progress is preserved)..."
-              sleep 10
-            done
+            echo "Pulling nomic-embed-text model..."
+            docker exec ollama ollama pull nomic-embed-text
+            echo "✅ Model pull completed"
           fi
 
       - name: Build
