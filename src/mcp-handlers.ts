@@ -7,6 +7,8 @@ import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from './path
 import { log } from './logger.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { resolve, sep } from 'path';
+import { realpathSync } from 'fs';
 
 // MCP server reference for sending client-visible log notifications
 let mcpServer: Server | null = null;
@@ -19,11 +21,32 @@ export function setMcpServer(server: Server): void {
   mcpServer = server;
 }
 
+/**
+ * Normalize a directory path for use as a mutex key.
+ * Resolves symlinks, makes absolute, and strips trailing separators
+ * so that '/repo', '/repo/', and symlinks all map to the same key.
+ */
+function normalizeMutexKey(dirPath: string): string {
+  let normalized: string;
+  try {
+    normalized = realpathSync(resolve(dirPath));
+  } catch {
+    // Directory may not exist yet; fall back to resolve only
+    normalized = resolve(dirPath);
+  }
+  // Strip trailing separator (but keep root '/' or 'C:\')
+  while (normalized.length > 1 && normalized.endsWith(sep)) {
+    normalized = normalized.slice(0, -sep.length);
+  }
+  return normalized;
+}
+
 // Workspace-level indexing mutex: keyed by normalized directory path
 const indexingMutex = new Map<string, Promise<void>>();
 
 // Cached set of resolved indexed directory paths for path validation
 let indexedDirsCache: Set<string> = new Set();
+let indexedDirsCacheInitialized = false;
 
 /**
  * Refresh the indexed directories cache from storage.
@@ -31,14 +54,16 @@ let indexedDirsCache: Set<string> = new Set();
  */
 export function refreshIndexedDirsCache(storage: SQLiteStorage): void {
   indexedDirsCache = resolveIndexedDirectories(storage);
+  indexedDirsCacheInitialized = true;
 }
 
 /**
- * Ensure the cache is populated, lazily initializing from storage if empty.
+ * Ensure the cache is populated, lazily initializing from SQLite only (no Qdrant).
+ * Uses a boolean flag so an empty result doesn't re-trigger initialization.
  */
 async function ensureIndexedDirsCache(config: Config): Promise<void> {
-  if (indexedDirsCache.size === 0) {
-    const { sqlite } = await initializeStorage(config);
+  if (!indexedDirsCacheInitialized) {
+    const sqlite = new SQLiteStorage(config);
     try {
       refreshIndexedDirsCache(sqlite);
     } finally {
@@ -119,15 +144,16 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   await validateIndexPrerequisites(config);
 
   const paths = args.directory_paths.map((p: string) => p.trim());
+  const mutexKeys = paths.map(normalizeMutexKey);
 
   log('info', 'Index start', { directories: paths });
   mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_start', directories: paths } });
 
   // Per-directory mutex: serialize concurrent calls targeting the same directory
-  for (const dirPath of paths) {
-    const existing = indexingMutex.get(dirPath);
+  for (const key of mutexKeys) {
+    const existing = indexingMutex.get(key);
     if (existing) {
-      log('info', 'Waiting for ongoing indexing', { directory: dirPath });
+      log('info', 'Waiting for ongoing indexing', { directory: key });
       await existing;
     }
   }
@@ -135,8 +161,8 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   // Create a deferred promise for this indexing operation
   let resolveIndexing: () => void;
   const indexingPromise = new Promise<void>((resolve) => { resolveIndexing = resolve; });
-  for (const dirPath of paths) {
-    indexingMutex.set(dirPath, indexingPromise);
+  for (const key of mutexKeys) {
+    indexingMutex.set(key, indexingPromise);
   }
 
   try {
@@ -180,8 +206,8 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
     );
   } finally {
     resolveIndexing!();
-    for (const dirPath of paths) {
-      indexingMutex.delete(dirPath);
+    for (const key of mutexKeys) {
+      indexingMutex.delete(key);
     }
   }
 }
@@ -334,6 +360,19 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
   }
 
   const dirPath = args.directory_path.trim();
+  const mutexKey = normalizeMutexKey(dirPath);
+
+  // Acquire per-directory mutex to avoid racing with in-flight indexing
+  const existing = indexingMutex.get(mutexKey);
+  if (existing) {
+    log('info', 'Waiting for ongoing indexing before delete', { directory: dirPath });
+    await existing;
+  }
+
+  let resolveDelete: () => void;
+  const deletePromise = new Promise<void>((r) => { resolveDelete = r; });
+  indexingMutex.set(mutexKey, deletePromise);
+
   const { sqlite, qdrant } = await initializeStorage(config);
 
   try {
@@ -347,15 +386,27 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
 
     // Get files for this directory to clean up Qdrant points
     const files = await sqlite.getFilesByDirectory(dirPath);
+    const vectorErrors: string[] = [];
     for (const file of files) {
       try {
         await qdrant.deletePointsByFilePath(file.path);
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         log('warning', 'Failed to delete Qdrant points for file', {
           path: file.path,
-          error: error instanceof Error ? error.message : String(error)
+          error: msg
         });
+        vectorErrors.push(`${file.path}: ${msg}`);
       }
+    }
+
+    // If any vector deletions failed, abort to prevent orphaned vectors
+    if (vectorErrors.length > 0) {
+      throw new Error(
+        `Aborting delete: failed to remove vector embeddings for ${vectorErrors.length} file(s). ` +
+        `SQLite rows were NOT deleted to avoid orphaned vectors.\n` +
+        vectorErrors.join('\n')
+      );
     }
 
     // Delete file records and directory record from SQLite
@@ -379,6 +430,8 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
       ]
     };
   } finally {
+    resolveDelete!();
+    indexingMutex.delete(mutexKey);
     sqlite.close();
   }
 }

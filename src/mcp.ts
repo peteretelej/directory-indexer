@@ -394,6 +394,9 @@ export async function startMcpServer(config: Config): Promise<void> {
           return await handleServerInfoTool(VERSION);
 
         case 'delete_index':
+          if (process.env.DISABLE_DESTRUCTIVE === 'true') {
+            throw new Error('delete_index is disabled via DISABLE_DESTRUCTIVE environment variable');
+          }
           return await handleDeleteIndexTool(args, config);
 
         default:
