@@ -49,9 +49,9 @@ jobs:
           path: |
             /tmp/docker-cache
             /tmp/ollama-models
-          key: integration-cache-${{ hashFiles('.github/workflows/release.yml') }}-v2
+          key: ollama-nomic-embed-text-v1
           restore-keys: |
-            integration-cache-
+            ollama-nomic-embed-text-
 
       - name: Install dependencies
         run: npm ci
