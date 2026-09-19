@@ -12,11 +12,12 @@ export function checkServicesAvailable(): Promise<boolean> {
 }
 
 export async function checkQdrantHealth(): Promise<boolean> {
+  const endpoint = process.env.QDRANT_ENDPOINT || 'http://127.0.0.1:6333';
   try {
-    const response = await fetch('http://localhost:6333/healthz');
+    const response = await fetch(`${endpoint}/healthz`);
     if (!response.ok) return false;
-    
-    const collectionsResponse = await fetch('http://localhost:6333/collections');
+
+    const collectionsResponse = await fetch(`${endpoint}/collections`);
     return collectionsResponse.ok;
   } catch {
     return false;
@@ -24,11 +25,12 @@ export async function checkQdrantHealth(): Promise<boolean> {
 }
 
 export async function checkOllamaHealth(): Promise<boolean> {
+  const endpoint = process.env.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
   try {
-    const response = await fetch('http://localhost:11434/api/tags');
+    const response = await fetch(`${endpoint}/api/tags`);
     if (!response.ok) return false;
-    
-    await fetch('http://localhost:11434/api/embeddings', {
+
+    await fetch(`${endpoint}/api/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -36,7 +38,7 @@ export async function checkOllamaHealth(): Promise<boolean> {
         prompt: 'test'
       })
     });
-    
+
     return response.ok;
   } catch {
     return false;
