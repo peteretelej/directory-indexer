@@ -5,7 +5,7 @@ import { setupServicesCheck, getTestDataPath } from '../utils/test-helpers.js';
 import { loadConfig } from '../../src/config.js';
 import { startMcpServer } from '../../src/mcp.js';
 
-describe.sequential('MCP Server Integration Tests', () => {
+describe('MCP Server Integration Tests', () => {
   beforeAll(async () => {
     await setupServicesCheck();
   });

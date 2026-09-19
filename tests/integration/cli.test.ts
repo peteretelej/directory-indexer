@@ -15,7 +15,7 @@ import { indexDirectories, getFileMetadata, chunkText, scanDirectory } from '../
 import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from '../../src/search.js';
 import { getIndexStatus } from '../../src/storage.js';
 
-describe.sequential('CLI Commands Integration Tests', () => {
+describe('CLI Commands Integration Tests', () => {
   beforeAll(async () => {
     await setupServicesCheck();
   });
@@ -232,7 +232,7 @@ describe.sequential('CLI Commands Integration Tests', () => {
         const docsResults = await searchContent('API', { workspace: 'docs', limit: 10 });
         
         if (docsResults.length > 0) {
-          expect(docsResults.every(r => r.filePath.includes('/docs/'))).toBe(true);
+          expect(docsResults.every(r => r.filePath.replace(/\\/g, '/').includes('/docs/'))).toBe(true);
         }
         
         const codeResults = await searchContent('function', { workspace: 'docs', limit: 10 });

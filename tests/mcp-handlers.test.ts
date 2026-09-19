@@ -502,7 +502,7 @@ describe('MCP Handlers Unit Tests', () => {
         connect: vi.fn().mockResolvedValue(undefined),
         sendLoggingMessage: vi.fn()
       };
-      vi.mocked(Server).mockReturnValue(mockServer as any);
+      vi.mocked(Server).mockImplementation((function () { return mockServer; }) as any);
 
       const config = { verbose: false } as any;
 

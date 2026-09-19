@@ -13,7 +13,7 @@ import { createEmbeddingProvider } from '../../src/embedding.js';
 import { normalizePath, calculateHash, fileExists } from '../../src/utils.js';
 import { clearGitignoreCache } from '../../src/gitignore.js';
 
-describe.sequential('Core Functionality Integration Tests', () => {
+describe('Core Functionality Integration Tests', () => {
   beforeAll(async () => {
     await setupServicesCheck();
   });

@@ -1,6 +1,6 @@
 {
   "name": "directory-indexer",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "AI-powered directory indexing with semantic search for MCP servers",
   "main": "dist/cli.js",
   "bin": {
@@ -11,7 +11,7 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "npm run test:unit",
-    "test:unit": "vitest run tests/*.unit.test.ts tests/mcp-handlers.test.ts tests/prerequisites.test.ts",
+    "test:unit": "vitest run tests --exclude \"tests/integration/**\" --exclude \"tests/integration.test.ts\"",
     "test:integration": "vitest run tests/integration/",
     "test:all": "vitest run",
     "test:watch": "vitest",
@@ -42,33 +42,27 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "publishConfig": {
-    "provenance": true,
-    "access": "public"
-  },
   "files": [
     "dist/",
     "bin/"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "better-sqlite3": "^11.5.0",
-    "commander": "^12.1.0",
-    "ignore": "^7.0.5",
-    "mime-types": "^2.1.35",
-    "zod": "^3.25.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^11.10.0",
+    "commander": "^13.1.0",
+    "ignore": "^7.0.9",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
-    "@types/mime-types": "^2.1.4",
-    "@types/node": "^22.10.1",
-    "@typescript-eslint/eslint-plugin": "^8.53.0",
-    "@typescript-eslint/parser": "^8.53.0",
-    "@vitest/coverage-v8": "^3.2.4",
-    "eslint": "^9.39.2",
-    "tmp": "^0.2.4",
+    "@eslint/js": "^9.39.5",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^18.19.130",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "@vitest/coverage-v8": "^3.2.7",
+    "eslint": "^9.39.5",
     "typescript": "^5.9.3",
-    "vite": "^6.4.1",
-    "vitest": "^3.2.4"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
   }
 }

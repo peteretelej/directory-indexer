@@ -14,14 +14,14 @@ const WorkspaceSchema = z.object({
 const ConfigSchema = z.object({
   storage: z.object({
     sqlitePath: z.string(),
-    qdrantEndpoint: z.string().url(),
+    qdrantEndpoint: z.url(),
     qdrantCollection: z.string(),
     qdrantApiKey: z.string().optional(),
   }),
   embedding: z.object({
     provider: z.enum(['ollama', 'openai', 'mock']),
     model: z.string(),
-    endpoint: z.string().url(),
+    endpoint: z.url(),
   }),
   indexing: z.object({
     chunkSize: z.number().positive(),
@@ -32,7 +32,7 @@ const ConfigSchema = z.object({
   }),
   dataDir: z.string(),
   verbose: z.boolean(),
-  workspaces: z.record(WorkspaceSchema),
+  workspaces: z.record(z.string(), WorkspaceSchema),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -135,7 +135,7 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
     return ConfigSchema.parse(config);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const messages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      const messages = error.issues.map(e => `${e.path.join('.')}: ${e.message}`);
       throw new ConfigError(`Configuration validation failed: ${messages.join(', ')}`, error);
     }
     throw new ConfigError('Failed to load configuration', error as Error);

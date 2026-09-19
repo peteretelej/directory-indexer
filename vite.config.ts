@@ -47,10 +47,9 @@ export default defineConfig({
     ssr: true,
     rollupOptions: {
       external: [
-        'better-sqlite3', 
-        'commander', 
-        'mime-types', 
-        'zod', 
+        'better-sqlite3',
+        'commander',
+        'zod',
         '@modelcontextprotocol/sdk',
         'node:fs',
         'node:path', 
