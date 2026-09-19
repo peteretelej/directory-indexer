@@ -48,6 +48,35 @@ describe('Storage Operations', () => {
     }
   });
 
+  it('should roundtrip modifiedTime with millisecond precision', async () => {
+    const config = await loadConfig();
+    config.storage.sqlitePath = ':memory:';
+    const { SQLiteStorage } = await import('../src/storage.js');
+    const storage = new SQLiteStorage(config);
+
+    try {
+      const modifiedTime = new Date('2026-09-20T10:30:45.123Z');
+      const fileInfo = {
+        path: '/test/file.md',
+        size: 100,
+        modifiedTime,
+        hash: 'abc123',
+        parentDirs: ['/test']
+      };
+      await storage.upsertFile(fileInfo);
+
+      const record = await storage.getFile(fileInfo.path);
+      expect(record).not.toBeNull();
+      expect(record!.modifiedTime.getTime()).toBe(modifiedTime.getTime());
+
+      const records = await storage.getFilesByDirectory('/test');
+      expect(records).toHaveLength(1);
+      expect(records[0].modifiedTime.getTime()).toBe(modifiedTime.getTime());
+    } finally {
+      storage.close();
+    }
+  });
+
   it('should clear database when no file exists', async () => {
     const originalDataDir = process.env.DIRECTORY_INDEXER_DATA_DIR;
     try {
