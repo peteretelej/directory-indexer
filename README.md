@@ -14,7 +14,7 @@ Self-hosted semantic search for local files. Give your AI assistant access to se
 **Prerequisites:**
 
 - **[Docker](https://docs.docker.com/get-docker/)** - For running Qdrant and Ollama _(skip if you already have them running natively)_
-- **[Node.js 18+](https://nodejs.org/en/download/)** - Required for running directory-indexer
+- **[Node.js 18+](https://nodejs.org/en/download/)** - Required for running directory-indexer (the v1.x line targets Node 18 LTS compatibility)
 
 _Note: For native Qdrant and Ollama installation without Docker, see [Setup section](#setup)._
 
