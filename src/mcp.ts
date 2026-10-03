@@ -158,7 +158,7 @@ Example queries:
         },
         workspace: {
           type: 'string',
-          description: 'Optional workspace name to filter search results. Only files within the workspace directories will be searched. IMPORTANT: Use server_info tool first to discover available workspace names - using invalid workspace names will result in empty results.'
+          description: 'Optional workspace name to filter search results. Only files within the workspace directories will be searched. IMPORTANT: Use server_info tool first to discover available workspace names - invalid workspace names are rejected with an error listing the available workspaces.'
         }
       },
       required: ['query']
@@ -205,7 +205,7 @@ Returns file paths with similarity scores. Use get_content to read full files or
         },
         workspace: {
           type: 'string',
-          description: 'Optional workspace name to filter results. Only files within the workspace directories will be considered. IMPORTANT: Use server_info tool first to discover available workspace names - using invalid workspace names will result in empty results.'
+          description: 'Optional workspace name to filter results. Only files within the workspace directories will be considered. IMPORTANT: Use server_info tool first to discover available workspace names - invalid workspace names are rejected with an error listing the available workspaces.'
         }
       },
       required: ['file_path']

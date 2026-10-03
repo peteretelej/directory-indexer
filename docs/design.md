@@ -272,7 +272,6 @@ DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer
 ### API Keys (Optional)
 
 - `QDRANT_API_KEY` - Qdrant API key for authenticated instances
-- `OLLAMA_API_KEY` - Ollama API key for hosted instances
 
 ## CLI Usage
 

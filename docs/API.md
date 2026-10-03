@@ -173,7 +173,10 @@ Index directories for semantic search.
 
 ```json
 {
-  "directory_path": "/home/user/docs,/opt/projects"
+  "directory_paths": [
+    "/home/user/docs",
+    "/opt/projects"
+  ]
 }
 ```
 
@@ -208,11 +211,11 @@ Search indexed content semantically.
     "matchingChunks": 3,
     "chunks": [
       {
-        "chunkId": "chunk_1",
+        "chunkId": "1",
         "score": 0.92
       },
       {
-        "chunkId": "chunk_3",
+        "chunkId": "3",
         "score": 0.87
       }
     ]
@@ -276,7 +279,7 @@ Get content of a specific chunk by file path and chunk ID.
 ```json
 {
   "file_path": "/home/user/docs/api-guide.md",
-  "chunk_id": "chunk_2"
+  "chunk_id": "2"
 }
 ```
 
