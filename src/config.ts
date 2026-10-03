@@ -23,13 +23,23 @@ const ConfigSchema = z.object({
     model: z.string(),
     endpoint: z.url(),
   }),
-  indexing: z.object({
-    chunkSize: z.number().positive(),
-    chunkOverlap: z.number().nonnegative(),
-    maxFileSize: z.number().positive(),
-    ignorePatterns: z.array(z.string()),
-    respectGitignore: z.boolean(),
-  }),
+  indexing: z
+    .object({
+      chunkSize: z.number().positive(),
+      chunkOverlap: z.number().nonnegative(),
+      maxFileSize: z.number().positive(),
+      ignorePatterns: z.array(z.string()),
+      respectGitignore: z.boolean(),
+    })
+    .superRefine((indexing, ctx) => {
+      if (indexing.chunkOverlap >= indexing.chunkSize) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['chunkOverlap'],
+          message: 'chunkOverlap must be smaller than chunkSize',
+        });
+      }
+    }),
   dataDir: z.string(),
   verbose: z.boolean(),
   workspaces: z.record(z.string(), WorkspaceSchema),

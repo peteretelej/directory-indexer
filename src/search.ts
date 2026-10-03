@@ -35,6 +35,10 @@ export class SearchError extends Error {
   }
 }
 
+// Caps ad-hoc embedding input below the ~8k-token context of common
+// embedding models; oversized files would otherwise fail at the provider
+const MAX_EMBED_INPUT_CHARS = 24000;
+
 
 function buildWorkspaceFilter(workspacePaths: string[]): Record<string, unknown> {
   return {
@@ -139,7 +143,7 @@ export async function findSimilarFiles(filePath: string, limit: number = 5, work
       embedding = await generateEmbedding(fileRecord.chunks[0].content, config);
     } else {
       const content = await fs.readFile(filePath, 'utf-8');
-      embedding = await generateEmbedding(content, config);
+      embedding = await generateEmbedding(content.slice(0, MAX_EMBED_INPUT_CHARS), config);
     }
     
     const points = await qdrant.searchPoints(embedding, limit + 1, filter);

@@ -94,10 +94,17 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
   async function walkDirectory(currentPath: string): Promise<void> {
     const normalizedPath = normalizePath(currentPath);
 
-    if (visited.has(normalizedPath)) {
+    let realPath = normalizedPath;
+    try {
+      realPath = normalizePath(await fs.realpath(normalizedPath));
+    } catch {
+      realPath = normalizedPath;
+    }
+
+    if (visited.has(realPath)) {
       return;
     }
-    visited.add(normalizedPath);
+    visited.add(realPath);
 
     try {
       // Convert to relative path for gitignore matching
@@ -154,9 +161,10 @@ async function shouldReprocessFile(filePath: string, existingRecord: FileRecord,
     const currentStats = await fs.stat(filePath);
     const existingModTime = new Date(existingRecord.modifiedTime);
 
-    // If modtime is clearly older, likely unchanged
-    if (currentStats.mtime <= existingModTime) {
-      return false; // Skip processing
+    // An exactly-unchanged mtime skips; older or newer mtimes verify via hash
+    // so restored or backed-up files with stale timestamps are re-examined
+    if (currentStats.mtime.getTime() === existingModTime.getTime()) {
+      return false;
     }
 
     // If modtime suggests change, verify with hash
@@ -232,17 +240,22 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       // Track directory-specific counters
       const dirStartIndexed = indexed;
       const dirStartSkipped = skipped;
+      let dirHadFailure = false;
 
       // Calculate progress interval for non-verbose updates
       const progressInterval = totalFiles > 1000 ? 50 : 10;
 
       for (const file of files) {
+        let chunks: ChunkInfo[] = [];
         try {
           // Check if file already exists and needs reprocessing
           const existingFile = await sqlite.getFile(file.path);
 
           if (existingFile) {
-            const needsReprocessing = await shouldReprocessFile(file.path, existingFile, config);
+            const hasStoredFailure =
+              existingFile.errors?.some(error => error.startsWith('Failed to process')) ?? false;
+            const needsReprocessing =
+              hasStoredFailure || (await shouldReprocessFile(file.path, existingFile, config));
             if (!needsReprocessing) {
               skipped++;
               if (config.verbose) {
@@ -271,7 +284,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
           // Normalize CRLF to LF for consistent chunk boundaries
           const content = rawContent.replace(/\r\n/g, '\n');
-          const chunks = chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
+          chunks = chunkText(content, config.indexing.chunkSize, config.indexing.chunkOverlap);
 
           // Store file metadata in SQLite
           await sqlite.upsertFile(file, chunks);
@@ -312,9 +325,14 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           const fullError = `Failed to process ${file.path}: ${errorMessage}${causeMessage}`;
           errors.push(fullError);
           failed++;
+          dirHadFailure = true;
 
           // Print error immediately during processing (not just in verbose mode)
           console.error(`❌ ${fullError}`);
+
+          // Record the failure on the file row so a later run reprocesses it
+          // instead of skipping it as unchanged
+          await sqlite.upsertFile(file, chunks, [fullError]);
         }
       }
 
@@ -340,14 +358,14 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           const fullError = `Failed to clean up deleted file ${deletedFile.path}: ${errorMessage}`;
           errors.push(fullError);
           failed++;
-          
+          dirHadFailure = true;
+
           console.error(`❌ ${fullError}`);
         }
       }
 
-      // Mark directory as completed if no errors for this directory
-      const directoryErrors = errors.filter(err => err.includes(path));
-      const directoryStatus = directoryErrors.length > 0 ? 'failed' : 'completed';
+      // Mark directory as completed unless a file or cleanup failure occurred
+      const directoryStatus = dirHadFailure ? 'failed' : 'completed';
       await sqlite.upsertDirectory(normalizedPath, directoryStatus);
 
       // Show directory completion

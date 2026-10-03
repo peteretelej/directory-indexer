@@ -97,12 +97,12 @@ describe('Configuration', () => {
 
   it('should handle extreme numeric values', async () => {
     const originalEnv = { ...process.env };
-    
+
     try {
       process.env.CHUNK_SIZE = '0';
       process.env.CHUNK_OVERLAP = '-1';
       process.env.MAX_FILE_SIZE = '999999999999999';
-      
+
       try {
         await loadConfig();
         expect(false).toBe(true); // Should not reach here due to validation
@@ -110,6 +110,40 @@ describe('Configuration', () => {
         expect((error as Error).name).toBe('ConfigError');
         expect((error as Error).message).toContain('Configuration validation failed');
       }
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
+  it('should reject chunkOverlap greater than or equal to chunkSize', async () => {
+    const originalEnv = { ...process.env };
+
+    try {
+      process.env.CHUNK_SIZE = '512';
+      process.env.CHUNK_OVERLAP = '512';
+
+      try {
+        await loadConfig();
+        expect(false).toBe(true); // Should not reach here due to validation
+      } catch (error) {
+        expect((error as Error).name).toBe('ConfigError');
+        expect((error as Error).message).toContain('chunkOverlap must be smaller than chunkSize');
+      }
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
+  it('should accept chunkOverlap smaller than chunkSize', async () => {
+    const originalEnv = { ...process.env };
+
+    try {
+      process.env.CHUNK_SIZE = '512';
+      process.env.CHUNK_OVERLAP = '511';
+
+      const config = await loadConfig();
+      expect(config.indexing.chunkSize).toBe(512);
+      expect(config.indexing.chunkOverlap).toBe(511);
     } finally {
       process.env = originalEnv;
     }
