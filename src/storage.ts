@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { Config } from './config.js';
-import { FileInfo, ChunkInfo, ensureDirectory } from './utils.js';
+import { FileInfo, ChunkInfo } from './utils.js';
+import { mkdirSync } from 'node:fs';
 import { dirname } from 'path';
 
 /**
@@ -250,34 +251,45 @@ export class QdrantClient {
 
   async scrollPoints(filter?: Record<string, unknown>, limit: number = 1000): Promise<QdrantPoint[]> {
     const collectionName = this.config.storage.qdrantCollection;
-    
+
     try {
-      const scrollBody: Record<string, unknown> = {
-        limit,
-        with_payload: true,
-        with_vector: false
-      };
-      if (filter) {
-        scrollBody.filter = filter;
-      }
+      const points: QdrantPoint[] = [];
+      let offset: string | number | null = null;
 
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/scroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(scrollBody)
-      });
+      do {
+        const scrollBody: Record<string, unknown> = {
+          limit,
+          with_payload: true,
+          with_vector: false
+        };
+        if (filter) {
+          scrollBody.filter = filter;
+        }
+        if (offset !== null) {
+          scrollBody.offset = offset;
+        }
 
-      if (!response.ok) {
-        throw new Error(`Failed to scroll points: ${response.statusText}`);
-      }
+        const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/scroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scrollBody)
+        });
 
-      const data = await response.json();
-      return data.result.points.map((item: { id: string | number; payload: Record<string, unknown> }) => ({
-        id: item.id,
-        vector: [],
-        payload: item.payload,
-        score: 0
-      }));
+        if (!response.ok) {
+          throw new Error(`Failed to scroll points: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        points.push(...data.result.points.map((item: { id: string | number; payload: Record<string, unknown> }) => ({
+          id: item.id,
+          vector: [],
+          payload: item.payload,
+          score: 0
+        })));
+        offset = data.result.next_page_offset ?? null;
+      } while (offset !== null);
+
+      return points;
     } catch (error) {
       throw new StorageError(`Failed to scroll points in Qdrant`, error as Error);
     }
@@ -335,8 +347,8 @@ export class SQLiteStorage {
 
   private initializeDatabase(): Database.Database {
     try {
-      ensureDirectory(dirname(this.config.storage.sqlitePath));
-      
+      mkdirSync(dirname(this.config.storage.sqlitePath), { recursive: true });
+
       const db = new Database(this.config.storage.sqlitePath);
       
       db.exec(`
@@ -882,7 +894,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
     const chunksStmt = sqlite.db.prepare('SELECT SUM(json_array_length(chunks_json)) as count FROM files WHERE chunks_json IS NOT NULL');
     const chunksCount = chunksStmt.get() as { count: number | null };
     
-    const lastIndexedStmt = sqlite.db.prepare('SELECT MAX(indexed_at) as last_indexed FROM directories WHERE indexed_at > 0');
+    const lastIndexedStmt = sqlite.db.prepare("SELECT MAX(indexed_at) as last_indexed FROM directories WHERE indexed_at > 0 AND status = 'completed'");
     const lastIndexedResult = lastIndexedStmt.get() as { last_indexed: number | null };
     
     const errorsStmt = sqlite.db.prepare('SELECT errors_json FROM files WHERE errors_json IS NOT NULL');
@@ -898,20 +910,18 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       }
     });
     
-    const directoriesDetailStmt = sqlite.db.prepare(`
-      SELECT
-        d.path,
-        d.status,
-        d.indexed_at,
-        (SELECT COUNT(*) FROM files f WHERE f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') as files_count,
-        (SELECT COALESCE(SUM(json_array_length(f.chunks_json)), 0) FROM files f WHERE (f.path = d.path OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '/%' ESCAPE '\\' OR f.path LIKE REPLACE(d.path, '\\', '\\\\') || '\\%' ESCAPE '\\') AND f.chunks_json IS NOT NULL) as chunks_count
-      FROM directories d
-      ORDER BY d.indexed_at DESC
-    `);
-    const directoryDetails = directoriesDetailStmt.all() as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number; files_count: number; chunks_count: number }[];
+    const directoriesDetailStmt = sqlite.db.prepare('SELECT path, status, indexed_at FROM directories ORDER BY indexed_at DESC');
+    const directoryDetails = directoriesDetailStmt.all() as { path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number }[];
 
     const directories: DirectoryStatus[] = directoryDetails.map(row => {
       const { clause, params } = directoryLikeClause('path', row.path);
+
+      const filesByDirStmt = sqlite.db.prepare(`SELECT COUNT(*) as count FROM files WHERE ${clause}`);
+      const filesCount = filesByDirStmt.get(...params) as { count: number };
+
+      const chunksByDirStmt = sqlite.db.prepare(`SELECT COALESCE(SUM(json_array_length(chunks_json)), 0) as count FROM files WHERE ${clause} AND chunks_json IS NOT NULL`);
+      const chunksCount = chunksByDirStmt.get(...params) as { count: number };
+
       const errorsByDirStmt = sqlite.db.prepare(`
         SELECT errors_json FROM files
         WHERE ${clause} AND errors_json IS NOT NULL
@@ -931,8 +941,8 @@ export async function getIndexStatus(): Promise<IndexStatus> {
       return {
         path: row.path,
         status: row.status,
-        filesCount: row.files_count,
-        chunksCount: row.chunks_count,
+        filesCount: filesCount.count,
+        chunksCount: chunksCount.count,
         lastIndexed: row.indexed_at && row.indexed_at > 0 ? new Date(row.indexed_at).toISOString() : null,
         errors: dirErrorsList
       };
