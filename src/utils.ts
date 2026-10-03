@@ -151,9 +151,18 @@ export async function readlineSync(prompt: string): Promise<string> {
   });
 
   return new Promise((resolve) => {
-    rl.question(prompt, (answer) => {
-      rl.close();
+    let settled = false;
+    const settle = (answer: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       resolve(answer);
+    };
+    rl.on('close', () => settle(''));
+    rl.question(prompt, (answer) => {
+      settle(answer);
+      rl.close();
     });
   });
 }

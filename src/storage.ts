@@ -679,10 +679,11 @@ export async function getResetPreview(config: Config): Promise<ResetStats> {
 
 export async function clearDatabase(config: Config): Promise<boolean> {
   try {
+    closeSharedStorageForPath(config.storage.sqlitePath);
     if (!await import('fs').then(fs => fs.existsSync(config.storage.sqlitePath))) {
       return true; // Already clean
     }
-    
+
     await import('fs/promises').then(fs => fs.unlink(config.storage.sqlitePath));
     return true;
   } catch (error) {
