@@ -51,7 +51,10 @@ export async function handleIndex(paths: string[], options: IndexOptions): Promi
     console.log('Indexing may take time due to embedding generation - see project README for performance tips');
   }
   
-  const result = await indexDirectories(paths, config);
+  const result = await indexDirectories(paths, config, {
+    progress: m => console.log(m),
+    error: m => console.error(m)
+  });
   console.log(`Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`);
   
   if (result.errors.length > 0) {

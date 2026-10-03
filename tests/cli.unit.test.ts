@@ -134,7 +134,10 @@ describe('CLI Tests', () => {
 
       await handleIndex(['/test'], { verbose: false });
 
-      expect(indexDirectories).toHaveBeenCalledWith(['/test'], {});
+      expect(indexDirectories).toHaveBeenCalledWith(['/test'], {}, {
+        progress: expect.any(Function),
+        error: expect.any(Function)
+      });
     });
 
     it('should call searchContent with correct limit', async () => {

@@ -30,6 +30,9 @@ function directoryLikeClause(column: string, dirPath: string): { clause: string;
 // Registry of all open SQLiteStorage instances for graceful shutdown
 const openStorageInstances = new Set<SQLiteStorage>();
 
+// Shared storage handles memoized per SQLite database path
+const sharedStorage = new Map<string, { sqlite: SQLiteStorage; qdrant: QdrantClient }>();
+
 /**
  * Close all open SQLiteStorage instances. Called during graceful shutdown.
  */
@@ -41,6 +44,7 @@ export function closeAllStorage(): void {
       // Ignore errors during shutdown cleanup
     }
   }
+  sharedStorage.clear();
 }
 
 export interface DirectoryRecord {
@@ -565,10 +569,33 @@ export class SQLiteStorage {
 }
 
 export async function initializeStorage(config: Config): Promise<{ sqlite: SQLiteStorage; qdrant: QdrantClient }> {
+  const dbPath = config.storage.sqlitePath;
+  const cached = sharedStorage.get(dbPath);
+  if (cached) {
+    return cached;
+  }
+
   const sqlite = new SQLiteStorage(config);
   const qdrant = new QdrantClient(config);
-  
-  return { sqlite, qdrant };
+  const storage = { sqlite, qdrant };
+  sharedStorage.set(dbPath, storage);
+
+  return storage;
+}
+
+/**
+ * Close and evict the shared storage handle for one database path so the
+ * next initializeStorage call for it opens a fresh connection. Reset and
+ * cache-eviction flows use this; callers must never close the shared
+ * handle themselves.
+ */
+export function closeSharedStorageForPath(dbPath: string): void {
+  const shared = sharedStorage.get(dbPath);
+  if (!shared) {
+    return;
+  }
+  sharedStorage.delete(dbPath);
+  shared.sqlite.close();
 }
 
 export async function ensureCollectionDimensions(

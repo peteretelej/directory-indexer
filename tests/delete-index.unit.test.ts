@@ -123,6 +123,45 @@ describe('handleDeleteIndexTool', () => {
       .rejects.toThrow(`Directory '${dirPath}' is not indexed`);
   });
 
+  it('should release the directory mutex when storage initialization fails', async () => {
+    const { initializeStorage } = await import('../src/storage.js');
+    const dirPath = normalizePath('/test/dir');
+    const mockSqlite = {
+      getDirectory: vi.fn().mockResolvedValue({ path: dirPath, status: 'completed' }),
+      getDirectoryByCaseInsensitive: vi.fn(),
+      getFilesByDirectory: vi.fn().mockResolvedValue([]),
+      deleteFilesByDirectory: vi.fn().mockReturnValue(0),
+      deleteDirectory: vi.fn(),
+      getDirectories: vi.fn().mockReturnValue([]),
+      close: vi.fn()
+    };
+    vi.mocked(initializeStorage)
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockResolvedValue({
+        sqlite: mockSqlite as any,
+        qdrant: { deletePointsByFilePath: vi.fn().mockResolvedValue(undefined) } as any
+      });
+
+    const { loadConfig } = await import('../src/config.js');
+    const config = loadConfig();
+
+    await expect(handleDeleteIndexTool({ directory_path: '/test/dir' }, config))
+      .rejects.toThrow('storage unavailable');
+
+    let wedgeTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        handleDeleteIndexTool({ directory_path: '/test/dir' }, config),
+        new Promise<never>((_, reject) => {
+          wedgeTimer = setTimeout(() => reject(new Error('delete_index wedged the directory mutex')), 1000);
+        })
+      ]);
+      expect(result).toBeDefined();
+    } finally {
+      clearTimeout(wedgeTimer);
+    }
+  });
+
   describe('delete_index path normalization', () => {
     beforeEach(() => {
       vi.clearAllMocks();

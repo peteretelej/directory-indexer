@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
 import { loadConfig } from '../src/config.js';
 import { clearDatabase, clearVectorCollection } from '../src/storage.js';
 
@@ -567,5 +567,58 @@ describe('Qdrant point IDs', () => {
 
     expect(oldPointId(hashA, 0)).toBe(oldPointId(hashB, 0));
     expect(pointIdFor('/a.md', '0')).not.toBe(pointIdFor('/b.md', '0'));
+  });
+});
+describe('initializeStorage memoization', () => {
+  it('should return one shared sqlite instance per database path', async () => {
+    const { initializeStorage } = await import('../src/storage.js');
+    const config = await loadConfig();
+    const dbPath = join(tmpdir(), `di-memo-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    config.storage.sqlitePath = dbPath;
+
+    try {
+      const first = await initializeStorage(config);
+      const second = await initializeStorage(config);
+
+      expect(second.sqlite).toBe(first.sqlite);
+      expect(second.qdrant).toBe(first.qdrant);
+    } finally {
+      const { closeSharedStorageForPath } = await import('../src/storage.js');
+      closeSharedStorageForPath(dbPath);
+    }
+
+    if (existsSync(dbPath)) {
+      rmSync(dbPath, { force: true });
+    }
+  });
+
+  it('should evict the shared handle on closeSharedStorageForPath so the next call opens fresh', async () => {
+    const { initializeStorage, closeSharedStorageForPath } = await import('../src/storage.js');
+    const config = await loadConfig();
+    const dbPath = join(tmpdir(), `di-memo-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    config.storage.sqlitePath = dbPath;
+
+    try {
+      const first = await initializeStorage(config);
+      const second = await initializeStorage(config);
+      expect(second.sqlite).toBe(first.sqlite);
+
+      closeSharedStorageForPath(dbPath);
+      expect(() => first.sqlite.getDirectories()).toThrow();
+
+      const third = await initializeStorage(config);
+      expect(third.sqlite).not.toBe(first.sqlite);
+      expect(third.sqlite).not.toBe(second.sqlite);
+
+      closeSharedStorageForPath(dbPath);
+      const fourth = await initializeStorage(config);
+      expect(fourth.sqlite).not.toBe(third.sqlite);
+      expect(fourth.sqlite).not.toBe(first.sqlite);
+    } finally {
+      closeSharedStorageForPath(dbPath);
+      if (existsSync(dbPath)) {
+        rmSync(dbPath, { force: true });
+      }
+    }
   });
 });

@@ -49,6 +49,34 @@ function normalizeMutexKey(dirPath: string): string {
 // Workspace-level indexing mutex: keyed by normalized directory path
 const indexingMutex = new Map<string, Promise<void>>();
 
+/**
+ * Serialize an operation against prior holders of the given mutex keys.
+ * The registered ticket resolves only when this operation's `fn` finishes,
+ * so later arrivals chain behind the whole operation instead of acquiring
+ * at check time; `fn`'s rejection propagates to its own caller only, and
+ * release runs unconditionally in the finally.
+ */
+async function withDirectoryMutex<T>(keys: string[], fn: () => Promise<T>): Promise<T> {
+  const holders = keys.map(key => indexingMutex.get(key));
+  const prior = Promise.all(holders.map(holder => holder ?? Promise.resolve()));
+  let release!: () => void;
+  const done = new Promise<void>(resolve => { release = resolve; });
+  const ticket = prior.then(() => done);
+  for (const key of keys) indexingMutex.set(key, ticket);
+  if (holders.some(Boolean)) {
+    log('info', 'Waiting for ongoing indexing', { directories: keys });
+  }
+  await prior;
+  try {
+    return await fn();
+  } finally {
+    release();
+    for (const key of keys) {
+      if (indexingMutex.get(key) === ticket) indexingMutex.delete(key);
+    }
+  }
+}
+
 // Cached set of resolved indexed directory paths for path validation
 let indexedDirsCache: Set<string> = new Set();
 let indexedDirsCacheInitialized = false;
@@ -68,12 +96,8 @@ export function refreshIndexedDirsCache(storage: SQLiteStorage): void {
  */
 async function ensureIndexedDirsCache(config: Config): Promise<void> {
   if (!indexedDirsCacheInitialized) {
-    const sqlite = new SQLiteStorage(config);
-    try {
-      refreshIndexedDirsCache(sqlite);
-    } finally {
-      sqlite.close();
-    }
+    const { sqlite } = await initializeStorage(config);
+    refreshIndexedDirsCache(sqlite);
   }
 }
 
@@ -145,76 +169,53 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
     throw new Error('directory_paths is required and must be an array');
   }
 
-  // Validate prerequisites before proceeding
-  await validateIndexPrerequisites(config);
-
   const paths = args.directory_paths.map((p: string) => p.trim());
   const mutexKeys = paths.map(normalizeMutexKey);
 
-  log('info', 'Index start', { directories: paths });
-  notifyClient('info', { event: 'index_start', directories: paths });
+  return withDirectoryMutex(mutexKeys, async () => {
+    // Validate prerequisites before proceeding
+    await validateIndexPrerequisites(config);
 
-  // Per-directory mutex: serialize concurrent calls targeting the same directory
-  for (const key of mutexKeys) {
-    const existing = indexingMutex.get(key);
-    if (existing) {
-      log('info', 'Waiting for ongoing indexing', { directory: key });
-      await existing;
-    }
-  }
+    log('info', 'Index start', { directories: paths });
+    notifyClient('info', { event: 'index_start', directories: paths });
 
-  // Create a deferred promise for this indexing operation
-  let resolveIndexing: () => void;
-  const indexingPromise = new Promise<void>((resolve) => { resolveIndexing = resolve; });
-  for (const key of mutexKeys) {
-    indexingMutex.set(key, indexingPromise);
-  }
-
-  try {
-    const result = await indexDirectories(paths, config);
-
-    // Refresh the indexed directories cache after successful indexing
-    const { sqlite } = await initializeStorage(config);
     try {
+      const result = await indexDirectories(paths, config);
+
+      // Refresh the indexed directories cache after successful indexing
+      const { sqlite } = await initializeStorage(config);
       refreshIndexedDirsCache(sqlite);
-    } finally {
-      sqlite.close();
+
+      log('info', 'Index complete', { result });
+      notifyClient('info', { event: 'index_complete', result });
+
+      let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
+
+      if (result.errors.length > 0) {
+        responseText += `\nErrors: [\n`;
+        result.errors.forEach(error => {
+          responseText += `  '${error}'\n`;
+        });
+        responseText += `]`;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          }
+        ]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log('error', 'Index error', { error: errorMessage, directories: paths });
+      notifyClient('error', { event: 'index_error', error: errorMessage });
+      throw new Error(
+        `Indexing failed for ${paths.join(', ')}. Verify the directory exists and is readable. Use 'server_info' to check current status.`
+      );
     }
-
-    log('info', 'Index complete', { result });
-    notifyClient('info', { event: 'index_complete', result });
-
-    let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
-
-    if (result.errors.length > 0) {
-      responseText += `\nErrors: [\n`;
-      result.errors.forEach(error => {
-        responseText += `  '${error}'\n`;
-      });
-      responseText += `]`;
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: responseText
-        }
-      ]
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    log('error', 'Index error', { error: errorMessage, directories: paths });
-    notifyClient('error', { event: 'index_error', error: errorMessage });
-    throw new Error(
-      `Indexing failed for ${paths.join(', ')}. Verify the directory exists and is readable. Use 'server_info' to check current status.`
-    );
-  } finally {
-    resolveIndexing!();
-    for (const key of mutexKeys) {
-      indexingMutex.delete(key);
-    }
-  }
+  });
 }
 
 async function validateWorkspace(workspace?: string): Promise<string | undefined> {
@@ -362,20 +363,9 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
   const dirPath = normalizePath(trimmedPath);
   const mutexKey = normalizeMutexKey(trimmedPath);
 
-  // Acquire per-directory mutex to avoid racing with in-flight indexing
-  const existing = indexingMutex.get(mutexKey);
-  if (existing) {
-    log('info', 'Waiting for ongoing indexing before delete', { directory: dirPath });
-    await existing;
-  }
+  return withDirectoryMutex([mutexKey], async () => {
+    const { sqlite, qdrant } = await initializeStorage(config);
 
-  let resolveDelete: () => void;
-  const deletePromise = new Promise<void>((r) => { resolveDelete = r; });
-  indexingMutex.set(mutexKey, deletePromise);
-
-  const { sqlite, qdrant } = await initializeStorage(config);
-
-  try {
     // Check if the directory is actually indexed
     let directory = await sqlite.getDirectory(dirPath);
     if (!directory && process.platform === 'win32') {
@@ -434,11 +424,7 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
         }
       ]
     };
-  } finally {
-    resolveDelete!();
-    indexingMutex.delete(mutexKey);
-    sqlite.close();
-  }
+  });
 }
 
 export function formatErrorResponse(error: unknown): CallToolResult {

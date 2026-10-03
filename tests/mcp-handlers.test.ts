@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   handleIndexTool,
   handleSearchTool,
@@ -10,9 +13,19 @@ import {
 } from '../src/mcp-handlers.js';
 import { loadConfig } from '../src/config.js';
 
+const realIndexing = vi.hoisted(() => ({
+  indexDirectories: undefined as undefined | typeof import('../src/indexing.js').indexDirectories
+}));
+
 // Mock all the dependencies
-vi.mock('../src/indexing.js', () => ({
-  indexDirectories: vi.fn()
+vi.mock('../src/indexing.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/indexing.js')>();
+  realIndexing.indexDirectories = actual.indexDirectories;
+  return { ...actual, indexDirectories: vi.fn() };
+});
+
+vi.mock('../src/embedding.js', () => ({
+  generateEmbedding: vi.fn().mockResolvedValue([0.1, 0.2, 0.3])
 }));
 
 vi.mock('../src/search.js', () => ({
@@ -36,7 +49,8 @@ vi.mock('../src/storage.js', () => ({
       db: {}
     },
     qdrant: {}
-  })
+  }),
+  ensureCollectionDimensions: vi.fn()
 }));
 
 vi.mock('../src/config.js', () => ({
@@ -55,10 +69,10 @@ vi.mock('../src/path-validation.js', () => ({
   resolveIndexedDirectories: vi.fn().mockReturnValue(new Set())
 }));
 
-vi.mock('../src/logger.js', () => ({
-  log: vi.fn(),
-  initLogLevel: vi.fn()
-}));
+vi.mock('../src/logger.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/logger.js')>();
+  return { ...actual, log: vi.fn(actual.log) };
+});
 
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: vi.fn().mockImplementation(() => ({
@@ -496,6 +510,29 @@ describe('MCP Handlers Unit Tests', () => {
       expect(callOrder[2]).toBe('start:/same');
       expect(callOrder[3]).toBe('end:/same');
     });
+
+    it('should never overlap concurrent indexDirectories invocations for the same directory', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const spans: Array<{ start: number; end: number }> = [];
+
+      vi.mocked(indexDirectories).mockImplementation(async () => {
+        const start = Date.now();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        spans.push({ start, end: Date.now() });
+        return { indexed: 1, skipped: 0, failed: 0, deleted: 0, errors: [] };
+      });
+
+      const config = loadConfig();
+
+      await Promise.all([
+        handleIndexTool({ directory_paths: ['/overlap'] }, config),
+        handleIndexTool({ directory_paths: ['/overlap'] }, config)
+      ]);
+
+      expect(spans).toHaveLength(2);
+      spans.sort((a, b) => a.start - b.start);
+      expect(spans[1].start).toBeGreaterThanOrEqual(spans[0].end);
+    });
   });
 
   describe('improved error messages', () => {
@@ -545,6 +582,115 @@ describe('MCP Handlers Unit Tests', () => {
       expect(Server).toHaveBeenCalled();
       expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(2);
       expect(mockServer.connect).toHaveBeenCalled();
+    });
+  });
+
+  describe('indexDirectories stdout discipline', () => {
+    function makeStdoutConfig(): any {
+      return {
+        verbose: true,
+        indexing: {
+          ignorePatterns: [],
+          maxFileSize: 1024 * 1024,
+          respectGitignore: false,
+          chunkSize: 100,
+          chunkOverlap: 20
+        }
+      };
+    }
+
+    async function mockStorageForStdoutTests(failUpserts: boolean): Promise<void> {
+      const { initializeStorage } = await import('../src/storage.js');
+      const upsertPoints = failUpserts
+        ? vi.fn().mockRejectedValue(new Error('vector store down'))
+        : vi.fn().mockResolvedValue(undefined);
+      vi.mocked(initializeStorage).mockResolvedValue({
+        sqlite: {
+          upsertDirectory: vi.fn().mockResolvedValue(undefined),
+          getFile: vi.fn().mockResolvedValue(null),
+          upsertFile: vi.fn().mockResolvedValue(undefined),
+          getFilesByDirectory: vi.fn().mockResolvedValue([]),
+          deleteFile: vi.fn().mockResolvedValue(undefined),
+          getDirectories: vi.fn().mockReturnValue([]),
+          close: vi.fn(),
+          db: {}
+        } as any,
+        qdrant: {
+          upsertPoints,
+          deletePointsByFilePath: vi.fn().mockResolvedValue(undefined)
+        } as any
+      });
+    }
+
+    function makeTempDir(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'mcp-stdout-'));
+      writeFileSync(join(dir, 'note.md'), 'stdout discipline probe');
+      return dir;
+    }
+
+    it('routes progress and errors to the stderr logger and never writes to stdout by default', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const { log } = await import('../src/logger.js');
+      vi.mocked(indexDirectories).mockImplementation(realIndexing.indexDirectories!);
+      await mockStorageForStdoutTests(true);
+
+      const dir = makeTempDir();
+      const stderrChunks: string[] = [];
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      }) as unknown as typeof process.stderr.write);
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const result = await indexDirectories([dir], makeStdoutConfig());
+
+        expect(result.failed).toBe(1);
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+        expect(log).toHaveBeenCalledWith('info', `Found 1 files to process in ${dir}`);
+        expect(log).toHaveBeenCalledWith('error', expect.stringContaining('❌ Failed to process'));
+
+        const entries = stderrChunks.join('').split('\n').flatMap(line => {
+          if (!line.trim().startsWith('{')) return [];
+          try { return [JSON.parse(line) as { level: string; message: string }]; } catch { return []; }
+        });
+        expect(entries.some(entry => entry.level === 'info' && entry.message === `Found 1 files to process in ${dir}`)).toBe(true);
+        expect(entries.some(entry => entry.level === 'error' && entry.message.includes('❌ Failed to process'))).toBe(true);
+      } finally {
+        stderrSpy.mockRestore();
+        consoleLogSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('uses explicitly passed console reporters so CLI output is unchanged', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const { log } = await import('../src/logger.js');
+      vi.mocked(indexDirectories).mockImplementation(realIndexing.indexDirectories!);
+      await mockStorageForStdoutTests(true);
+
+      const dir = makeTempDir();
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const result = await indexDirectories([dir], makeStdoutConfig(), {
+          progress: m => console.log(m),
+          error: m => console.error(m)
+        });
+
+        expect(result.failed).toBe(1);
+        expect(consoleLogSpy).toHaveBeenCalledWith(`Found 1 files to process in ${dir}`);
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('❌ Failed to process'));
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        consoleLogSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -31,6 +31,11 @@ export interface IndexResult {
   errors: string[];
 }
 
+export interface IndexReporters {
+  progress?: (message: string) => void;
+  error?: (message: string) => void;
+}
+
 export class IndexingError extends Error {
   constructor(message: string, public override cause?: Error) {
     super(message);
@@ -174,7 +179,9 @@ async function shouldReprocessFile(filePath: string, existingRecord: FileRecord,
   } catch (modtimeError) {
     // Graceful fallback: skip modtime, use hash only
     if (config.verbose) {
-      console.log(`Warning: Could not check modification time for ${filePath}:`, modtimeError);
+      log('warning', `Could not check modification time for ${filePath}`, {
+        error: modtimeError instanceof Error ? modtimeError.message : String(modtimeError)
+      });
     }
     try {
       const currentFileInfo = await getFileInfo(filePath);
@@ -182,14 +189,18 @@ async function shouldReprocessFile(filePath: string, existingRecord: FileRecord,
     } catch (hashError) {
       // If we can't hash either, assume changed to be safe
       if (config.verbose) {
-        console.log(`Warning: Could not compute hash for ${filePath}:`, hashError);
+        log('warning', `Could not compute hash for ${filePath}`, {
+          error: hashError instanceof Error ? hashError.message : String(hashError)
+        });
       }
       return true;
     }
   }
 }
 
-export async function indexDirectories(paths: string[], config: Config): Promise<IndexResult> {
+export async function indexDirectories(paths: string[], config: Config, reporters: IndexReporters = {}): Promise<IndexResult> {
+  const progress = reporters.progress ?? ((message: string) => log('info', message));
+  const reportError = reporters.error ?? ((message: string) => log('error', message));
   let indexed = 0;
   let skipped = 0;
   let failed = 0;
@@ -211,12 +222,12 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   for (const path of paths) {
     try {
       if (config.verbose) {
-        console.log(`Scanning directory: ${path}`);
+        progress(`Scanning directory: ${path}`);
       }
       const files = await scanDirectory(path, scanOptions);
       totalFiles += files.length;
       if (config.verbose) {
-        console.log(`Found ${files.length} files to process in ${path}`);
+        progress(`Found ${files.length} files to process in ${path}`);
       }
     } catch {
       // Continue with other directories even if one fails to scan
@@ -225,8 +236,8 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
   if (!config.verbose && totalFiles > 0) {
     // Add a blank line for spacing in the console output
-    console.log('');
-    console.log(`Found ${totalFiles} files to process (checking for changes...)`);
+    progress('');
+    progress(`Found ${totalFiles} files to process (checking for changes...)`);
   }
 
   for (const path of paths) {
@@ -259,11 +270,11 @@ export async function indexDirectories(paths: string[], config: Config): Promise
             if (!needsReprocessing) {
               skipped++;
               if (config.verbose) {
-                console.log(`  Skipped: ${file.path} (unchanged)`);
+                progress(`  Skipped: ${file.path} (unchanged)`);
               }
               // Show periodic progress in non-verbose mode
               if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
-                console.log(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
+                progress(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
               }
               continue; // Skip unchanged file
             }
@@ -313,11 +324,11 @@ export async function indexDirectories(paths: string[], config: Config): Promise
 
           indexed++;
           if (config.verbose) {
-            console.log(`  Indexed: ${file.path} (${chunks.length} chunks)`);
+            progress(`  Indexed: ${file.path} (${chunks.length} chunks)`);
           }
           // Show periodic progress in non-verbose mode
           if (!config.verbose && (indexed + skipped) % progressInterval === 0) {
-            console.log(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
+            progress(`Progress: ${indexed + skipped}/${totalFiles} files (${skipped} skipped as unchanged)...`);
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -328,7 +339,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           dirHadFailure = true;
 
           // Print error immediately during processing (not just in verbose mode)
-          console.error(`❌ ${fullError}`);
+          reportError(`❌ ${fullError}`);
 
           // Record the failure on the file row so a later run reprocesses it
           // instead of skipping it as unchanged
@@ -351,7 +362,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           
           deleted++;
           if (config.verbose) {
-            console.log(`  Cleaned up deleted file: ${deletedFile.path}`);
+            progress(`  Cleaned up deleted file: ${deletedFile.path}`);
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -360,7 +371,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           failed++;
           dirHadFailure = true;
 
-          console.error(`❌ ${fullError}`);
+          reportError(`❌ ${fullError}`);
         }
       }
 
@@ -373,9 +384,9 @@ export async function indexDirectories(paths: string[], config: Config): Promise
       const dirIndexed = indexed - dirStartIndexed;
       const dirSkipped = skipped - dirStartSkipped;
       if (config.verbose) {
-        console.log(`Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
+        progress(`Directory ${path} completed: ${dirIndexed} indexed, ${dirSkipped} skipped`);
       } else {
-        console.log(`Directory ${path} completed: ${dirFiles} files processed`);
+        progress(`Directory ${path} completed: ${dirFiles} files processed`);
       }
 
     } catch (error) {
