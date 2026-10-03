@@ -1,4 +1,5 @@
 import { Config } from './config.js';
+import { QdrantClient } from './storage.js';
 
 export class PrerequisiteError extends Error {
   constructor(message: string, public override cause?: Error) {
@@ -11,12 +12,8 @@ export class PrerequisiteError extends Error {
  * Check if Qdrant is accessible
  */
 export async function checkQdrant(config: Config): Promise<boolean> {
-  try {
-    const response = await fetch(`${config.storage.qdrantEndpoint}/healthz`);
-    return response.ok;
-  } catch {
-    return false;
-  }
+  const qdrant = new QdrantClient(config);
+  return qdrant.healthCheck();
 }
 
 /**
@@ -93,7 +90,7 @@ export async function checkAllPrerequisitesDetailed(config: Config): Promise<Pre
   services.push({
     service: 'qdrant',
     status: qdrantOk ? 'available' : 'unavailable',
-    details: qdrantOk ? undefined : `Cannot connect to Qdrant at ${config.storage.qdrantEndpoint}`
+    details: qdrantOk ? undefined : 'Cannot connect to Qdrant'
   });
   
   // Check embedding service

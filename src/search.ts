@@ -62,7 +62,8 @@ export async function searchContent(query: string, options: SearchOptions = {}):
     
     // Use Qdrant filtering for workspace searches
     const filter = workspace && workspacePaths.length > 0 ? buildWorkspaceFilter(workspacePaths) : undefined;
-    const points = await qdrant.searchPoints(queryEmbedding, limit, filter);
+    const fetchLimit = threshold > 0 ? Math.max(limit * 5, 100) : limit;
+    const points = await qdrant.searchPoints(queryEmbedding, fetchLimit, filter);
     
     // Group points by file path
     const fileGroups = new Map<string, Array<{ score: number; chunkId: string }>>();

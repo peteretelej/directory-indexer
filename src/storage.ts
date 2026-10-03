@@ -84,30 +84,37 @@ export class StorageError extends Error {
 export class QdrantClient {
   constructor(private config: Config) {}
 
+  private qdrantFetch(path: string, init?: Parameters<typeof fetch>[1]): ReturnType<typeof fetch> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.config.storage.qdrantApiKey) {
+      headers['api-key'] = this.config.storage.qdrantApiKey;
+    }
+    return fetch(`${this.config.storage.qdrantEndpoint}${path}`, { ...init, headers });
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/healthz`);
+      const response = await this.qdrantFetch('/healthz');
       return response.ok;
     } catch {
       return false;
     }
   }
 
-  async createCollection(): Promise<void> {
+  async createCollection(dimension: number): Promise<void> {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const checkResponse = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`);
+      const checkResponse = await this.qdrantFetch(`/collections/${collectionName}`);
       if (checkResponse.ok) {
         return;
       }
 
-      const createResponse = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`, {
+      const createResponse = await this.qdrantFetch(`/collections/${collectionName}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vectors: {
-            size: 768,
+            size: dimension,
             distance: 'Cosine'
           }
         })
@@ -125,9 +132,8 @@ export class QdrantClient {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points`, {
+      const response = await this.qdrantFetch(`/collections/${collectionName}/points`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ points })
       });
 
@@ -154,11 +160,14 @@ export class QdrantClient {
         searchBody.filter = filter;
       }
       
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/search`, {
+      const response = await this.qdrantFetch(`/collections/${collectionName}/points/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(searchBody)
       });
+
+      if (response.status === 404) {
+        return [];
+      }
 
       if (!response.ok) {
         const errorBody = await response.text();
@@ -181,11 +190,14 @@ export class QdrantClient {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/delete`, {
+      const response = await this.qdrantFetch(`/collections/${collectionName}/points/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ points: ids })
       });
+
+      if (response.status === 404) {
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to delete points: ${response.statusText}`);
@@ -199,9 +211,8 @@ export class QdrantClient {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/delete`, {
+      const response = await this.qdrantFetch(`/collections/${collectionName}/points/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filter: {
             must: [
@@ -213,6 +224,10 @@ export class QdrantClient {
           }
         })
       });
+
+      if (response.status === 404) {
+        return;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -232,11 +247,14 @@ export class QdrantClient {
         countBody.filter = filter;
       }
 
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/count`, {
+      const response = await this.qdrantFetch(`/collections/${collectionName}/points/count`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(countBody)
       });
+
+      if (response.status === 404) {
+        return 0;
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to count points: ${response.statusText}`);
@@ -269,11 +287,14 @@ export class QdrantClient {
           scrollBody.offset = offset;
         }
 
-        const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}/points/scroll`, {
+        const response = await this.qdrantFetch(`/collections/${collectionName}/points/scroll`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(scrollBody)
         });
+
+        if (response.status === 404) {
+          return [];
+        }
 
         if (!response.ok) {
           throw new Error(`Failed to scroll points: ${response.statusText}`);
@@ -295,11 +316,11 @@ export class QdrantClient {
     }
   }
 
-  async getCollectionInfo(): Promise<{ vectors_count?: number } | null> {
+  async getCollectionInfo(): Promise<{ vectors_count?: number; vectorSize?: number } | null> {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`);
+      const response = await this.qdrantFetch(`/collections/${collectionName}`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -309,9 +330,14 @@ export class QdrantClient {
       }
 
       const data = await response.json();
-      return {
+      const vectors = data.result?.config?.params?.vectors;
+      const info: { vectors_count?: number; vectorSize?: number } = {
         vectors_count: data.result?.points_count || data.result?.vectors_count || 0
       };
+      if (vectors && typeof vectors === 'object' && typeof vectors.size === 'number') {
+        info.vectorSize = vectors.size;
+      }
+      return info;
     } catch (error) {
       throw new StorageError(`Failed to get collection info from Qdrant`, error as Error);
     }
@@ -321,11 +347,8 @@ export class QdrantClient {
     const collectionName = this.config.storage.qdrantCollection;
     
     try {
-      const response = await fetch(`${this.config.storage.qdrantEndpoint}/collections/${collectionName}`, {
-        method: 'DELETE',
-        headers: this.config.storage.qdrantApiKey ? {
-          'api-key': this.config.storage.qdrantApiKey
-        } : {}
+      const response = await this.qdrantFetch(`/collections/${collectionName}`, {
+        method: 'DELETE'
       });
 
       if (!response.ok && response.status !== 404) {
@@ -373,6 +396,11 @@ export class SQLiteStorage {
         CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
         CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
         CREATE INDEX IF NOT EXISTS idx_directories_path ON directories(path);
+
+        CREATE TABLE IF NOT EXISTS meta (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        );
       `);
 
       db.pragma('journal_mode = WAL');
@@ -503,6 +531,15 @@ export class SQLiteStorage {
     return result.changes;
   }
 
+  getMeta(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, value);
+  }
+
   close(): void {
     openStorageInstances.delete(this);
     this.db.close();
@@ -513,9 +550,34 @@ export async function initializeStorage(config: Config): Promise<{ sqlite: SQLit
   const sqlite = new SQLiteStorage(config);
   const qdrant = new QdrantClient(config);
   
-  await qdrant.createCollection();
-  
   return { sqlite, qdrant };
+}
+
+export async function ensureCollectionDimensions(
+  sqlite: SQLiteStorage,
+  qdrant: QdrantClient,
+  config: Config,
+  dimension: number
+): Promise<void> {
+  const info = await qdrant.getCollectionInfo();
+
+  if (!info) {
+    await qdrant.createCollection(dimension);
+  } else if (info.vectorSize !== undefined && info.vectorSize !== dimension) {
+    const provider = sqlite.getMeta('embedding_provider');
+    const recordedDims = sqlite.getMeta('embedding_dims');
+    const recorded = provider && recordedDims
+      ? ` (meta table records provider '${provider}' with ${recordedDims} dimensions)`
+      : '';
+    throw new StorageError(
+      `Qdrant collection '${config.storage.qdrantCollection}' was created with ${info.vectorSize}-dimensional vectors ` +
+      `but the active embedding provider produces ${dimension}-dimensional vectors${recorded}. ` +
+      `Run \`directory-indexer reset\` to delete the existing collection, then re-index.`
+    );
+  }
+
+  sqlite.setMeta('embedding_provider', config.embedding.provider);
+  sqlite.setMeta('embedding_dims', String(dimension));
 }
 
 export async function initDatabase(dbPath: string): Promise<Database.Database> {
@@ -849,14 +911,13 @@ async function checkQdrantConsistency(sqlite: SQLiteStorage, config: Config): Pr
     
     const collectionName = config.storage.qdrantCollection;
     try {
-      const response = await fetch(`${config.storage.qdrantEndpoint}/collections/${collectionName}`);
-      if (!response.ok) {
+      const collectionInfo = await qdrant.getCollectionInfo();
+      if (!collectionInfo) {
         issues.push(`Vector collection '${collectionName}' not found (normal during first-time setup)`);
         return { isConsistent: false, issues };
       }
       
-      const collectionInfo = await response.json();
-      const qdrantPointCount = collectionInfo.result?.points_count || 0;
+      const qdrantPointCount = collectionInfo.vectors_count || 0;
       const sqliteChunkCount = totalChunks.count || 0;
       
       if (Math.abs(qdrantPointCount - sqliteChunkCount) > 0) {

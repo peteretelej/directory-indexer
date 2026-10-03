@@ -102,7 +102,7 @@ describe('Core Functionality Integration Tests', () => {
       expect(typeof isHealthy).toBe('boolean');
       
       if (isHealthy) {
-        await qdrant.createCollection();
+        await qdrant.createCollection(768);
         
         const points = [{
           id: 12345,

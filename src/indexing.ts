@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs';
+import { createHash } from 'node:crypto';
 import { join } from 'path';
 import { Config } from './config.js';
 import {
@@ -13,7 +14,7 @@ import {
 } from './utils.js';
 import { loadGitignoreRules } from './gitignore.js';
 import { generateEmbedding } from './embedding.js';
-import { initializeStorage, FileRecord } from './storage.js';
+import { initializeStorage, ensureCollectionDimensions, FileRecord } from './storage.js';
 import { log } from './logger.js';
 
 export interface ScanOptions {
@@ -35,6 +36,11 @@ export class IndexingError extends Error {
     super(message);
     this.name = 'IndexingError';
   }
+}
+
+export function pointIdFor(filePath: string, chunkId: string): string {
+  const hex = createHash('sha256').update(`${filePath}:${chunkId}`).digest('hex').slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 export function chunkText(content: string, chunkSize: number, overlap: number): ChunkInfo[] {
@@ -180,6 +186,7 @@ export async function indexDirectories(paths: string[], config: Config): Promise
   let skipped = 0;
   let failed = 0;
   let deleted = 0;
+  let collectionEnsured = false;
   const errors: string[] = [];
 
   const scanOptions: ScanOptions = {
@@ -273,11 +280,12 @@ export async function indexDirectories(paths: string[], config: Config): Promise
           for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             const embedding = await generateEmbedding(chunk.content, config);
-            // Generate a unique integer ID by combining hash and chunk index
-            const hashNum = parseInt(file.hash.slice(0, 8), 16);
-            const pointId = (hashNum % 1000000) * 1000 + parseInt(chunk.id);
+            if (!collectionEnsured) {
+              await ensureCollectionDimensions(sqlite, qdrant, config, embedding.length);
+              collectionEnsured = true;
+            }
             const point = {
-              id: pointId,
+              id: pointIdFor(file.path, chunk.id),
               vector: embedding,
               payload: {
                 filePath: file.path,

@@ -353,3 +353,219 @@ describe('QdrantClient.scrollPoints pagination', () => {
     }
   });
 });
+
+function jsonResponse(body: unknown, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    statusText: ok ? 'OK' : 'Not Found',
+    json: async () => body,
+    text: async () => JSON.stringify(body)
+  };
+}
+
+describe('QdrantClient auth headers', () => {
+  it('should send the api-key header on every request type when the key is set', async () => {
+    const { QdrantClient } = await import('../src/storage.js');
+    const config = await loadConfig();
+    config.storage.qdrantApiKey = 'secret-key';
+    const collection = config.storage.qdrantCollection;
+    const client = new QdrantClient(config);
+
+    const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const [input, init] = args;
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/healthz')) return jsonResponse({ status: 'ok' });
+      if (method === 'PUT' && url.endsWith(`/collections/${collection}`)) return jsonResponse({ result: {} });
+      if (method === 'GET' && url.endsWith(`/collections/${collection}`)) return jsonResponse({}, false, 404);
+      if (url.endsWith('/points/search')) return jsonResponse({ result: [] });
+      if (url.endsWith('/points/delete')) return jsonResponse({ result: {} });
+      if (url.endsWith('/points/count')) return jsonResponse({ result: { count: 2 } });
+      if (url.endsWith('/points/scroll')) return jsonResponse({ result: { points: [], next_page_offset: null } });
+      if (url.endsWith('/points')) return jsonResponse({ result: {} });
+      return jsonResponse({}, false, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await client.healthCheck();
+      await client.createCollection(1536);
+      await client.getCollectionInfo();
+      await client.upsertPoints([{
+        id: '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0',
+        vector: [0.1],
+        payload: { filePath: '/a.md', chunkId: '0', fileHash: 'h', content: 'c', parentDirectories: [] }
+      }]);
+      await client.searchPoints([0.1], 5);
+      await client.deletePointsByFilePath('/a.md');
+      await client.countPoints();
+      await client.scrollPoints();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const requests = fetchMock.mock.calls.map(call => {
+      const [input, init] = call as Parameters<typeof fetch>;
+      return {
+        url: String(input),
+        method: init?.method ?? 'GET',
+        headers: (init?.headers ?? {}) as Record<string, string>
+      };
+    });
+
+    expect(requests.length).toBeGreaterThanOrEqual(8);
+    expect(requests.some(r => r.url.endsWith('/healthz'))).toBe(true);
+    expect(requests.some(r => r.method === 'PUT' && r.url.endsWith(`/collections/${collection}`))).toBe(true);
+    expect(requests.some(r => r.method === 'GET' && r.url.endsWith(`/collections/${collection}`))).toBe(true);
+    expect(requests.some(r => r.method === 'PUT' && r.url.endsWith('/points'))).toBe(true);
+    expect(requests.some(r => r.url.endsWith('/points/search'))).toBe(true);
+    expect(requests.some(r => r.url.endsWith('/points/delete'))).toBe(true);
+    expect(requests.some(r => r.url.endsWith('/points/count'))).toBe(true);
+    expect(requests.some(r => r.url.endsWith('/points/scroll'))).toBe(true);
+    for (const request of requests) {
+      expect(request.headers['api-key']).toBe('secret-key');
+    }
+  });
+
+  it('should send no api-key header when the key is not set', async () => {
+    const { QdrantClient } = await import('../src/storage.js');
+    const config = await loadConfig();
+    config.storage.qdrantApiKey = undefined;
+    const client = new QdrantClient(config);
+
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => jsonResponse({ status: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await client.healthCheck();
+      await client.getCollectionInfo();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      const [, init] = call as Parameters<typeof fetch>;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['api-key']).toBeUndefined();
+      expect(headers['Content-Type']).toBe('application/json');
+    }
+  });
+});
+
+describe('ensureCollectionDimensions', () => {
+  it('should create a missing collection with the given dimension and record meta', async () => {
+    const { SQLiteStorage, QdrantClient, ensureCollectionDimensions } = await import('../src/storage.js');
+
+    async function ensureWithFreshInstances(dimension: number) {
+      const config = await loadConfig();
+      config.storage.sqlitePath = ':memory:';
+      const sqlite = new SQLiteStorage(config);
+      const qdrant = new QdrantClient(config);
+
+      const createBodies: unknown[] = [];
+      const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+        const [, init] = args;
+        if ((init?.method ?? 'GET') === 'PUT') {
+          createBodies.push(JSON.parse(String(init?.body)));
+          return jsonResponse({ result: {} });
+        }
+        return jsonResponse({}, false, 404);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        await ensureCollectionDimensions(sqlite, qdrant, config, dimension);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+
+      expect(createBodies).toEqual([{ vectors: { size: dimension, distance: 'Cosine' } }]);
+      expect(sqlite.getMeta('embedding_provider')).toBe(config.embedding.provider);
+      expect(sqlite.getMeta('embedding_dims')).toBe(String(dimension));
+      return sqlite;
+    }
+
+    const first = await ensureWithFreshInstances(1536);
+    first.close();
+    const second = await ensureWithFreshInstances(384);
+    second.close();
+  });
+
+  it('should throw reset guidance when the existing collection has a different size', async () => {
+    const { SQLiteStorage, QdrantClient, StorageError, ensureCollectionDimensions } = await import('../src/storage.js');
+    const config = await loadConfig();
+    config.storage.sqlitePath = ':memory:';
+    const sqlite = new SQLiteStorage(config);
+    const qdrant = new QdrantClient(config);
+
+    const fetchMock = vi.fn(async () => jsonResponse({
+      result: {
+        points_count: 3,
+        config: { params: { vectors: { size: 768, distance: 'Cosine' } } }
+      }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    let error: Error | null = null;
+    try {
+      await ensureCollectionDimensions(sqlite, qdrant, config, 1536);
+    } catch (caught) {
+      error = caught as Error;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error!.message).toContain('768');
+    expect(error!.message).toContain('1536');
+    expect(error!.message).toContain('directory-indexer reset');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    sqlite.close();
+  });
+});
+
+describe('QdrantClient missing collection tolerance', () => {
+  it('should treat a missing collection as empty results and successful deletes', async () => {
+    const { QdrantClient } = await import('../src/storage.js');
+    const config = await loadConfig();
+    const client = new QdrantClient(config);
+
+    const fetchMock = vi.fn(async () => jsonResponse({}, false, 404));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      expect(await client.searchPoints([0.1], 5)).toEqual([]);
+      expect(await client.countPoints()).toBe(0);
+      expect(await client.scrollPoints()).toEqual([]);
+      await expect(client.deletePointsByFilePath('/gone.md')).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('Qdrant point IDs', () => {
+  it('should be deterministic and UUID-shaped for the same path and chunk', async () => {
+    const { pointIdFor } = await import('../src/indexing.js');
+
+    const first = pointIdFor('/docs/report.md', '3');
+    const second = pointIdFor('/docs/report.md', '3');
+
+    expect(second).toBe(first);
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it('should give different IDs to files whose hashes collided under the old scheme', async () => {
+    const { pointIdFor } = await import('../src/indexing.js');
+
+    const hashA = `000f4240${'0'.repeat(56)}`;
+    const hashB = `001e8480${'0'.repeat(56)}`;
+    const oldPointId = (hash: string, chunkIndex: number) =>
+      (parseInt(hash.slice(0, 8), 16) % 1000000) * 1000 + chunkIndex;
+
+    expect(oldPointId(hashA, 0)).toBe(oldPointId(hashB, 0));
+    expect(pointIdFor('/a.md', '0')).not.toBe(pointIdFor('/b.md', '0'));
+  });
+});
