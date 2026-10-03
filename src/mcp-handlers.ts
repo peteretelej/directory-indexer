@@ -4,6 +4,7 @@ import { searchContent, findSimilarFiles, getFileContent, getChunkContent } from
 import { getIndexStatus, SQLiteStorage, initializeStorage } from './storage.js';
 import { validateIndexPrerequisites, validateSearchPrerequisites } from './prerequisites.js';
 import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from './path-validation.js';
+import { normalizePath } from './utils.js';
 import { log } from './logger.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -19,6 +20,10 @@ let mcpServer: Server | null = null;
  */
 export function setMcpServer(server: Server): void {
   mcpServer = server;
+}
+
+function notifyClient(level: 'info' | 'error', data: Record<string, unknown>): void {
+  mcpServer?.sendLoggingMessage({ level, data })?.catch(() => {});
 }
 
 /**
@@ -147,7 +152,7 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   const mutexKeys = paths.map(normalizeMutexKey);
 
   log('info', 'Index start', { directories: paths });
-  mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_start', directories: paths } });
+  notifyClient('info', { event: 'index_start', directories: paths });
 
   // Per-directory mutex: serialize concurrent calls targeting the same directory
   for (const key of mutexKeys) {
@@ -177,7 +182,7 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
     }
 
     log('info', 'Index complete', { result });
-    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_complete', result } });
+    notifyClient('info', { event: 'index_complete', result });
 
     let responseText = `Indexed ${result.indexed} files, skipped ${result.skipped} files, cleaned up ${result.deleted} deleted files, ${result.failed} failed`;
 
@@ -200,7 +205,7 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log('error', 'Index error', { error: errorMessage, directories: paths });
-    mcpServer?.sendLoggingMessage({ level: 'error', data: { event: 'index_error', error: errorMessage } });
+    notifyClient('error', { event: 'index_error', error: errorMessage });
     throw new Error(
       `Indexing failed for ${paths.join(', ')}. Verify the directory exists and is readable. Use 'server_info' to check current status.`
     );
@@ -212,43 +217,38 @@ export async function handleIndexTool(args: unknown, config: Config): Promise<Ca
   }
 }
 
-async function validateWorkspace(workspace?: string): Promise<{ workspace?: string; message?: string }> {
-  if (!workspace) return { workspace };
-  
+async function validateWorkspace(workspace?: string): Promise<string | undefined> {
+  if (!workspace) return workspace;
+
   const config = (await import('./config.js')).loadConfig();
   const { getAvailableWorkspaces } = await import('./config.js');
   const availableWorkspaces = getAvailableWorkspaces(config);
-  
+
   if (availableWorkspaces.includes(workspace)) {
-    return { workspace };
+    return workspace;
   }
-  
-  // Invalid workspace - search all content with informative message
-  const message = availableWorkspaces.length > 0
-    ? `Note: Workspace '${workspace}' not found. Searching all content instead. Available workspaces: ${availableWorkspaces.join(', ')}. Use server_info tool to see workspace details.`
-    : `Note: Workspace '${workspace}' not found and no workspaces are configured. Searching all indexed content.`;
-  
-  return { workspace: undefined, message };
+
+  throw new Error(
+    availableWorkspaces.length > 0
+      ? `Workspace '${workspace}' not found. Available workspaces: ${availableWorkspaces.join(', ')}`
+      : `Workspace '${workspace}' not found and no workspaces are configured.`
+  );
 }
 
 export async function handleSearchTool(args: unknown): Promise<CallToolResult> {
   if (!isSearchToolArgs(args)) {
     throw new Error('query is required');
   }
-  
+
   // Validate prerequisites before proceeding
   const config = (await import('./config.js')).loadConfig();
   await validateSearchPrerequisites(config);
-  
-  const { workspace, message } = await validateWorkspace(args.workspace);
+
+  const workspace = await validateWorkspace(args.workspace);
   const results = await searchContent(args.query, { limit: args.limit || 10, workspace });
-  
-  const response = message 
-    ? `${message}\n\n${JSON.stringify(results, null, 2)}`
-    : JSON.stringify(results, null, 2);
-  
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: JSON.stringify(results, null, 2) }]
   };
 }
 
@@ -256,20 +256,19 @@ export async function handleSimilarFilesTool(args: unknown): Promise<CallToolRes
   if (!isSimilarFilesToolArgs(args)) {
     throw new Error('file_path is required');
   }
-  
+
   // Validate prerequisites before proceeding
   const config = (await import('./config.js')).loadConfig();
   await validateSearchPrerequisites(config);
-  
-  const { workspace, message } = await validateWorkspace(args.workspace);
+
+  await ensureIndexedDirsCache(config);
+  validatePathWithinIndexedDirs(args.file_path, indexedDirsCache);
+
+  const workspace = await validateWorkspace(args.workspace);
   const results = await findSimilarFiles(args.file_path, args.limit || 10, workspace);
-  
-  const response = message 
-    ? `${message}\n\n${JSON.stringify(results, null, 2)}`
-    : JSON.stringify(results, null, 2);
-  
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: JSON.stringify(results, null, 2) }]
   };
 }
 
@@ -359,8 +358,9 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
     throw new Error('directory_path is required');
   }
 
-  const dirPath = args.directory_path.trim();
-  const mutexKey = normalizeMutexKey(dirPath);
+  const trimmedPath = args.directory_path.trim();
+  const dirPath = normalizePath(trimmedPath);
+  const mutexKey = normalizeMutexKey(trimmedPath);
 
   // Acquire per-directory mutex to avoid racing with in-flight indexing
   const existing = indexingMutex.get(mutexKey);
@@ -377,15 +377,20 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
 
   try {
     // Check if the directory is actually indexed
-    const directory = await sqlite.getDirectory(dirPath);
+    let directory = await sqlite.getDirectory(dirPath);
+    if (!directory && process.platform === 'win32') {
+      directory = await sqlite.getDirectoryByCaseInsensitive(dirPath);
+    }
     if (!directory) {
       throw new Error(
         `Directory '${dirPath}' is not indexed. Use 'server_info' to see indexed directories.`
       );
     }
 
+    const storedPath = directory.path;
+
     // Get files for this directory to clean up Qdrant points
-    const files = await sqlite.getFilesByDirectory(dirPath);
+    const files = await sqlite.getFilesByDirectory(storedPath);
     const vectorErrors: string[] = [];
     for (const file of files) {
       try {
@@ -410,22 +415,22 @@ export async function handleDeleteIndexTool(args: unknown, config: Config): Prom
     }
 
     // Delete file records and directory record from SQLite
-    const deletedFiles = sqlite.deleteFilesByDirectory(dirPath);
-    sqlite.deleteDirectory(dirPath);
+    const deletedFiles = sqlite.deleteFilesByDirectory(storedPath);
+    sqlite.deleteDirectory(storedPath);
 
     // Refresh the indexed directories cache
     refreshIndexedDirsCache(sqlite);
 
     const chunksCount = files.reduce((sum, f) => sum + (f.chunks?.length || 0), 0);
 
-    log('info', 'Index deleted', { directory: dirPath, files: deletedFiles, chunks: chunksCount });
-    mcpServer?.sendLoggingMessage({ level: 'info', data: { event: 'index_deleted', directory: dirPath } });
+    log('info', 'Index deleted', { directory: storedPath, files: deletedFiles, chunks: chunksCount });
+    notifyClient('info', { event: 'index_deleted', directory: storedPath });
 
     return {
       content: [
         {
           type: 'text',
-          text: `Deleted index for ${dirPath}: removed ${deletedFiles} files and ${chunksCount} chunks`
+          text: `Deleted index for ${storedPath}: removed ${deletedFiles} files and ${chunksCount} chunks`
         }
       ]
     };

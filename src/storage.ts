@@ -430,6 +430,24 @@ export class SQLiteStorage {
     }
   }
 
+  async getDirectoryByCaseInsensitive(path: string): Promise<DirectoryRecord | null> {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM directories WHERE path = ? COLLATE NOCASE');
+      const row = stmt.get(path) as { id: number; path: string; status: 'pending' | 'indexing' | 'completed' | 'failed'; indexed_at: number } | undefined;
+
+      if (!row) return null;
+
+      return {
+        id: row.id,
+        path: row.path,
+        status: row.status,
+        indexedAt: new Date(row.indexed_at)
+      };
+    } catch (error) {
+      throw new StorageError(`Failed to get directory record`, error as Error);
+    }
+  }
+
   async upsertDirectory(path: string, status: DirectoryRecord['status']): Promise<void> {
     try {
       const stmt = this.db.prepare(`

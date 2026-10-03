@@ -109,6 +109,34 @@ describe('MCP Handlers Unit Tests', () => {
       await expect(handleIndexTool(null, config)).rejects.toThrow('directory_paths is required');
       await expect(handleIndexTool({ directory_paths: 'not-an-array' }, config)).rejects.toThrow('directory_paths is required');
     });
+
+    it('should not produce an unhandled rejection when the client disconnected', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const { setMcpServer } = await import('../src/mcp-handlers.js');
+      vi.mocked(indexDirectories).mockResolvedValue({ indexed: 1, skipped: 0, failed: 0, deleted: 0, errors: [] });
+
+      const rejections: unknown[] = [];
+      const tracker = (reason: unknown): void => { rejections.push(reason); };
+      process.on('unhandledRejection', tracker);
+
+      const rejectingServer = {
+        sendLoggingMessage: vi.fn().mockRejectedValue(new Error('Not connected'))
+      };
+      setMcpServer(rejectingServer as any);
+
+      try {
+        const config = loadConfig();
+        const result = await handleIndexTool({ directory_paths: ['/notify/dir'] }, config);
+        await new Promise(r => setTimeout(r, 0));
+
+        expect(rejectingServer.sendLoggingMessage).toHaveBeenCalled();
+        expect(rejections).toHaveLength(0);
+        expect((result.content[0] as { type: 'text'; text: string }).text).toContain('Indexed 1 files');
+      } finally {
+        process.off('unhandledRejection', tracker);
+        setMcpServer({ sendLoggingMessage: vi.fn() } as any);
+      }
+    });
   });
 
   describe('handleSearchTool', () => {
@@ -144,38 +172,28 @@ describe('MCP Handlers Unit Tests', () => {
       expect(searchContent).toHaveBeenCalledWith('test', { limit: 10, workspace: undefined });
     });
 
-    it('should handle invalid workspace by searching all content', async () => {
+    it('should throw for unknown workspace with available workspaces listed', async () => {
       const { searchContent } = await import('../src/search.js');
       const { loadConfig, getAvailableWorkspaces } = await import('../src/config.js');
-      const mockResults = [{ filePath: '/test.md', score: 0.9, fileSizeBytes: 1024, matchingChunks: 2, chunks: [] }];
-      vi.mocked(searchContent).mockResolvedValue(mockResults);
+      vi.mocked(searchContent).mockResolvedValue([]);
       vi.mocked(loadConfig).mockReturnValue({ workspaces: { docs: { paths: ['/docs'], isValid: true } } } as any);
       vi.mocked(getAvailableWorkspaces).mockReturnValue(['docs']);
 
-      const args = { query: 'test search', workspace: 'invalid' };
-
-      const result = await handleSearchTool(args);
-
-      expect(searchContent).toHaveBeenCalledWith('test search', { limit: 10, workspace: undefined });
-      const text = (result.content[0] as { type: 'text'; text: string }).text;
-      expect(text).toContain('Workspace \'invalid\' not found');
-      expect(text).toContain('Available workspaces: docs');
+      await expect(handleSearchTool({ query: 'test search', workspace: 'invalid' }))
+        .rejects.toThrow("Workspace 'invalid' not found. Available workspaces: docs");
+      expect(searchContent).not.toHaveBeenCalled();
     });
 
-    it('should handle invalid workspace when no workspaces configured', async () => {
+    it('should throw for unknown workspace when no workspaces are configured', async () => {
       const { searchContent } = await import('../src/search.js');
       const { loadConfig, getAvailableWorkspaces } = await import('../src/config.js');
-      const mockResults = [{ filePath: '/test.md', score: 0.9, fileSizeBytes: 1024, matchingChunks: 2, chunks: [] }];
-      vi.mocked(searchContent).mockResolvedValue(mockResults);
+      vi.mocked(searchContent).mockResolvedValue([]);
       vi.mocked(loadConfig).mockReturnValue({ workspaces: {} } as any);
       vi.mocked(getAvailableWorkspaces).mockReturnValue([]);
 
-      const args = { query: 'test search', workspace: 'invalid' };
-
-      const result = await handleSearchTool(args);
-
-      expect(searchContent).toHaveBeenCalledWith('test search', { limit: 10, workspace: undefined });
-      expect((result.content[0] as { type: 'text'; text: string }).text).toContain('no workspaces are configured');
+      await expect(handleSearchTool({ query: 'test search', workspace: 'invalid' }))
+        .rejects.toThrow("Workspace 'invalid' not found and no workspaces are configured.");
+      expect(searchContent).not.toHaveBeenCalled();
     });
 
     it('should throw error for missing query', async () => {
@@ -218,38 +236,54 @@ describe('MCP Handlers Unit Tests', () => {
       expect(findSimilarFiles).toHaveBeenCalledWith('/test.md', 10, undefined);
     });
 
-    it('should handle invalid workspace by searching all content', async () => {
+    it('should throw for unknown workspace with available workspaces listed', async () => {
       const { findSimilarFiles } = await import('../src/search.js');
       const { loadConfig, getAvailableWorkspaces } = await import('../src/config.js');
-      const mockResults = [{ filePath: '/similar.md', score: 0.8, fileSizeBytes: 512 }];
-      vi.mocked(findSimilarFiles).mockResolvedValue(mockResults);
+      vi.mocked(findSimilarFiles).mockResolvedValue([]);
       vi.mocked(loadConfig).mockReturnValue({ workspaces: { code: { paths: ['/code'], isValid: true } } } as any);
       vi.mocked(getAvailableWorkspaces).mockReturnValue(['code']);
 
-      const args = { file_path: '/test.md', workspace: 'invalid' };
-
-      const result = await handleSimilarFilesTool(args);
-
-      expect(findSimilarFiles).toHaveBeenCalledWith('/test.md', 10, undefined);
-      const text = (result.content[0] as { type: 'text'; text: string }).text;
-      expect(text).toContain('Workspace \'invalid\' not found');
-      expect(text).toContain('Available workspaces: code');
+      await expect(handleSimilarFilesTool({ file_path: '/test.md', workspace: 'invalid' }))
+        .rejects.toThrow("Workspace 'invalid' not found. Available workspaces: code");
+      expect(findSimilarFiles).not.toHaveBeenCalled();
     });
 
-    it('should handle invalid workspace when no workspaces configured', async () => {
+    it('should throw for unknown workspace when no workspaces are configured', async () => {
       const { findSimilarFiles } = await import('../src/search.js');
       const { loadConfig, getAvailableWorkspaces } = await import('../src/config.js');
-      const mockResults = [{ filePath: '/similar.md', score: 0.8, fileSizeBytes: 512 }];
-      vi.mocked(findSimilarFiles).mockResolvedValue(mockResults);
+      vi.mocked(findSimilarFiles).mockResolvedValue([]);
       vi.mocked(loadConfig).mockReturnValue({ workspaces: {} } as any);
       vi.mocked(getAvailableWorkspaces).mockReturnValue([]);
 
-      const args = { file_path: '/test.md', workspace: 'invalid' };
+      await expect(handleSimilarFilesTool({ file_path: '/test.md', workspace: 'invalid' }))
+        .rejects.toThrow("Workspace 'invalid' not found and no workspaces are configured.");
+      expect(findSimilarFiles).not.toHaveBeenCalled();
+    });
 
-      const result = await handleSimilarFilesTool(args);
+    it('should throw access-denied for a file outside indexed directories', async () => {
+      const { findSimilarFiles } = await import('../src/search.js');
+      const { validatePathWithinIndexedDirs } = await import('../src/path-validation.js');
+      vi.mocked(findSimilarFiles).mockResolvedValue([]);
+      vi.mocked(validatePathWithinIndexedDirs).mockImplementationOnce((filePath: string) => {
+        throw new Error(`Access denied: ${filePath} is outside indexed directories. Only files within indexed directories can be accessed.`);
+      });
 
+      await expect(handleSimilarFilesTool({ file_path: '/outside/secret.txt' }))
+        .rejects.toThrow('Access denied: /outside/secret.txt is outside indexed directories');
+      expect(findSimilarFiles).not.toHaveBeenCalled();
+    });
+
+    it('should pass a file inside indexed directories through to findSimilarFiles', async () => {
+      const { findSimilarFiles } = await import('../src/search.js');
+      const { validatePathWithinIndexedDirs } = await import('../src/path-validation.js');
+      const mockResults = [{ filePath: '/similar.md', score: 0.8, fileSizeBytes: 512 }];
+      vi.mocked(findSimilarFiles).mockResolvedValue(mockResults);
+
+      const result = await handleSimilarFilesTool({ file_path: '/test.md' });
+
+      expect(validatePathWithinIndexedDirs).toHaveBeenCalledWith('/test.md', expect.any(Set));
       expect(findSimilarFiles).toHaveBeenCalledWith('/test.md', 10, undefined);
-      expect((result.content[0] as { type: 'text'; text: string }).text).toContain('no workspaces are configured');
+      expect((result.content[0] as { type: 'text'; text: string }).text).toBe(JSON.stringify(mockResults, null, 2));
     });
 
     it('should throw error for missing file_path', async () => {

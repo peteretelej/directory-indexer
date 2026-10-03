@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { sep } from 'path';
 import { handleDeleteIndexTool } from '../src/mcp-handlers.js';
+import { normalizePath } from '../src/utils.js';
 import { getMcpTools } from '../src/mcp.js';
 
 vi.mock('../src/indexing.js', () => ({
@@ -64,11 +66,13 @@ describe('handleDeleteIndexTool', () => {
 
   it('should delete index for an indexed directory', async () => {
     const { initializeStorage } = await import('../src/storage.js');
+    const dirPath = normalizePath('/test/dir');
     const mockSqlite = {
-      getDirectory: vi.fn().mockResolvedValue({ path: '/test/dir', status: 'completed' }),
+      getDirectory: vi.fn().mockResolvedValue({ path: dirPath, status: 'completed' }),
+      getDirectoryByCaseInsensitive: vi.fn(),
       getFilesByDirectory: vi.fn().mockResolvedValue([
-        { path: '/test/dir/file1.txt', chunks: [{ id: '0' }, { id: '1' }] },
-        { path: '/test/dir/file2.txt', chunks: [{ id: '0' }] }
+        { path: `${dirPath}${sep}file1.txt`, chunks: [{ id: '0' }, { id: '1' }] },
+        { path: `${dirPath}${sep}file2.txt`, chunks: [{ id: '0' }] }
       ]),
       deleteFilesByDirectory: vi.fn().mockReturnValue(2),
       deleteDirectory: vi.fn(),
@@ -88,21 +92,23 @@ describe('handleDeleteIndexTool', () => {
 
     const result = await handleDeleteIndexTool({ directory_path: '/test/dir' }, config);
 
-    expect(mockSqlite.getDirectory).toHaveBeenCalledWith('/test/dir');
-    expect(mockSqlite.deleteFilesByDirectory).toHaveBeenCalledWith('/test/dir');
-    expect(mockSqlite.deleteDirectory).toHaveBeenCalledWith('/test/dir');
+    expect(mockSqlite.getDirectory).toHaveBeenCalledWith(dirPath);
+    expect(mockSqlite.deleteFilesByDirectory).toHaveBeenCalledWith(dirPath);
+    expect(mockSqlite.deleteDirectory).toHaveBeenCalledWith(dirPath);
     expect(mockQdrant.deletePointsByFilePath).toHaveBeenCalledTimes(2);
 
     const text = (result.content[0] as { type: 'text'; text: string }).text;
-    expect(text).toContain('Deleted index for /test/dir');
+    expect(text).toContain(`Deleted index for ${dirPath}`);
     expect(text).toContain('removed 2 files');
     expect(text).toContain('3 chunks');
   });
 
   it('should return error for non-indexed directory', async () => {
     const { initializeStorage } = await import('../src/storage.js');
+    const dirPath = normalizePath('/not/indexed');
     const mockSqlite = {
       getDirectory: vi.fn().mockResolvedValue(null),
+      getDirectoryByCaseInsensitive: vi.fn().mockResolvedValue(null),
       close: vi.fn()
     };
     vi.mocked(initializeStorage).mockResolvedValue({
@@ -114,7 +120,77 @@ describe('handleDeleteIndexTool', () => {
     const config = loadConfig();
 
     await expect(handleDeleteIndexTool({ directory_path: '/not/indexed' }, config))
-      .rejects.toThrow("Directory '/not/indexed' is not indexed");
+      .rejects.toThrow(`Directory '${dirPath}' is not indexed`);
+  });
+
+  describe('delete_index path normalization', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    function createMockSqlite(storedPath: string): Record<string, ReturnType<typeof vi.fn>> {
+      return {
+        getDirectory: vi.fn().mockResolvedValue(null),
+        getDirectoryByCaseInsensitive: vi.fn().mockResolvedValue({ path: storedPath, status: 'completed' }),
+        getFilesByDirectory: vi.fn().mockResolvedValue([
+          { path: `${storedPath}${sep}file1.txt`, chunks: [{ id: '0' }] }
+        ]),
+        deleteFilesByDirectory: vi.fn().mockReturnValue(1),
+        deleteDirectory: vi.fn(),
+        getDirectories: vi.fn().mockReturnValue([]),
+        close: vi.fn()
+      };
+    }
+
+    it('should delete the indexed directory when given a trailing-slash spelling', async () => {
+      const { initializeStorage } = await import('../src/storage.js');
+      const storedPath = normalizePath('/test/dir');
+      const inputPath = storedPath + sep;
+      const mockSqlite = createMockSqlite(storedPath);
+      mockSqlite.getDirectory.mockResolvedValue({ path: storedPath, status: 'completed' });
+      vi.mocked(initializeStorage).mockResolvedValue({
+        sqlite: mockSqlite as any,
+        qdrant: { deletePointsByFilePath: vi.fn().mockResolvedValue(undefined) } as any
+      });
+
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+
+      const result = await handleDeleteIndexTool({ directory_path: inputPath }, config);
+
+      expect(mockSqlite.getDirectory).toHaveBeenCalledWith(storedPath);
+      expect(mockSqlite.getFilesByDirectory).toHaveBeenCalledWith(storedPath);
+      expect(mockSqlite.deleteFilesByDirectory).toHaveBeenCalledWith(storedPath);
+      expect(mockSqlite.deleteDirectory).toHaveBeenCalledWith(storedPath);
+      const text = (result.content[0] as { type: 'text'; text: string }).text;
+      expect(text).toContain(`Deleted index for ${storedPath}`);
+    });
+
+    it.runIf(process.platform === 'win32')('should resolve a case-different spelling to the stored path on windows', async () => {
+      const { initializeStorage } = await import('../src/storage.js');
+      const storedPath = normalizePath('/test/dir');
+      const caseDifferent = storedPath.toUpperCase();
+      expect(caseDifferent).not.toBe(storedPath);
+
+      const mockSqlite = createMockSqlite(storedPath);
+      vi.mocked(initializeStorage).mockResolvedValue({
+        sqlite: mockSqlite as any,
+        qdrant: { deletePointsByFilePath: vi.fn().mockResolvedValue(undefined) } as any
+      });
+
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+
+      const result = await handleDeleteIndexTool({ directory_path: caseDifferent }, config);
+
+      expect(mockSqlite.getDirectory).toHaveBeenCalledWith(caseDifferent);
+      expect(mockSqlite.getDirectoryByCaseInsensitive).toHaveBeenCalled();
+      expect(mockSqlite.getFilesByDirectory).toHaveBeenCalledWith(storedPath);
+      expect(mockSqlite.deleteFilesByDirectory).toHaveBeenCalledWith(storedPath);
+      expect(mockSqlite.deleteDirectory).toHaveBeenCalledWith(storedPath);
+      const text = (result.content[0] as { type: 'text'; text: string }).text;
+      expect(text).toContain(`Deleted index for ${storedPath}`);
+    });
   });
 
   it('should throw error for missing directory_path', async () => {
