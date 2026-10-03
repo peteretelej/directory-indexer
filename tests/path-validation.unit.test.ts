@@ -3,7 +3,7 @@ import { validatePathWithinIndexedDirs, resolveIndexedDirectories } from '../src
 import { SQLiteStorage } from '../src/storage.js';
 import { loadConfig } from '../src/config.js';
 import { mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'fs';
-import { join } from 'path';
+import { join, parse } from 'path';
 import { tmpdir } from 'os';
 
 describe('validatePathWithinIndexedDirs', () => {
@@ -147,6 +147,24 @@ describe('validatePathWithinIndexedDirs', () => {
     const dirs = new Set(['/some/dir']);
     expect(() =>
       validatePathWithinIndexedDirs('\\\\server\\share\\file.txt', dirs)
+    ).toThrow('Access denied');
+  });
+
+  it('should allow children when an indexed directory is the filesystem root', () => {
+    const root = parse(tmpdir()).root;
+    const rootDirs = new Set([root]);
+
+    expect(() =>
+      validatePathWithinIndexedDirs(join(root, 'Users', 'x', 'file.md'), rootDirs)
+    ).not.toThrow();
+  });
+
+  it('should still deny a sibling directory sharing a prefix with an indexed directory', () => {
+    const docsDir = join(tempDir, 'docs');
+    const docsEvilFile = join(tempDir, 'docs-evil', 'steal.txt');
+
+    expect(() =>
+      validatePathWithinIndexedDirs(docsEvilFile, new Set([docsDir]))
     ).toThrow('Access denied');
   });
 });

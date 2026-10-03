@@ -20,9 +20,17 @@ const packageJsonPath = join(__dirname, '../package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 const VERSION = packageJson.version;
 
+function parseLimit(value: string): number {
+  const limit = Number.parseInt(value);
+  if (Number.isNaN(limit) || limit < 1) {
+    throw new Error('Invalid --limit: must be a positive integer');
+  }
+  return limit;
+}
+
 export async function main() {
   const program = new Command();
-  
+
   program
     .name('directory-indexer')
     .description('AI-powered directory indexing with semantic search')
@@ -52,7 +60,7 @@ export async function main() {
     .action(async (query: string, options) => {
       try {
         await handleSearch(query, {
-          limit: parseInt(options.limit),
+          limit: parseLimit(options.limit),
           showChunks: options.showChunks,
           verbose: options.verbose
         });
@@ -71,7 +79,7 @@ export async function main() {
     .action(async (filePath: string, options) => {
       try {
         await handleSimilar(filePath, {
-          limit: parseInt(options.limit),
+          limit: parseLimit(options.limit),
           verbose: options.verbose
         });
       } catch (error) {

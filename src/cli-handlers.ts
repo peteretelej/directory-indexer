@@ -44,7 +44,7 @@ export async function handleIndex(paths: string[], options: IndexOptions): Promi
   await validateIndexPrerequisites(config);
   
   console.log(`Indexing ${paths.length} ${paths.length === 1 ? 'directory' : 'directories'}: ${paths.join(', ')}`);
-  if (!options.verbose) {
+  if (!config.verbose) {
     console.log('Run with --verbose for detailed per-file indexing reports');
     console.log('Indexing can be safely stopped and resumed - progress is automatically saved');
     console.log('You can start using the MCP server while indexing continues');

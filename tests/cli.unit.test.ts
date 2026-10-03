@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { main } from '../src/cli.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { 
   handleIndex, 
   handleSearch, 
@@ -22,13 +25,14 @@ describe('CLI Tests', () => {
   let originalArgv: string[];
   let originalExit: typeof process.exit;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: ReturnType<typeof vi.spyOn>;
   let exitCode: number | undefined;
 
   beforeEach(() => {
     originalArgv = process.argv;
     originalExit = process.exit;
-    
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
     process.exit = vi.fn((code?: number) => {
@@ -318,6 +322,154 @@ describe('CLI Tests', () => {
 
       expect(getIndexStatus).toHaveBeenCalled();
       expect(getServiceStatus).toHaveBeenCalledWith(mockConfig);
+    });
+  });
+
+  describe('Verbose Hint Gating', () => {
+    it('should not print the verbose hint when verbosity comes from VERBOSE=true', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const { loadConfig } = await import('../src/config.js');
+      const { loadConfig: realLoadConfig } = await vi.importActual<typeof import('../src/config.js')>('../src/config.js');
+
+      const originalVerbose = process.env.VERBOSE;
+      process.env.VERBOSE = 'true';
+      try {
+        vi.mocked(loadConfig).mockResolvedValue(realLoadConfig());
+        vi.mocked(indexDirectories).mockResolvedValue({ indexed: 1, skipped: 0, deleted: 0, failed: 0, errors: [] });
+
+        await handleIndex(['/test'], {});
+
+        const hintPrinted = logSpy.mock.calls
+          .some(call => call.some(arg => String(arg).includes('Run with --verbose')));
+        expect(hintPrinted).toBe(false);
+      } finally {
+        if (originalVerbose === undefined) delete process.env.VERBOSE;
+        else process.env.VERBOSE = originalVerbose;
+      }
+    });
+
+    it('should print the verbose hint when verbosity is off', async () => {
+      const { indexDirectories } = await import('../src/indexing.js');
+      const { loadConfig } = await import('../src/config.js');
+      const { loadConfig: realLoadConfig } = await vi.importActual<typeof import('../src/config.js')>('../src/config.js');
+
+      const originalVerbose = process.env.VERBOSE;
+      delete process.env.VERBOSE;
+      try {
+        vi.mocked(loadConfig).mockResolvedValue(realLoadConfig());
+        vi.mocked(indexDirectories).mockResolvedValue({ indexed: 1, skipped: 0, deleted: 0, failed: 0, errors: [] });
+
+        await handleIndex(['/test'], {});
+
+        const hintPrinted = logSpy.mock.calls
+          .some(call => call.some(arg => String(arg).includes('Run with --verbose')));
+        expect(hintPrinted).toBe(true);
+      } finally {
+        if (originalVerbose === undefined) delete process.env.VERBOSE;
+        else process.env.VERBOSE = originalVerbose;
+      }
+    });
+  });
+
+  describe('Chunk Range Validation', () => {
+    it('should reject malformed chunk ranges', async () => {
+      const { getFileContent: realGetFileContent } = await vi.importActual<typeof import('../src/search.js')>('../src/search.js');
+
+      await expect(realGetFileContent('/some/file.txt', 'abc')).rejects.toThrow("Invalid chunk range: 'abc'");
+      await expect(realGetFileContent('/some/file.txt', '5-2')).rejects.toThrow("Invalid chunk range: '5-2'");
+    });
+
+    it('should return the requested chunk range', async () => {
+      const { getFileContent: realGetFileContent } = await vi.importActual<typeof import('../src/search.js')>('../src/search.js');
+      const { loadConfig } = await import('../src/config.js');
+      const { initializeStorage } = await import('../src/storage.js');
+
+      const tempDir = mkdtempSync(join(tmpdir(), 'chunk-range-'));
+      const filePath = join(tempDir, 'file.txt');
+      writeFileSync(filePath, 'full content');
+
+      try {
+        vi.mocked(loadConfig).mockResolvedValue({} as any);
+        vi.mocked(initializeStorage).mockResolvedValue({
+          sqlite: {
+            getFile: async () => ({
+              chunks: [
+                { id: '1', content: 'one ' },
+                { id: '2', content: 'two ' },
+                { id: '3', content: 'three' }
+              ]
+            })
+          }
+        } as any);
+
+        const content = await realGetFileContent(filePath, '2-3');
+        expect(content).toBe('two three');
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('Limit Validation', () => {
+    it('should reject a non-numeric --limit', async () => {
+      process.argv = ['node', 'cli.js', 'search', 'query', '--limit', 'abc'];
+
+      try {
+        await main();
+      } catch {
+        // process.exit throws in tests
+      }
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error searching content:',
+        expect.objectContaining({ message: 'Invalid --limit: must be a positive integer' })
+      );
+      expect(exitCode).toBe(1);
+    });
+
+    it('should reject a negative --limit', async () => {
+      process.argv = ['node', 'cli.js', 'search', 'query', '--limit', '-3'];
+
+      try {
+        await main();
+      } catch {
+        // process.exit throws in tests
+      }
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error searching content:',
+        expect.objectContaining({ message: 'Invalid --limit: must be a positive integer' })
+      );
+      expect(exitCode).toBe(1);
+    });
+
+    it('should reject an invalid --limit for similar', async () => {
+      process.argv = ['node', 'cli.js', 'similar', 'file.txt', '--limit', 'abc'];
+
+      try {
+        await main();
+      } catch {
+        // process.exit throws in tests
+      }
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error finding similar files:',
+        expect.objectContaining({ message: 'Invalid --limit: must be a positive integer' })
+      );
+      expect(exitCode).toBe(1);
+    });
+
+    it('should pass a valid --limit to search', async () => {
+      const { searchContent } = await import('../src/search.js');
+      const { loadConfig } = await import('../src/config.js');
+
+      vi.mocked(loadConfig).mockResolvedValue({} as any);
+      vi.mocked(searchContent).mockResolvedValue([]);
+
+      process.argv = ['node', 'cli.js', 'search', 'query', '--limit', '5'];
+      await main();
+
+      expect(searchContent).toHaveBeenCalledWith('query', { limit: 5 });
     });
   });
 

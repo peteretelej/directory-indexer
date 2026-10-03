@@ -196,6 +196,10 @@ export async function getChunkContent(filePath: string, chunkId: string): Promis
 }
 
 export async function getFileContent(filePath: string, chunks?: string): Promise<string> {
+  if (chunks) {
+    parseChunkRange(chunks);
+  }
+
   try {
     if (!await fileExists(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -229,9 +233,15 @@ export async function getFileContent(filePath: string, chunks?: string): Promise
 function parseChunkRange(chunks: string): { start: number; end: number } {
   if (chunks.includes('-')) {
     const [start, end] = chunks.split('-').map(num => parseInt(num.trim()));
-    return { start: start || 0, end: end || start || 0 };
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end) {
+      throw new Error(`Invalid chunk range: '${chunks}'`);
+    }
+    return { start, end };
   }
-  
+
   const num = parseInt(chunks);
+  if (Number.isNaN(num)) {
+    throw new Error(`Invalid chunk range: '${chunks}'`);
+  }
   return { start: num, end: num };
 }

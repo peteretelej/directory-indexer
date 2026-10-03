@@ -34,8 +34,10 @@ export function validatePathWithinIndexedDirs(filePath: string, indexedDirs: Set
     if (resolved === dir) {
       return;
     }
-    // Prefix match with separator to prevent /docs-evil matching /docs
-    if (resolved.startsWith(dir + sep)) {
+    // Prefix match with separator; roots already end with one, and the
+    // separator prevents /docs-evil matching /docs
+    const prefix = dir.endsWith(sep) ? dir : dir + sep;
+    if (resolved.startsWith(prefix)) {
       return;
     }
   }
