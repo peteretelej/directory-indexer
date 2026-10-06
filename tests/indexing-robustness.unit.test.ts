@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'os';
-import { join, relative } from 'path';
+import { join } from 'path';
 import { promises as fs, realpathSync, symlinkSync } from 'fs';
 import { loadConfig } from '../src/config.js';
 import { indexDirectories, scanDirectory } from '../src/indexing.js';
@@ -174,9 +174,7 @@ describe('Indexing Robustness', () => {
         return [0.1, 0.2];
       });
 
-      const alphaArg = './' + relative(process.cwd(), alphaDir);
-      const betaArg = './' + relative(process.cwd(), betaDir);
-      const result = await indexDirectories([alphaArg, betaArg], config);
+      const result = await indexDirectories([alphaDir, betaDir], config);
 
       expect(result.failed).toBe(1);
       expect(result.indexed).toBe(1);
