@@ -23,7 +23,7 @@ function directoryLikeClause(column: string, dirPath: string): { clause: string;
   const escaped = escapeLike(dirPath);
   return {
     clause: `(${column} = ? OR ${column} LIKE ? ESCAPE '\\' OR ${column} LIKE ? ESCAPE '\\')`,
-    params: [dirPath, `${escaped}/%`, `${escaped}\\%`]
+    params: [dirPath, `${escaped}/%`, `${escaped}\\\\%`]
   };
 }
 

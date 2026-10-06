@@ -281,6 +281,63 @@ describe('getIndexStatus directory counts', () => {
       expect(decoy!.chunksCount).toBe(1);
     });
   });
+
+  it('should count files and chunks for Windows backslash directory paths', async () => {
+    await withIsolatedStatusEnv(async () => {
+      const { SQLiteStorage, getIndexStatus } = await import('../src/storage.js');
+      const config = loadConfig({ verbose: false });
+      const storage = new SQLiteStorage(config);
+
+      const insertDir = storage.db.prepare("INSERT INTO directories (path, status, indexed_at) VALUES (?, 'completed', 100)");
+      const insertFile = storage.db.prepare('INSERT INTO files (path, size, modified_time, hash, parent_dirs, chunks_json) VALUES (?, ?, ?, ?, ?, ?)');
+      const chunks = (n: number) => JSON.stringify(Array.from({ length: n }, (_, i) => ({ id: `c${i}`, content: 'x', startIndex: 0, endIndex: 1 })));
+
+      insertDir.run('C:\\data\\reports_2026%final');
+      insertFile.run('C:\\data\\reports_2026%final\\a.md', 1, 1, 'h1', '[]', chunks(1));
+      insertFile.run('C:\\data\\reports_2026%final\\b.md', 1, 1, 'h2', '[]', chunks(2));
+      insertDir.run('C:\\data\\reportsX2026Zfinal');
+      insertFile.run('C:\\data\\reportsX2026Zfinal\\decoy.md', 1, 1, 'h3', '[]', chunks(1));
+      storage.close();
+
+      const status = await getIndexStatus();
+      const counted = status.directories.find(d => d.path === 'C:\\data\\reports_2026%final');
+      expect(counted).toBeDefined();
+      expect(counted!.filesCount).toBe(2);
+      expect(counted!.chunksCount).toBe(3);
+      const decoy = status.directories.find(d => d.path === 'C:\\data\\reportsX2026Zfinal');
+      expect(decoy).toBeDefined();
+      expect(decoy!.filesCount).toBe(1);
+      expect(decoy!.chunksCount).toBe(1);
+    });
+  });
+});
+
+describe('getFilesByDirectory and deleteFilesByDirectory with Windows paths', () => {
+  it('should match and delete files under backslash directory paths', async () => {
+    await withIsolatedStatusEnv(async () => {
+      const { SQLiteStorage } = await import('../src/storage.js');
+      const config = loadConfig({ verbose: false });
+      const storage = new SQLiteStorage(config);
+      try {
+        const modifiedTime = new Date('2026-01-01T00:00:00Z');
+        const dir = 'C:\\data\\dir_with%chars';
+        for (const name of ['a.md', 'b.md']) {
+          await storage.upsertFile({ path: `${dir}\\${name}`, size: 1, modifiedTime, hash: name, parentDirs: [dir] });
+        }
+        await storage.upsertFile({ path: `${dir}-sibling\\c.md`, size: 1, modifiedTime, hash: 'c', parentDirs: [`${dir}-sibling`] });
+
+        const files = await storage.getFilesByDirectory(dir);
+        expect(files.map(f => f.path).sort()).toEqual([`${dir}\\a.md`, `${dir}\\b.md`]);
+
+        const deleted = storage.deleteFilesByDirectory(dir);
+        expect(deleted).toBe(2);
+        const siblings = await storage.getFilesByDirectory(`${dir}-sibling`);
+        expect(siblings).toHaveLength(1);
+      } finally {
+        storage.close();
+      }
+    });
+  });
 });
 
 describe('getIndexStatus lastIndexed', () => {
