@@ -57,8 +57,7 @@ describe('MCP Server Integration Tests', () => {
         const searchResult = await handleSearchTool({ query: 'test', workspace: 'docs' });
         expect((searchResult.content[0] as { type: 'text'; text: string }).text).toBeDefined();
 
-        const invalidSearch = await handleSearchTool({ query: 'test', workspace: 'nonexistent' });
-        expect((invalidSearch.content[0] as { type: 'text'; text: string }).text).toContain('not found');
+        await expect(handleSearchTool({ query: 'test', workspace: 'nonexistent' })).rejects.toThrow(/not found/);
         
       } finally {
         process.env = originalEnv;

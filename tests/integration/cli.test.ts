@@ -334,20 +334,20 @@ describe('CLI Commands Integration Tests', () => {
       }
     });
 
-    it('should handle reset with services unavailable', async () => {
+    it('should fail reset when the vector store is unreachable', async () => {
       const testEnv = await createIsolatedTestEnvironment('reset-offline');
-      
+
       try {
         const resetResult = await runCLI(['reset', '--force'], 30000, {
           ...testEnv.env,
           QDRANT_ENDPOINT: 'http://invalid-qdrant:9999'
         });
-        
-        expect(resetResult.exitCode).toBe(0);
+
+        expect(resetResult.exitCode).toBe(1);
         const output = resetResult.stdout + resetResult.stderr;
-        expect(output.toLowerCase()).toMatch(/(reset|warning|unavailable)/);
-        
-        console.log('✅ Reset with unavailable services handled gracefully');
+        expect(output.toLowerCase()).toMatch(/(reset|qdrant|unavailable)/);
+
+        console.log('✅ Reset with unavailable services refused to claim success');
       } finally {
         await testEnv.cleanup();
       }
