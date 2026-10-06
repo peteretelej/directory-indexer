@@ -274,6 +274,9 @@ export DIRECTORY_INDEXER_DATA_DIR="/opt/ai-knowledge-base"
 export QDRANT_ENDPOINT="http://localhost:6333"
 export OLLAMA_ENDPOINT="http://localhost:11434"
 
+# OpenAI provider: custom OpenAI-compatible endpoint (default: https://api.openai.com/v1)
+export OPENAI_ENDPOINT="https://api.openai.com/v1"
+
 # Optional API keys
 export OPENAI_API_KEY="your-key-here"
 export QDRANT_API_KEY="your-key-here"

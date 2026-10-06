@@ -41,6 +41,36 @@ describe('Configuration', () => {
     }
   });
 
+  it('should build the embedding endpoint provider-aware', async () => {
+    const originalProvider = process.env.EMBEDDING_PROVIDER;
+    const originalOpenAI = process.env.OPENAI_ENDPOINT;
+    const originalOllama = process.env.OLLAMA_ENDPOINT;
+
+    try {
+      delete process.env.OLLAMA_ENDPOINT;
+      process.env.EMBEDDING_PROVIDER = 'openai';
+      process.env.OPENAI_ENDPOINT = 'https://example.internal/v1';
+      let config = await loadConfig();
+      expect(config.embedding.endpoint).toBe('https://example.internal/v1');
+
+      delete process.env.OPENAI_ENDPOINT;
+      config = await loadConfig();
+      expect(config.embedding.endpoint).toBe('https://api.openai.com/v1');
+
+      delete process.env.EMBEDDING_PROVIDER;
+      process.env.OLLAMA_ENDPOINT = 'http://custom:11434';
+      config = await loadConfig();
+      expect(config.embedding.endpoint).toBe('http://custom:11434');
+    } finally {
+      if (originalProvider) process.env.EMBEDDING_PROVIDER = originalProvider;
+      else delete process.env.EMBEDDING_PROVIDER;
+      if (originalOpenAI) process.env.OPENAI_ENDPOINT = originalOpenAI;
+      else delete process.env.OPENAI_ENDPOINT;
+      if (originalOllama) process.env.OLLAMA_ENDPOINT = originalOllama;
+      else delete process.env.OLLAMA_ENDPOINT;
+    }
+  });
+
   it('should handle missing environment variables gracefully', async () => {
     const originalEnv = { ...process.env };
     

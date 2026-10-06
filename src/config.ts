@@ -127,7 +127,9 @@ export function loadConfig(options: { verbose?: boolean } = {}): Config {
     embedding: {
       provider: (process.env.EMBEDDING_PROVIDER as Config['embedding']['provider']) || 'ollama',
       model: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
-      endpoint: process.env.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434',
+      endpoint: process.env.EMBEDDING_PROVIDER === 'openai'
+        ? (process.env.OPENAI_ENDPOINT || 'https://api.openai.com/v1')
+        : (process.env.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434'),
     },
     indexing: {
       chunkSize: parseInt(process.env.CHUNK_SIZE || '512'),

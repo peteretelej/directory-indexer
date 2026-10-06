@@ -260,6 +260,7 @@ DIRECTORY_INDEXER_QDRANT_COLLECTION=directory-indexer
 
 - `EMBEDDING_PROVIDER` - Provider type: `ollama`, `openai`, `mock` (default: `ollama`)
 - `EMBEDDING_MODEL` - Model name (default: `nomic-embed-text`)
+- `OPENAI_ENDPOINT` - OpenAI-compatible embeddings endpoint, used when provider is `openai` (default: `https://api.openai.com/v1`)
 - `OPENAI_API_KEY` - OpenAI API key (required for OpenAI provider)
 
 ### Processing Options

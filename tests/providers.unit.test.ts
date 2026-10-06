@@ -199,6 +199,40 @@ describe('Embedding Provider Unit Tests', () => {
       }
     });
 
+    it('should fetch embeddings from the configured endpoint', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = 'test-api-key';
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [{ embedding: new Array(1536).fill(0.2) }]
+        })
+      });
+      (globalThis as any).fetch = mockFetch;
+
+      try {
+        const provider = createEmbeddingProvider('openai', {
+          model: 'text-embedding-3-small',
+          endpoint: 'https://example.internal/v1',
+          dimensions: 1536
+        });
+
+        await provider.generateEmbedding('test text');
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          'https://example.internal/v1/embeddings',
+          expect.objectContaining({ method: 'POST' })
+        );
+      } finally {
+        if (originalEnv) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
+        }
+      }
+    });
+
     it('should handle missing API key', async () => {
       const originalEnv = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;

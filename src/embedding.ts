@@ -110,7 +110,7 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
   
   async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
+      const response = await fetch(`${this.config.endpoint}/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
   
   async generateEmbeddings(texts: string[]): Promise<number[][]> {
     try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
+      const response = await fetch(`${this.config.endpoint}/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

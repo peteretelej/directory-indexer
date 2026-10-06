@@ -51,7 +51,7 @@ export async function checkOpenAI(config: Config): Promise<boolean> {
   if (!process.env.OPENAI_API_KEY) return false;
   
   try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch(`${config.embedding.endpoint}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
