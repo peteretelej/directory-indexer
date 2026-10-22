@@ -4,8 +4,23 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      dev-non-major:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      prod-non-major:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
     ignore:
-      - dependency-name: "vitest"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@vitest/*"
-        update-types: ["version-update:semver-major"]
+      # majors stay out of the PR stream while the Node 18 line is supported;
+      # an advisory only fixable by a major still surfaces via the CI audit gate
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
