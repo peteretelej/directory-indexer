@@ -49,7 +49,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^11.10.0",
-    "commander": "^13.1.0",
+    "commander": "^15.0.0",
     "ignore": "^7.0.9",
     "zod": "^4.6.5"
   },
