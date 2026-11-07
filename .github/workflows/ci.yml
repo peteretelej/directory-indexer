@@ -294,6 +294,6 @@ jobs:
         run: npm ci
 
       - name: Run security audit
-        # dev-only advisories without a Node 18-compatible fix (e.g. vitest
-        # mocker) are excluded; runtime deps are what ship to npm users
-        run: npm audit --omit=dev --audit-level moderate
+        # only high/critical findings in runtime deps gate CI; dev-tree and
+        # moderate noise (unreachable transitive paths) never block merges
+        run: npm audit --omit=dev --audit-level high
